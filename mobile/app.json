@@ -60,7 +60,9 @@
             "deploymentTarget": "15.1"
           }
         }
-      ]
+      ],
+      "expo-font",
+      "expo-secure-store"
     ],
     "extra": {
       "eas": {

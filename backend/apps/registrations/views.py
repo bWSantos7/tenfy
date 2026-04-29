@@ -295,6 +295,10 @@ class RegistrationViewSet(viewsets.GenericViewSet):
             paid = sum(1 for e in cat_entries if e.payment_status == FederationEntry.PAYMENT_PAID)
             in_draw = sum(1 for e in cat_entries
                          if (e.slot_position or 0) <= (max_p or float('inf')) and e.payment_status == FederationEntry.PAYMENT_PAID)
+            active = [e for e in cat_entries if not e.removed_or_replaced]
+            removed = len(cat_entries) - len(active)
+            filled = in_draw
+            remaining = (max_p - filled) if max_p is not None else None
             result.append({
                 'category_text': cat_text,
                 'max_participants': max_p,
@@ -304,6 +308,10 @@ class RegistrationViewSet(viewsets.GenericViewSet):
                     'pending': len(cat_entries) - paid,
                     'in_draw': in_draw,
                     'waiting_list': paid - in_draw,
+                    'removed': removed,
+                    'total_slots': max_p,
+                    'filled_slots': filled,
+                    'remaining_slots': remaining,
                 },
                 'entries': FederationEntrySerializer(cat_entries, many=True).data,
             })
@@ -632,6 +640,7 @@ def _run_import(request):
 
     created_count = updated_count = skipped_count = 0
     errors = []
+    warnings = []
     previews = []
 
     for i, entry_data in enumerate(entries_data):
@@ -647,6 +656,14 @@ def _run_import(request):
             if not category_text:
                 errors.append({'row': row_num, 'error': 'category_text obrigatório.', 'data': entry_data})
                 continue
+
+            # Non-blocking warnings
+            if not external_id:
+                warnings.append({'row': row_num, 'warning': f'player_external_id ausente para "{player_name}" — dedup por nome apenas, risco de duplicata.'})
+            if entry_data.get('ranking_position') is None:
+                warnings.append({'row': row_num, 'warning': f'ranking_position ausente para "{player_name}" — status/slot_position pode ficar impreciso.'})
+            if not (entry_data.get('payment_status') or '').strip():
+                warnings.append({'row': row_num, 'warning': f'payment_status ausente para "{player_name}" — assumindo unknown.'})
 
             raw_payment = (entry_data.get('payment_status') or FederationEntry.PAYMENT_UNKNOWN).strip()
             if raw_payment not in _VALID_PAYMENT:
@@ -725,6 +742,7 @@ def _run_import(request):
         'updated': updated_count,
         'skipped': skipped_count,
         'errors': errors,
+        'warnings': warnings,
         'detail': (
             f'[DRY RUN] Prévia: {created_count} seriam criadas, {updated_count} atualizadas, {len(errors)} rejeitadas.'
             if dry_run

@@ -321,6 +321,10 @@ export interface FederationCategoryGroup {
     pending: number;
     in_draw: number;
     waiting_list: number;
+    removed: number;
+    total_slots: number | null;
+    filled_slots: number;
+    remaining_slots: number | null;
   };
   entries: FederationEntry[];
 }

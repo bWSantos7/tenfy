@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { Linking, Pressable, View } from 'react-native';
+import { Linking, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
@@ -37,37 +37,53 @@ const CONFIDENCE_CONFIG: Record<string, { icon: string; color: string; label: st
   low:    { icon: 'alert-circle-outline',       color: '#ef4444', label: 'Dado inferido' },
 };
 
+const STALE_HOURS = 24;
+
+function isStale(syncedAt: string | null): boolean {
+  if (!syncedAt) return false;
+  return (Date.now() - new Date(syncedAt).getTime()) > STALE_HOURS * 3600 * 1000;
+}
+
 export function RegistrationListScreen({ route, navigation }: Props) {
   const { colors } = useTheme();
   const { editionId, editionTitle } = route.params;
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [categories, setCategories] = useState<FederationCategoryGroup[]>([]);
   const [syncedAt, setSyncedAt] = useState<string | null>(null);
   const [sourceLabel, setSourceLabel] = useState<string>('');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [error, setError] = useState(false);
+
+  const loadData = useCallback(async () => {
+    setError(false);
+    try {
+      const data = await federationRegistrations(editionId);
+      setCategories(data.categories);
+      const firstEntry = data.categories[0]?.entries[0];
+      if (firstEntry) {
+        setSyncedAt(firstEntry.synced_at);
+        setSourceLabel(firstEntry.source_label || firstEntry.source);
+      }
+      if (data.categories.length > 0) {
+        setExpanded(new Set([data.categories[0].category_text]));
+      }
+    } catch {
+      setError(true);
+      Toast.show({ type: 'error', text1: 'Erro ao carregar lista de inscritos' });
+    }
+  }, [editionId]);
 
   React.useEffect(() => {
-    (async () => {
-      setLoading(true);
-      try {
-        const data = await federationRegistrations(editionId);
-        setCategories(data.categories);
-        // Extract sync info from first entry
-        const firstEntry = data.categories[0]?.entries[0];
-        if (firstEntry) {
-          setSyncedAt(firstEntry.synced_at);
-          setSourceLabel(firstEntry.source_label || firstEntry.source);
-        }
-        if (data.categories.length > 0) {
-          setExpanded(new Set([data.categories[0].category_text]));
-        }
-      } catch {
-        Toast.show({ type: 'error', text1: 'Erro ao carregar lista de inscritos' });
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [editionId]);
+    setLoading(true);
+    loadData().finally(() => setLoading(false));
+  }, [loadData]);
+
+  async function onRefresh() {
+    setRefreshing(true);
+    await loadData();
+    setRefreshing(false);
+  }
 
   function toggleCategory(text: string) {
     setExpanded((prev) => {
@@ -79,7 +95,7 @@ export function RegistrationListScreen({ route, navigation }: Props) {
   }
 
   return (
-    <Screen>
+    <Screen onRefresh={onRefresh} refreshing={refreshing}>
       {/* Header */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
         <Pressable onPress={() => navigation.goBack()} style={{ padding: 4 }}>
@@ -90,6 +106,17 @@ export function RegistrationListScreen({ route, navigation }: Props) {
           <AppText variant="caption" numberOfLines={1}>{editionTitle}</AppText>
         </View>
       </View>
+
+      {/* Staleness warning */}
+      {isStale(syncedAt) && (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: `${colors.statusClosing}15`, borderWidth: 1, borderColor: `${colors.statusClosing}40`, borderRadius: 10, padding: 10, marginBottom: 8 }}>
+          <Ionicons name="warning-outline" size={14} color={colors.statusClosing} />
+          <AppText variant="caption" style={{ color: colors.statusClosing, flex: 1 }}>
+            Dados com mais de {STALE_HOURS}h. Toque para atualizar.
+          </AppText>
+          <Pressable onPress={onRefresh}><Ionicons name="refresh" size={14} color={colors.statusClosing} /></Pressable>
+        </View>
+      )}
 
       {/* Sync info bar */}
       {(syncedAt || sourceLabel) ? (
@@ -105,6 +132,12 @@ export function RegistrationListScreen({ route, navigation }: Props) {
 
       {loading ? (
         <LoadingBlock />
+      ) : error ? (
+        <EmptyState
+          title="Erro ao carregar inscritos"
+          subtitle="Verifique sua conexão e puxe para atualizar."
+          icon="alert-circle-outline"
+        />
       ) : categories.length === 0 ? (
         <EmptyState
           title="Lista ainda não publicada"
@@ -144,8 +177,9 @@ function CategorySection({
   onToggle: () => void;
   colors: any;
 }) {
-  const { summary, max_participants } = cat;
-  const drawFull = max_participants != null && summary.in_draw >= max_participants;
+  const { summary } = cat;
+  const totalSlots = summary.total_slots ?? cat.max_participants;
+  const drawFull = totalSlots != null && summary.filled_slots >= totalSlots;
 
   return (
     <Card style={{ padding: 0, overflow: 'hidden' }}>
@@ -156,10 +190,10 @@ function CategorySection({
       >
         <View style={{ flex: 1 }}>
           <AppText variant="body" style={{ fontWeight: '700' }}>{cat.category_text}</AppText>
-          {max_participants ? (
+          {totalSlots != null ? (
             <AppText variant="caption" style={{ marginTop: 2 }}>
-              Vagas: {summary.in_draw}/{max_participants}
-              {drawFull ? ' · Chave completa' : ` · ${max_participants - summary.in_draw} restante${max_participants - summary.in_draw !== 1 ? 's' : ''}`}
+              {`Vagas: ${summary.filled_slots}/${totalSlots}`}
+              {drawFull ? ' · Chave completa' : ` · ${summary.remaining_slots ?? (totalSlots - summary.filled_slots)} restante${(summary.remaining_slots ?? 1) !== 1 ? 's' : ''}`}
             </AppText>
           ) : null}
         </View>
@@ -184,7 +218,7 @@ function CategorySection({
       {expanded && (
         <View style={{ borderTopWidth: 1, borderTopColor: colors.borderSubtle }}>
           {cat.entries.map((entry) => (
-            <EntryRow key={entry.id} entry={entry} maxP={max_participants} colors={colors} />
+            <EntryRow key={entry.id} entry={entry} maxP={totalSlots} colors={colors} />
           ))}
         </View>
       )}

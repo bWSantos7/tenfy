@@ -2,6 +2,12 @@
 
 ## Endpoint
 
+Para n8n e pipelines externos (usa X-Import-Token):
+```
+POST https://api.tennis.app.br/api/registrations/import/
+```
+
+Para admin/staff via JWT (endpoint legado):
 ```
 POST https://api.tennis.app.br/api/registrations/federation/bulk-import/
 ```

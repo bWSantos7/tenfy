@@ -1,0 +1,251 @@
+{
+  "name": "COSAT Import — Tennis Hub",
+  "nodes": [
+    {
+      "id": "1",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "parameters": {}
+    },
+    {
+      "id": "2",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [460, 300],
+      "parameters": {
+        "mode": "manual",
+        "fields": {
+          "values": [
+            {
+              "name": "edition_id",
+              "type": "numberValue",
+              "numberValue": 42,
+              "_comment": "ALTERAR: ID da edicao do torneio no Tennis Hub"
+            },
+            {
+              "name": "source",
+              "type": "stringValue",
+              "stringValue": "cosat"
+            },
+            {
+              "name": "source_url",
+              "type": "stringValue",
+              "stringValue": "https://cosat.tournamentsoftware.com/sport/tournament?id=XXXX",
+              "_comment": "ALTERAR: URL real da pagina do torneio"
+            },
+            {
+              "name": "confidence",
+              "type": "stringValue",
+              "stringValue": "medium"
+            },
+            {
+              "name": "tennis_hub_url",
+              "type": "stringValue",
+              "stringValue": "https://api.tennis.app.br/api/registrations/import/"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "3",
+      "name": "Raw Data Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [460, 460],
+      "parameters": {
+        "mode": "manual",
+        "_comment": "Cole aqui o texto/JSON copiado da pagina COSAT ou substitua por no de CSV/HTTP",
+        "fields": {
+          "values": [
+            {
+              "name": "raw_text",
+              "type": "stringValue",
+              "stringValue": "Nome;Categoria;ID;Ranking;Pagamento\nJoao Silva;Sub-14 M;COSAT-001;8;Pago\nPedro Oliveira;Sub-14 M;COSAT-002;35;Pago"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "4",
+      "name": "Normalize Entries",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 380],
+      "parameters": {
+        "jsCode": "// Normaliza dados brutos para schema Tennis Hub\n// ADAPTAR conforme estrutura real da pagina COSAT\n\nconst rawText = $('Raw Data Input').first().json.raw_text || '';\nconst config = $('Config').first().json;\n\n// Parser simples CSV/texto — adaptar conforme fonte real\nconst lines = rawText.trim().split('\\n');\nconst headers = lines[0].split(';').map(h => h.trim().toLowerCase());\n\nconst entries = lines.slice(1).map((line, i) => {\n  const cols = line.split(';').map(c => c.trim());\n  const row = {};\n  headers.forEach((h, idx) => { row[h] = cols[idx] || ''; });\n\n  const paymentStatus = (row.pagamento || row.payment || '').toLowerCase().includes('pago') ? 'paid'\n    : (row.pagamento || '').toLowerCase().includes('pendente') ? 'pending' : 'unknown';\n\n  const removed = (row.status || '').toLowerCase().includes('substitu') || \n                  (row.status || '').toLowerCase().includes('remov');\n\n  return {\n    player_name: row.nome || row.name || row.player_name || '',\n    category_text: row.categoria || row.category || row.category_text || '',\n    player_external_id: row.id || row.external_id || row.player_external_id || '',\n    ranking_position: row.ranking ? parseInt(row.ranking) || null : null,\n    ranking_source: 'COSAT',\n    payment_status: paymentStatus,\n    removed_or_replaced: removed,\n    replacement_reason: removed ? 'Substituido por atleta de ranking superior.' : '',\n    notes: '',\n    source_url: config.source_url || '',\n    confidence: removed ? 'medium' : 'medium',\n  };\n}).filter(e => e.player_name && e.category_text);\n\nreturn [{\n  json: {\n    edition_id: config.edition_id,\n    source: config.source,\n    source_url: config.source_url,\n    confidence: config.confidence,\n    dry_run: true,\n    entries,\n    _meta: { total_parsed: entries.length, tennis_hub_url: config.tennis_hub_url },\n  }\n}];"
+      }
+    },
+    {
+      "id": "5",
+      "name": "Validate Required",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 380],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "check-entries",
+              "leftValue": "={{ $json.entries.length }}",
+              "rightValue": 0,
+              "operator": { "type": "number", "operation": "gt" }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "6",
+      "name": "Error — No Entries",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1120, 500],
+      "parameters": {
+        "mode": "manual",
+        "fields": {
+          "values": [
+            { "name": "error", "type": "stringValue", "stringValue": "Nenhum inscrito encontrado. Verificar formato dos dados de entrada." }
+          ]
+        }
+      }
+    },
+    {
+      "id": "7",
+      "name": "POST dry_run=true",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1120, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.tennis_hub_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "X-Import-Token", "value": "={{ $env.TENNIS_HUB_IMPORT_TOKEN }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": { "timeout": 30000 }
+      }
+    },
+    {
+      "id": "8",
+      "name": "Review dry_run Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1340, 300],
+      "parameters": {
+        "_comment": "PONTO DE REVISAO — verifique 'previews' antes de confirmar",
+        "mode": "passthrough"
+      }
+    },
+    {
+      "id": "9",
+      "name": "Confirm Import?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1560, 300],
+      "parameters": {
+        "_comment": "Mude para true para confirmar importacao apos revisar dry_run",
+        "conditions": {
+          "conditions": [
+            {
+              "id": "check-errors",
+              "leftValue": "={{ $json.errors.length }}",
+              "rightValue": 0,
+              "operator": { "type": "number", "operation": "equal" }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "10",
+      "name": "POST dry_run=false",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1780, 240],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.tennis_hub_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "X-Import-Token", "value": "={{ $env.TENNIS_HUB_IMPORT_TOKEN }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ ...$('Normalize Entries').first().json, dry_run: false }) }}",
+        "options": { "timeout": 30000 }
+      }
+    },
+    {
+      "id": "11",
+      "name": "Import Complete",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [2000, 240],
+      "parameters": {
+        "mode": "passthrough",
+        "_comment": "Importacao concluida. Ver campo 'created', 'updated', 'errors'."
+      }
+    },
+    {
+      "id": "12",
+      "name": "Has Errors — Review",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1780, 380],
+      "parameters": {
+        "mode": "manual",
+        "fields": {
+          "values": [
+            { "name": "action_required", "type": "stringValue", "stringValue": "Dry run retornou erros. Revisar campo 'errors' e corrigir dados antes de confirmar." }
+          ]
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": { "main": [[{ "node": "Config", "type": "main", "index": 0 }, { "node": "Raw Data Input", "type": "main", "index": 0 }]] },
+    "Config": { "main": [[{ "node": "Normalize Entries", "type": "main", "index": 0 }]] },
+    "Raw Data Input": { "main": [[{ "node": "Normalize Entries", "type": "main", "index": 0 }]] },
+    "Normalize Entries": { "main": [[{ "node": "Validate Required", "type": "main", "index": 0 }]] },
+    "Validate Required": {
+      "main": [
+        [{ "node": "POST dry_run=true", "type": "main", "index": 0 }],
+        [{ "node": "Error — No Entries", "type": "main", "index": 0 }]
+      ]
+    },
+    "POST dry_run=true": { "main": [[{ "node": "Review dry_run Result", "type": "main", "index": 0 }]] },
+    "Review dry_run Result": { "main": [[{ "node": "Confirm Import?", "type": "main", "index": 0 }]] },
+    "Confirm Import?": {
+      "main": [
+        [{ "node": "POST dry_run=false", "type": "main", "index": 0 }],
+        [{ "node": "Has Errors — Review", "type": "main", "index": 0 }]
+      ]
+    },
+    "POST dry_run=false": { "main": [[{ "node": "Import Complete", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromAList"
+  },
+  "meta": {
+    "description": "Importa inscritos COSAT/COSANT para o Tennis Hub via endpoint seguro com X-Import-Token. Configurar TENNIS_HUB_IMPORT_TOKEN nas variaveis de ambiente do n8n.",
+    "version": "1.0",
+    "created_for": "Tennis Hub — COSAT Federation Entry Import"
+  }
+}

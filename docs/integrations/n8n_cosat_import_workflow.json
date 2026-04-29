@@ -20,34 +20,67 @@
         "fields": {
           "values": [
             {
-              "name": "edition_id",
-              "type": "numberValue",
-              "numberValue": 42,
-              "_comment": "ALTERAR: ID da edicao do torneio no Tennis Hub"
+              "name": "tennis_hub_base_url",
+              "type": "stringValue",
+              "stringValue": "https://api.tennis.app.br"
             },
             {
-              "name": "source",
+              "name": "sync_targets_url",
               "type": "stringValue",
-              "stringValue": "cosat"
+              "stringValue": "https://api.tennis.app.br/api/integrations/federation-sync-targets/"
             },
             {
-              "name": "source_url",
+              "name": "import_url",
               "type": "stringValue",
-              "stringValue": "https://cosat.tournamentsoftware.com/sport/tournament?id=XXXX",
-              "_comment": "ALTERAR: URL real da pagina do torneio"
+              "stringValue": "https://api.tennis.app.br/api/registrations/import/"
+            },
+            {
+              "name": "parse_url",
+              "type": "stringValue",
+              "stringValue": "https://api.tennis.app.br/api/integrations/parse-entries/"
+            },
+            {
+              "name": "source_filter",
+              "type": "stringValue",
+              "stringValue": "cosat",
+              "_comment": "Filtrar por fonte: cosat|cbt|fpt|manual — vazio = todas"
             },
             {
               "name": "confidence",
               "type": "stringValue",
               "stringValue": "medium"
-            },
-            {
-              "name": "tennis_hub_url",
-              "type": "stringValue",
-              "stringValue": "https://api.tennis.app.br/api/registrations/import/"
             }
           ]
         }
+      }
+    },
+    {
+      "id": "2b",
+      "name": "GET Sync Targets",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [680, 200],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Config').first().json.sync_targets_url }}?source={{ $('Config').first().json.source_filter }}&needs_sync=true",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-Import-Token", "value": "={{ $env.TENNIS_HUB_IMPORT_TOKEN }}" }
+          ]
+        },
+        "_comment": "Busca automaticamente todos os torneios que precisam sincronizar inscritos"
+      }
+    },
+    {
+      "id": "2c",
+      "name": "Loop Over Targets",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [900, 200],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
       }
     },
     {

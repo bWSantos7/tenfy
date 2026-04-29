@@ -194,13 +194,33 @@ FED_PAYMENT_LABELS = {
 }
 
 FED_STATUS_LABELS = {
-    'confirmed': 'Confirmado na chave',
-    'waiting_list': 'Lista de espera',
-    'pending_payment': 'Pagamento pendente',
+    'confirmed':       'Confirmado na chave',
+    'waiting_list':    'Lista de espera',
+    'pending_payment': 'Aguardando pagamento',
+    'removed':         'Removido — critério de ranking',
+}
+
+SOURCE_LABELS = {
+    'cbt':    'CBT',
+    'fpt':    'FPT',
+    'fct':    'FCT',
+    'cosat':  'COSAT',
+    'manual': 'Importação manual',
 }
 
 
-def compute_fed_status(payment_status: str, slot_position, max_participants):
+def compute_fed_status(payment_status: str, slot_position, max_participants,
+                       removed_or_replaced: bool = False) -> str:
+    """
+    Calcula status final de um inscrito externo (FederationEntry).
+
+    Regra de substituição: um atleta PAGO pode ser removido se a federação
+    aplicar critério de ranking e um atleta com ranking melhor se inscrever
+    após o preenchimento das vagas. Nesse caso, payment_status='paid' NÃO
+    garante 'confirmed' — o campo removed_or_replaced prevalece.
+    """
+    if removed_or_replaced:
+        return 'removed'
     if max_participants and slot_position and slot_position > max_participants:
         return 'waiting_list'
     if payment_status == FederationEntry.PAYMENT_PAID:
@@ -209,18 +229,21 @@ def compute_fed_status(payment_status: str, slot_position, max_participants):
 
 
 class FederationEntrySerializer(serializers.ModelSerializer):
-    slot_position = serializers.SerializerMethodField()
-    in_draw = serializers.SerializerMethodField()
-    status = serializers.SerializerMethodField()
-    status_label = serializers.SerializerMethodField()
+    slot_position       = serializers.SerializerMethodField()
+    in_draw             = serializers.SerializerMethodField()
+    status              = serializers.SerializerMethodField()
+    status_label        = serializers.SerializerMethodField()
     payment_status_label = serializers.SerializerMethodField()
+    source_label        = serializers.SerializerMethodField()
 
     class Meta:
         model = FederationEntry
         fields = (
             'id', 'category_text', 'player_name', 'player_external_id',
             'ranking_position', 'payment_status', 'payment_status_label',
-            'source', 'notes', 'synced_at',
+            'source', 'source_label', 'source_url', 'confidence',
+            'removed_or_replaced', 'replacement_reason',
+            'notes', 'synced_at',
             'slot_position', 'in_draw', 'status', 'status_label',
         )
 
@@ -231,6 +254,8 @@ class FederationEntrySerializer(serializers.ModelSerializer):
         return getattr(obj, 'slot_position', None)
 
     def get_in_draw(self, obj):
+        if obj.removed_or_replaced:
+            return False
         slot = getattr(obj, 'slot_position', None)
         max_p = self._max_p(obj)
         if slot is None:
@@ -239,13 +264,19 @@ class FederationEntrySerializer(serializers.ModelSerializer):
 
     def get_status(self, obj):
         slot = getattr(obj, 'slot_position', None)
-        return compute_fed_status(obj.payment_status, slot, self._max_p(obj))
+        return compute_fed_status(
+            obj.payment_status, slot, self._max_p(obj),
+            removed_or_replaced=obj.removed_or_replaced,
+        )
 
     def get_status_label(self, obj):
-        return FED_STATUS_LABELS.get(self.get_status(obj), '')
+        return FED_STATUS_LABELS.get(self.get_status(obj), 'Desconhecido')
 
     def get_payment_status_label(self, obj):
         return FED_PAYMENT_LABELS.get(obj.payment_status, obj.payment_status)
+
+    def get_source_label(self, obj):
+        return SOURCE_LABELS.get(obj.source, obj.source)
 
 
 class FederationEntryWriteSerializer(serializers.ModelSerializer):
@@ -253,5 +284,6 @@ class FederationEntryWriteSerializer(serializers.ModelSerializer):
         model = FederationEntry
         fields = (
             'edition', 'category_text', 'player_name', 'player_external_id',
-            'ranking_position', 'payment_status', 'source', 'notes',
+            'ranking_position', 'payment_status', 'source', 'source_url',
+            'confidence', 'removed_or_replaced', 'replacement_reason', 'notes',
         )

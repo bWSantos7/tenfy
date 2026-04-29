@@ -5,11 +5,11 @@ import {
   Image,
   ScrollView,
   Share,
-  StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useTheme } from '../../contexts/ThemeContext';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { MainStackParamList } from '../../navigation/types';
@@ -24,6 +24,7 @@ export function PixPaymentScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<PixRoute>();
   const { pixData } = route.params;
+  const { colors } = useTheme();
 
   const [checking, setChecking] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -88,19 +89,31 @@ export function PixPaymentScreen() {
     }
   }
 
+  const stateBadgeStyle = {
+    confirmed: { bg: `${colors.accentNeon}15`, border: `${colors.accentNeon}50`, text: colors.accentNeon },
+    expired:   { bg: '#ef444415', border: '#ef444450', text: '#ef4444' },
+    error:     { bg: '#ef444415', border: '#ef444450', text: '#ef4444' },
+    waiting:   { bg: `${colors.accentBlue}15`, border: `${colors.accentBlue}50`, text: colors.accentBlue },
+  };
+  const bState = paymentState === 'confirmed' ? stateBadgeStyle.confirmed
+    : (paymentState === 'expired' || paymentState === 'error') ? stateBadgeStyle.expired
+    : stateBadgeStyle.waiting;
+
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Pague com Pix</Text>
-      <Text style={styles.subtitle}>
-        Escaneie o QR code ou copie o código abaixo no seu banco.
-        A confirmação é automática em até 1 minuto.
+    <ScrollView
+      style={{ flex: 1, backgroundColor: colors.bgBase }}
+      contentContainerStyle={{ padding: 24, paddingBottom: 40, alignItems: 'center' }}
+    >
+      <Text style={{ fontSize: 22, fontWeight: '700', color: colors.textPrimary, marginBottom: 8, textAlign: 'center' }}>
+        Pague com Pix
+      </Text>
+      <Text style={{ fontSize: 14, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: 24 }}>
+        Escaneie o QR code ou copie o código abaixo no seu banco. A confirmação é automática em até 1 minuto.
       </Text>
 
-      <View style={[
-        styles.stateBadge,
-        paymentState === 'confirmed' ? styles.stateConfirmed : paymentState === 'expired' || paymentState === 'error' ? styles.stateError : styles.stateWaiting,
-      ]}>
-        <Text style={styles.stateText}>
+      {/* State badge */}
+      <View style={{ borderRadius: 999, paddingHorizontal: 14, paddingVertical: 7, marginBottom: 18, borderWidth: 1, backgroundColor: bState.bg, borderColor: bState.border }}>
+        <Text style={{ fontSize: 12, fontWeight: '700', color: bState.text }}>
           {paymentState === 'confirmed' ? 'Pagamento confirmado'
             : paymentState === 'expired' ? 'Pix expirado'
             : paymentState === 'error' ? 'Erro ao verificar pagamento'
@@ -108,94 +121,64 @@ export function PixPaymentScreen() {
         </Text>
       </View>
 
+      {/* QR Code */}
       {pixData.qr_code_image ? (
-        <View style={styles.qrContainer}>
-          {/* iVBOR is the base64 magic number for PNG — validate before rendering */}
+        <View style={{ backgroundColor: colors.bgCard, borderRadius: 16, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: colors.borderSubtle }}>
           {pixData.qr_code_image.startsWith('iVBOR') ? (
-            <Image
-              source={{ uri: `data:image/png;base64,${pixData.qr_code_image}` }}
-              style={styles.qrImage}
-              resizeMode="contain"
-            />
+            <Image source={{ uri: `data:image/png;base64,${pixData.qr_code_image}` }} style={{ width: 220, height: 220 }} resizeMode="contain" />
           ) : (
-            <Text style={{ color: '#EF4444', textAlign: 'center' }}>QR code inválido. Use o código Copia e Cola.</Text>
+            <Text style={{ color: '#ef4444', textAlign: 'center' }}>QR code inválido. Use o código Copia e Cola.</Text>
           )}
         </View>
       ) : (
-        <View style={styles.qrPlaceholder}>
-          <ActivityIndicator size="large" color="#6366F1" />
-          <Text style={styles.qrPlaceholderText}>Gerando QR code...</Text>
+        <View style={{ width: 220, height: 220, justifyContent: 'center', alignItems: 'center', marginBottom: 24 }}>
+          <ActivityIndicator size="large" color={colors.accentBlue} />
+          <Text style={{ marginTop: 12, color: colors.textMuted, fontSize: 14 }}>Gerando QR code...</Text>
         </View>
       )}
 
+      {/* Copia e cola */}
       {pixData.copia_e_cola ? (
-        <View style={styles.copiaContainer}>
-          <Text style={styles.copiaLabel}>Pix Copia e Cola</Text>
-          <Text style={styles.copiaCode} numberOfLines={3} ellipsizeMode="middle">
+        <View style={{ width: '100%', backgroundColor: colors.bgCard, borderRadius: 12, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: colors.borderSubtle }}>
+          <Text style={{ fontSize: 12, fontWeight: '600', color: colors.textMuted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Pix Copia e Cola</Text>
+          <Text numberOfLines={3} ellipsizeMode="middle" style={{ fontSize: 12, color: colors.textSecondary, fontFamily: 'monospace', marginBottom: 12, lineHeight: 18 }}>
             {pixData.copia_e_cola}
           </Text>
-          <TouchableOpacity style={styles.copyBtn} onPress={handleCopy}>
-            <Text style={styles.copyBtnText}>{copied ? 'Código aberto para copiar' : 'Copiar código Pix'}</Text>
+          <TouchableOpacity onPress={handleCopy} style={{ backgroundColor: `${colors.accentBlue}18`, borderRadius: 8, paddingVertical: 10, alignItems: 'center' }}>
+            <Text style={{ color: colors.accentBlue, fontWeight: '600', fontSize: 14 }}>
+              {copied ? 'Código aberto para copiar' : 'Copiar código Pix'}
+            </Text>
           </TouchableOpacity>
         </View>
       ) : null}
 
       {pixData.expiration ? (
-        <Text style={styles.expiration}>
+        <Text style={{ fontSize: 12, color: colors.textMuted, marginBottom: 24 }}>
           Válido até: {new Date(pixData.expiration).toLocaleString('pt-BR')}
         </Text>
       ) : null}
 
-      {paymentState !== 'expired' ? <View style={styles.pollInfo}>
-        <ActivityIndicator size="small" color="#6366F1" style={{ marginRight: 8 }} />
-        <Text style={styles.pollText}>Verificando pagamento automaticamente...</Text>
-      </View> : null}
+      {paymentState !== 'expired' ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
+          <ActivityIndicator size="small" color={colors.accentBlue} style={{ marginRight: 8 }} />
+          <Text style={{ fontSize: 13, color: colors.textMuted }}>Verificando pagamento automaticamente...</Text>
+        </View>
+      ) : null}
 
-      <TouchableOpacity style={styles.checkBtn} onPress={handleCheckManually} disabled={checking}>
-        {checking ? (
-          <ActivityIndicator color="#6366F1" />
-        ) : (
-          <Text style={styles.checkBtnText}>Já paguei — verificar agora</Text>
-        )}
+      <TouchableOpacity
+        style={{ width: '100%', backgroundColor: colors.accentBlue, borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginBottom: 12 }}
+        onPress={handleCheckManually}
+        disabled={checking}
+      >
+        {checking
+          ? <ActivityIndicator color="#FFF" />
+          : <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 15 }}>Já paguei — verificar agora</Text>
+        }
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.cancelLink} onPress={() => navigation.navigate('Subscription')}>
-        <Text style={styles.cancelLinkText}>Pagar depois</Text>
+      <TouchableOpacity style={{ paddingVertical: 8 }} onPress={() => navigation.navigate('Subscription')}>
+        <Text style={{ color: colors.textMuted, fontSize: 14 }}>Pagar depois</Text>
       </TouchableOpacity>
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8F9FA' },
-  content:   { padding: 24, paddingBottom: 40, alignItems: 'center' },
-
-  title:    { fontSize: 22, fontWeight: '700', color: '#1F2937', marginBottom: 8, textAlign: 'center' },
-  subtitle: { fontSize: 14, color: '#6B7280', textAlign: 'center', lineHeight: 20, marginBottom: 24 },
-  stateBadge: { borderRadius: 999, paddingHorizontal: 14, paddingVertical: 7, marginBottom: 18, borderWidth: 1 },
-  stateWaiting: { backgroundColor: '#EEF2FF', borderColor: '#C7D2FE' },
-  stateConfirmed: { backgroundColor: '#DCFCE7', borderColor: '#86EFAC' },
-  stateError: { backgroundColor: '#FEE2E2', borderColor: '#FCA5A5' },
-  stateText: { fontSize: 12, fontWeight: '700', color: '#374151' },
-
-  qrContainer:      { backgroundColor: '#FFF', borderRadius: 16, padding: 16, marginBottom: 24, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 },
-  qrImage:          { width: 220, height: 220 },
-  qrPlaceholder:    { width: 220, height: 220, justifyContent: 'center', alignItems: 'center', marginBottom: 24 },
-  qrPlaceholderText:{ marginTop: 12, color: '#9CA3AF', fontSize: 14 },
-
-  copiaContainer: { width: '100%', backgroundColor: '#FFF', borderRadius: 12, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#E5E7EB' },
-  copiaLabel:     { fontSize: 12, fontWeight: '600', color: '#6B7280', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
-  copiaCode:      { fontSize: 12, color: '#374151', fontFamily: 'monospace', marginBottom: 12, lineHeight: 18 },
-  copyBtn:        { backgroundColor: '#EEF2FF', borderRadius: 8, paddingVertical: 10, alignItems: 'center' },
-  copyBtnText:    { color: '#6366F1', fontWeight: '600', fontSize: 14 },
-
-  expiration: { fontSize: 12, color: '#9CA3AF', marginBottom: 24 },
-
-  pollInfo: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
-  pollText: { fontSize: 13, color: '#6B7280' },
-
-  checkBtn:     { width: '100%', backgroundColor: '#6366F1', borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginBottom: 12 },
-  checkBtnText: { color: '#FFF', fontWeight: '700', fontSize: 15 },
-  cancelLink:   { paddingVertical: 8 },
-  cancelLinkText:{ color: '#9CA3AF', fontSize: 14 },
-});

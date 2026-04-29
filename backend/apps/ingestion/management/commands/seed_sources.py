@@ -66,9 +66,16 @@ SOURCES = [
         'base_url': 'https://cosat.tournamentsoftware.com',
         'fetch_schedule_cron': '0 2 * * *',  # daily at 2am
         'priority': 'P1',
-        'enabled': True,
+        'enabled': False,  # DISABLED: robots.txt disallows /sport/ /tournament/ /ranking/ for all crawlers.
+        # API endpoint /api/tournament/search returns 404 (unavailable as of 2026-04-28).
+        # Re-enable only after obtaining official API partnership with COSAT/TournamentSoftware.
+        # Manual import available via /api/registrations/federation/bulk-import/
         'config_json': {'year': CURRENT_YEAR},
-        'legal_notes': 'Public TournamentSoftware API. May require partnership for stable access.',
+        'legal_notes': (
+            'DISABLED — robots.txt (User-agent:*) disallows /sport/ /tournament/ /ranking/ /player/. '
+            'Search API returns 404. Requires official API partnership with COSAT/TournamentSoftware '
+            'for re-activation. Manual admin import is available as an alternative.'
+        ),
     },
     {
         'org_short': 'ITF',

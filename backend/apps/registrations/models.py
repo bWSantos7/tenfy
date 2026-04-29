@@ -145,7 +145,17 @@ class FederationEntry(TimestampedModel):
     SOURCE_CBT = 'cbt'
     SOURCE_FPT = 'fpt'
     SOURCE_FCT = 'fct'
+    SOURCE_COSAT = 'cosat'
     SOURCE_MANUAL = 'manual'
+
+    CONFIDENCE_HIGH = 'high'
+    CONFIDENCE_MEDIUM = 'medium'
+    CONFIDENCE_LOW = 'low'
+    CONFIDENCE_CHOICES = [
+        (CONFIDENCE_HIGH, 'Alta — API oficial ou confirmação manual'),
+        (CONFIDENCE_MEDIUM, 'Média — scraping de página pública'),
+        (CONFIDENCE_LOW, 'Baixa — inferido ou incompleto'),
+    ]
 
     edition = models.ForeignKey(
         'tournaments.TournamentEdition',
@@ -173,10 +183,33 @@ class FederationEntry(TimestampedModel):
         default=PAYMENT_UNKNOWN,
         db_index=True,
     )
+    # Substituição por ranking: atleta pago pode ser removido se um atleta de
+    # ranking superior se inscrever após o preenchimento das vagas.
+    removed_or_replaced = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text='True se o atleta foi removido/substituído por critério de ranking da federação',
+    )
+    replacement_reason = models.CharField(
+        max_length=300,
+        blank=True,
+        help_text='Motivo da remoção/substituição conforme publicado pela federação',
+    )
     source = models.CharField(
         max_length=50,
         default=SOURCE_MANUAL,
-        help_text='Origem: cbt, fpt, fct, manual…',
+        help_text='Origem: cbt, fpt, fct, cosat, manual…',
+    )
+    source_url = models.URLField(
+        max_length=500,
+        blank=True,
+        help_text='URL pública onde esta entrada foi encontrada',
+    )
+    confidence = models.CharField(
+        max_length=10,
+        choices=CONFIDENCE_CHOICES,
+        default=CONFIDENCE_MEDIUM,
+        help_text='Grau de confiança nos dados desta entrada',
     )
     notes = models.CharField(max_length=300, blank=True)
     raw_data = models.JSONField(default=dict, blank=True)

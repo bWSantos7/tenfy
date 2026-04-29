@@ -2,11 +2,25 @@
 COSAT connector — Confederación Sudamericana de Tenis.
 
 Source: https://cosat.tournamentsoftware.com/
-TournamentSoftware.com hosts COSAT's calendar via a public JSON API.
 
-NOTE: This connector uses the public-facing search endpoint.
-For stable access at scale, negotiate an official API key with COSAT.
-The connector can be disabled via DataSource.enabled=False (kill switch).
+⚠️  STATUS: DISABLED — robots.txt restriction + API endpoint unavailable.
+
+robots.txt (User-agent: *) disallows:
+  /sport/, /tournament/, /ranking/, /player/, /profile/
+  These are exactly the paths needed for tournament and entry data.
+
+The search API endpoint (/api/tournament/search?organisationId=6) returns HTTP 404
+as of 2026-04-28 — no longer publicly available.
+
+Paths to 10/10:
+  Option A: Official API partnership with COSAT / TournamentSoftware
+  Option B: Manual admin import via bulk-import endpoint
+  Option C: Website Content Crawler service with official permission
+  Option D: ITF Junior API (COSAT tournaments sometimes appear in ITF feed)
+
+The connector class is kept to preserve the registered_connectors() registry
+and allow future activation. It will abort immediately with a clear log message
+when called, respecting robots.txt and not accessing disallowed paths.
 """
 import logging
 import re
@@ -42,50 +56,24 @@ class COSATConnector(BaseConnector):
     }
 
     def extract(self):
-        year = self.config.get('year') or date.today().year
-        start = f'{year}-01-01'
-        end = f'{year}-12-31'
+        """
+        COSAT extraction is disabled:
+          - robots.txt (User-agent: *) disallows /sport/, /tournament/, /ranking/
+          - /api/tournament/search endpoint returns HTTP 404 (unavailable)
+          - Accessing disallowed paths would violate the site's crawl policy
 
-        params = {
-            'startDate': start,
-            'endDate': end,
-            'organisationId': '6',  # COSAT organisation ID on TournamentSoftware
-            'pageSize': 100,
-            'pageNumber': 1,
-        }
-
-        page = 1
-        seen = set()
-        while True:
-            params['pageNumber'] = page
-            try:
-                resp = self.fetch(self.SEARCH_URL, params=params)
-                if resp.status_code == 403:
-                    logger.warning('COSAT search blocked (403) — mark for partnership. Stopping.')
-                    break
-                if resp.status_code >= 400:
-                    logger.warning('COSAT search returned %s — stopping.', resp.status_code)
-                    break
-                data = resp.json()
-            except (ConnectorError, ValueError) as exc:
-                logger.warning('COSAT fetch failed: %s', exc)
-                break
-
-            items = data if isinstance(data, list) else data.get('items', data.get('tournaments', []))
-            if not items:
-                break
-
-            for item in items:
-                parsed = self._parse_item(item, year)
-                if parsed and parsed['external_id'] not in seen:
-                    seen.add(parsed['external_id'])
-                    yield parsed
-
-            # Pagination
-            total = data.get('total', 0) if isinstance(data, dict) else 0
-            if not total or len(seen) >= total:
-                break
-            page += 1
+        To re-enable, obtain official API access from COSAT/TournamentSoftware
+        and update DataSource.enabled=True via the admin panel.
+        """
+        logger.error(
+            'COSAT connector called but is DISABLED: robots.txt disallows /sport/ and '
+            '/tournament/ for all crawlers, and the search API endpoint returned 404. '
+            'Action required: obtain official API partnership with COSAT to re-enable. '
+            'Manual import is available via /api/registrations/federation/bulk-import/'
+        )
+        # Yield nothing — connector is intentionally non-functional
+        return
+        yield  # make this a generator
 
     def _parse_item(self, item: dict, year: int) -> dict | None:
         ext_id = str(item.get('id') or item.get('tournamentId') or '')

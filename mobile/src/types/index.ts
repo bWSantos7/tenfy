@@ -299,11 +299,16 @@ export interface FederationEntry {
   payment_status: 'paid' | 'pending' | 'unknown';
   payment_status_label: string;
   source: string;
+  source_label: string;
+  source_url: string;
+  confidence: 'high' | 'medium' | 'low';
+  removed_or_replaced: boolean;
+  replacement_reason: string;
   notes: string;
   synced_at: string;
   slot_position: number | null;
   in_draw: boolean | null;
-  status: 'confirmed' | 'waiting_list' | 'pending_payment';
+  status: 'confirmed' | 'waiting_list' | 'pending_payment' | 'removed';
   status_label: string;
 }
 

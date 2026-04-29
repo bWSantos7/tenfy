@@ -5,7 +5,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
@@ -18,6 +17,7 @@ import { checkout, CheckoutPayload } from '../../services/billing';
 import { tokenizeCard, getAsaasCustomerId } from '../../services/asaas';
 import api from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
 
 type CheckoutRouteProp = RouteProp<MainStackParamList, 'Checkout'>;
 type Nav = NativeStackNavigationProp<MainStackParamList>;
@@ -51,6 +51,7 @@ export function CheckoutScreen() {
   const route = useRoute<CheckoutRouteProp>();
   const { plan, billingPeriod } = route.params;
   const { user } = useAuth();
+  const { colors } = useTheme();
 
   const [method, setMethod] = useState<PaymentMethod>('pix');
   const [loading, setLoading] = useState(false);
@@ -186,20 +187,35 @@ export function CheckoutScreen() {
     }
   }
 
+  const inp = {
+    backgroundColor: colors.bgCard,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: colors.textPrimary,
+    marginBottom: 10,
+  } as const;
+
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>Finalizar assinatura</Text>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView
+        style={{ flex: 1, backgroundColor: colors.bgBase }}
+        contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Text style={{ fontSize: 22, fontWeight: '700', color: colors.textPrimary, marginBottom: 20 }}>
+          Finalizar assinatura
+        </Text>
 
         {/* Summary */}
-        <View style={styles.summaryCard}>
-          <Text style={styles.summaryPlan}>{plan.name}</Text>
-          <Text style={styles.summaryPrice}>{formatPrice(price, billingPeriod)}</Text>
+        <View style={{ backgroundColor: colors.accentBlue, borderRadius: 14, padding: 20, marginBottom: 24 }}>
+          <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 14, marginBottom: 4 }}>{plan.name}</Text>
+          <Text style={{ color: '#FFF', fontSize: 26, fontWeight: '800' }}>{formatPrice(price, billingPeriod)}</Text>
           {billingPeriod === 'yearly' && (
-            <Text style={styles.savingsNote}>
+            <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, marginTop: 6 }}>
               Equivale a R$ {(parseFloat(price) / 12).toFixed(2).replace('.', ',')}/mês — 2 meses grátis
             </Text>
           )}
@@ -208,146 +224,74 @@ export function CheckoutScreen() {
         {/* Payment method */}
         {plan.slug !== 'free' && (
           <>
-            <Text style={styles.sectionTitle}>Forma de pagamento</Text>
+            <Text style={{ fontSize: 15, fontWeight: '600', color: colors.textSecondary, marginBottom: 10, marginTop: 8 }}>
+              Forma de pagamento
+            </Text>
             {(Object.keys(METHOD_CONFIG) as PaymentMethod[]).map((m) => {
               const cfg = METHOD_CONFIG[m];
+              const selected = method === m;
               return (
                 <TouchableOpacity
                   key={m}
-                  style={[styles.methodRow, method === m && styles.methodRowSelected]}
                   onPress={() => setMethod(m)}
+                  style={{
+                    flexDirection: 'row', alignItems: 'center',
+                    backgroundColor: selected ? `${colors.accentBlue}18` : colors.bgCard,
+                    borderRadius: 12, padding: 14, marginBottom: 10,
+                    borderWidth: 1, borderColor: selected ? colors.accentBlue : colors.borderSubtle,
+                  }}
                 >
-                  <Text style={styles.methodIcon}>{cfg.icon}</Text>
+                  <Text style={{ fontSize: 22, marginRight: 12 }}>{cfg.icon}</Text>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.methodLabel}>{cfg.label}</Text>
-                    <Text style={styles.methodDesc}>{cfg.description}</Text>
+                    <Text style={{ fontSize: 15, fontWeight: '600', color: colors.textPrimary }}>{cfg.label}</Text>
+                    <Text style={{ fontSize: 12, color: colors.textMuted }}>{cfg.description}</Text>
                   </View>
-                  <View style={[styles.radio, method === m && styles.radioSelected]} />
+                  <View style={{
+                    width: 18, height: 18, borderRadius: 9, borderWidth: 2,
+                    borderColor: selected ? colors.accentBlue : colors.borderSubtle,
+                    backgroundColor: selected ? colors.accentBlue : 'transparent',
+                  }} />
                 </TouchableOpacity>
               );
             })}
           </>
         )}
 
-        {/* Card form — shown for both credit and debit */}
+        {/* Card form */}
         {(method === 'credit_card' || method === 'debit_card') && plan.slug !== 'free' && (
-          <View style={styles.cardForm}>
-            <Text style={styles.sectionTitle}>Dados do cartão</Text>
-
-            <TextInput
-              style={styles.input}
-              placeholder="Nome no cartão"
-              placeholderTextColor="#9CA3AF"
-              value={cardName}
-              onChangeText={setCardName}
-              autoCapitalize="characters"
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Número do cartão"
-              placeholderTextColor="#9CA3AF"
-              value={cardNumber}
-              onChangeText={(v) => setCardNumber(formatCardNumber(v))}
-              keyboardType="numeric"
-              maxLength={19}
-            />
-            <View style={styles.row}>
-              <TextInput
-                style={[styles.input, styles.inputHalf]}
-                placeholder="Validade (MM/AA)"
-                placeholderTextColor="#9CA3AF"
-                value={expiry}
-                onChangeText={(v) => setExpiry(formatExpiry(v))}
-                keyboardType="numeric"
-                maxLength={5}
-              />
-              <TextInput
-                style={[styles.input, styles.inputHalf]}
-                placeholder="CVV"
-                placeholderTextColor="#9CA3AF"
-                value={ccv}
-                onChangeText={(v) => setCcv(v.replace(/\D/g, '').slice(0, 4))}
-                keyboardType="numeric"
-                maxLength={4}
-                secureTextEntry
-                contextMenuHidden={true}
-                selectTextOnFocus={false}
-              />
+          <View style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: 16, marginTop: 8, marginBottom: 8, borderWidth: 1, borderColor: colors.borderSubtle }}>
+            <Text style={{ fontSize: 15, fontWeight: '600', color: colors.textSecondary, marginBottom: 10 }}>Dados do cartão</Text>
+            <TextInput style={inp} placeholder="Nome no cartão" placeholderTextColor={colors.textMuted} value={cardName} onChangeText={setCardName} autoCapitalize="characters" />
+            <TextInput style={inp} placeholder="Número do cartão" placeholderTextColor={colors.textMuted} value={cardNumber} onChangeText={(v) => setCardNumber(formatCardNumber(v))} keyboardType="numeric" maxLength={19} />
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TextInput style={[inp, { flex: 1 }]} placeholder="Validade (MM/AA)" placeholderTextColor={colors.textMuted} value={expiry} onChangeText={(v) => setExpiry(formatExpiry(v))} keyboardType="numeric" maxLength={5} />
+              <TextInput style={[inp, { flex: 1 }]} placeholder="CVV" placeholderTextColor={colors.textMuted} value={ccv} onChangeText={(v) => setCcv(v.replace(/\D/g, '').slice(0, 4))} keyboardType="numeric" maxLength={4} secureTextEntry contextMenuHidden selectTextOnFocus={false} />
             </View>
-
-            <Text style={styles.sectionTitle}>Dados do titular</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="CPF (somente números)"
-              placeholderTextColor="#9CA3AF"
-              value={cpf}
-              onChangeText={(v) => setCpf(v.replace(/\D/g, '').slice(0, 11))}
-              keyboardType="numeric"
-              maxLength={11}
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="CEP (somente números)"
-              placeholderTextColor="#9CA3AF"
-              value={cep}
-              onChangeText={(v) => setCep(v.replace(/\D/g, '').slice(0, 8))}
-              keyboardType="numeric"
-              maxLength={8}
-            />
+            <Text style={{ fontSize: 15, fontWeight: '600', color: colors.textSecondary, marginBottom: 10, marginTop: 4 }}>Dados do titular</Text>
+            <TextInput style={inp} placeholder="CPF (somente números)" placeholderTextColor={colors.textMuted} value={cpf} onChangeText={(v) => setCpf(v.replace(/\D/g, '').slice(0, 11))} keyboardType="numeric" maxLength={11} />
+            <TextInput style={inp} placeholder="CEP (somente números)" placeholderTextColor={colors.textMuted} value={cep} onChangeText={(v) => setCep(v.replace(/\D/g, '').slice(0, 8))} keyboardType="numeric" maxLength={8} />
           </View>
         )}
 
-        <Text style={styles.disclaimer}>
+        <Text style={{ fontSize: 11, color: colors.textMuted, textAlign: 'center', marginTop: 12, marginBottom: 20, lineHeight: 16 }}>
           Ao confirmar, você concorda com os Termos de Uso. Você pode cancelar a qualquer momento.
         </Text>
 
-        <TouchableOpacity style={styles.confirmBtn} onPress={handleConfirm} disabled={loading}>
-          {loading ? (
-            <ActivityIndicator color="#FFF" />
-          ) : (
-            <Text style={styles.confirmBtnText}>
-              {plan.slug === 'free' ? 'Usar plano gratuito' : 'Confirmar assinatura'}
-            </Text>
-          )}
+        <TouchableOpacity
+          style={{ backgroundColor: colors.accentBlue, borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginBottom: 12 }}
+          onPress={handleConfirm}
+          disabled={loading}
+        >
+          {loading
+            ? <ActivityIndicator color="#FFF" />
+            : <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 16 }}>{plan.slug === 'free' ? 'Usar plano gratuito' : 'Confirmar assinatura'}</Text>
+          }
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.cancelLink} onPress={() => navigation.goBack()}>
-          <Text style={styles.cancelLinkText}>Voltar</Text>
+        <TouchableOpacity style={{ alignItems: 'center' }} onPress={() => navigation.goBack()}>
+          <Text style={{ color: colors.textMuted, fontSize: 14 }}>Voltar</Text>
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8F9FA' },
-  content:   { padding: 20, paddingBottom: 40 },
-  title:     { fontSize: 22, fontWeight: '700', color: '#1F2937', marginBottom: 20 },
-
-  summaryCard:  { backgroundColor: '#6366F1', borderRadius: 14, padding: 20, marginBottom: 24 },
-  summaryPlan:  { color: 'rgba(255,255,255,0.8)', fontSize: 14, marginBottom: 4 },
-  summaryPrice: { color: '#FFF', fontSize: 26, fontWeight: '800' },
-  savingsNote:  { color: 'rgba(255,255,255,0.7)', fontSize: 12, marginTop: 6 },
-
-  sectionTitle: { fontSize: 15, fontWeight: '600', color: '#374151', marginBottom: 10, marginTop: 8 },
-
-  methodRow:         { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', borderRadius: 12, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#E5E7EB' },
-  methodRowSelected: { borderColor: '#6366F1', backgroundColor: '#F0F0FF' },
-  methodIcon:        { fontSize: 22, marginRight: 12 },
-  methodLabel:       { fontSize: 15, fontWeight: '600', color: '#1F2937' },
-  methodDesc:        { fontSize: 12, color: '#6B7280' },
-  radio:             { width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: '#D1D5DB' },
-  radioSelected:     { borderColor: '#6366F1', backgroundColor: '#6366F1' },
-
-  cardForm: { backgroundColor: '#FFF', borderRadius: 14, padding: 16, marginTop: 8, marginBottom: 8, borderWidth: 1, borderColor: '#E5E7EB' },
-  input:    { backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#1F2937', marginBottom: 10 },
-  row:      { flexDirection: 'row', gap: 10 },
-  inputHalf:{ flex: 1 },
-
-  disclaimer: { fontSize: 11, color: '#9CA3AF', textAlign: 'center', marginTop: 12, marginBottom: 20, lineHeight: 16 },
-
-  confirmBtn:     { backgroundColor: '#6366F1', borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginBottom: 12 },
-  confirmBtnText: { color: '#FFF', fontWeight: '700', fontSize: 16 },
-  cancelLink:     { alignItems: 'center' },
-  cancelLinkText: { color: '#6B7280', fontSize: 14 },
-});

@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { Image, Pressable, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -80,11 +80,19 @@ export function HomeScreen(_: Props) {
 
   return (
     <Screen onRefresh={onRefresh} refreshing={refreshing}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <View style={{ flex: 1 }}>
-          <AppText variant="caption" style={{ color: colors.textMuted }}>Olá,</AppText>
-          <AppText variant="title">{user?.full_name || profile?.display_name || user?.email?.split('@')[0] || 'Jogador'}</AppText>
-          {profile ? <AppText variant="caption" style={{ marginTop: 4 }}>{profile.tennis_class ? `Classe ${profile.tennis_class}` : ''}{profile.sporting_age ? ` • ${profile.sporting_age} anos esportivos` : ''}{profile.home_state ? ` • ${profile.home_state}` : ''}</AppText> : null}
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+          {user?.avatar
+            ? <Image source={{ uri: user.avatar }} style={{ width: 40, height: 40, borderRadius: 20, borderWidth: 1, borderColor: colors.borderSubtle }} />
+            : <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: `${colors.accentNeon}20`, borderWidth: 1, borderColor: `${colors.accentNeon}40`, alignItems: 'center', justifyContent: 'center' }}>
+                <Ionicons name="person" size={20} color={colors.accentNeon} />
+              </View>
+          }
+          <View style={{ flex: 1 }}>
+            <AppText variant="caption" style={{ color: colors.textMuted }}>Olá,</AppText>
+            <AppText variant="body" style={{ fontWeight: '700', fontSize: 16 }}>{user?.full_name || profile?.display_name || user?.email?.split('@')[0] || 'Jogador'}</AppText>
+            {profile ? <AppText variant="caption" style={{ marginTop: 2 }}>{profile.tennis_class ? `Classe ${profile.tennis_class}` : ''}{profile.sporting_age ? ` • ${profile.sporting_age} anos esportivos` : ''}{profile.home_state ? ` • ${profile.home_state}` : ''}</AppText> : null}
+          </View>
         </View>
         <Pressable onPress={() => navigation.navigate('Tabs', { screen: 'Alerts' } as never)} style={{ padding: 8 }}>
           <View>
@@ -117,7 +125,7 @@ export function HomeScreen(_: Props) {
             }
           />
           {compat.length === 0
-            ? <EmptyState title="Nenhum torneio compatível por enquanto." subtitle="Revise cidade, raio de viagem, classe, idade e categoria no seu perfil para ampliar as recomendações." icon="trophy-outline" />
+            ? <EmptyState title="Nenhum torneio compatível com o seu perfil." subtitle="Revise cidade, raio de viagem, classe e categoria no perfil." icon="trophy-outline" />
             : compat.map((ed) => <TournamentCard key={ed.id} edition={ed} showEligibility onPress={() => navigation.navigate('TournamentDetail', { id: ed.id, edition: ed })} />)
           }
         </View>

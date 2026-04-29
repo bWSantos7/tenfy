@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -67,6 +67,7 @@ export function OnboardingScreen({ navigation }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [cities, setCities] = useState<{ value: string; label: string }[]>([]);
   const [loadingCities, setLoadingCities] = useState(false);
+  const [citiesError, setCitiesError] = useState(false);
   const [form, setForm] = useState({
     display_name: '',
     birth_year: '',
@@ -86,12 +87,15 @@ export function OnboardingScreen({ navigation }: Props) {
     if (!uf) return;
     setLoadingCities(true);
     setCities([]);
+    setCitiesError(false);
     try {
       const res = await fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${uf}/municipios`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data: any[] = await res.json();
       setCities(data.map((c) => ({ value: c.nome, label: c.nome })).sort((a, b) => a.label.localeCompare(b.label, 'pt-BR')));
     } catch {
-      Toast.show({ type: 'error', text1: 'Erro ao carregar cidades' });
+      setCitiesError(true);
+      Toast.show({ type: 'error', text1: 'Erro ao carregar cidades', text2: 'Verifique sua conexão e tente novamente.' });
     } finally {
       setLoadingCities(false);
     }
@@ -170,10 +174,23 @@ export function OnboardingScreen({ navigation }: Props) {
           value={form.home_city}
           options={cities}
           onSelect={(v) => setForm({ ...form, home_city: v })}
-          placeholder={loadingCities ? 'Carregando cidades...' : (cities.length === 0 ? 'Selecione o estado primeiro' : 'Selecione a cidade')}
+          placeholder={
+            loadingCities
+              ? 'Carregando cidades...'
+              : cities.length === 0
+              ? 'Selecione o estado primeiro'
+              : 'Selecione a cidade'
+          }
           loading={loadingCities}
           searchable
         />
+        {citiesError && !loadingCities && (
+          <Pressable onPress={() => loadCities(form.home_state)} style={{ paddingVertical: 6 }}>
+            <AppText variant="caption" style={{ color: colors.statusClosing }}>
+              Erro ao carregar cidades. Toque aqui para tentar novamente.
+            </AppText>
+          </Pressable>
+        )}
         <SelectField
           label="Raio de viagem"
           value={form.travel_radius_km}

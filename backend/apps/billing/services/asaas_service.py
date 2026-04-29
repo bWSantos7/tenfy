@@ -242,27 +242,40 @@ def create_subscription(
     return _request('POST', '/subscriptions', json=payload)
 
 
-def get_subscription_first_pix_qr(asaas_subscription_id: str) -> dict:
+def get_subscription_first_pix_qr(asaas_subscription_id: str, max_attempts: int = 3) -> dict:
     """
     Fetch the Pix QR code for the first pending payment of a subscription.
     Returns dict with encodedImage, payload (copia e cola) and expirationDate.
+
+    Retries up to max_attempts times with 2s delay because Asaas (especially sandbox)
+    may not generate the first payment synchronously right after subscription creation.
     """
-    try:
-        payments = _request('GET', '/payments', params={
-            'subscription': asaas_subscription_id,
-            'limit': 1,
-            'offset': 0,
-        })
-        payment_list = payments.get('data', [])
-        if not payment_list:
-            logger.warning('No payments found for subscription %s', asaas_subscription_id)
-            return {}
-        payment_id = payment_list[0]['id']
-        qr = _request('GET', f'/payments/{payment_id}/pixQrCode')
-        return qr
-    except AsaasAPIError as exc:
-        logger.warning('Could not fetch Pix QR for subscription %s: %s', asaas_subscription_id, exc)
-        return {}
+    for attempt in range(max_attempts):
+        try:
+            payments = _request('GET', '/payments', params={
+                'subscription': asaas_subscription_id,
+                'limit': 1,
+                'offset': 0,
+            })
+            payment_list = payments.get('data', [])
+            if not payment_list:
+                if attempt < max_attempts - 1:
+                    logger.info(
+                        'No payments yet for subscription %s (attempt %d/%d), retrying in 2s…',
+                        asaas_subscription_id, attempt + 1, max_attempts,
+                    )
+                    time.sleep(2)
+                    continue
+                logger.warning('No payments found for subscription %s after %d attempts', asaas_subscription_id, max_attempts)
+                return {}
+            payment_id = payment_list[0]['id']
+            qr = _request('GET', f'/payments/{payment_id}/pixQrCode')
+            return qr
+        except AsaasAPIError as exc:
+            logger.warning('Could not fetch Pix QR for subscription %s (attempt %d): %s', asaas_subscription_id, attempt + 1, exc)
+            if attempt < max_attempts - 1:
+                time.sleep(2)
+    return {}
 
 
 def cancel_subscription(asaas_subscription_id: str) -> dict:

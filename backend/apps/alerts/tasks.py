@@ -78,6 +78,11 @@ def _build_change_body(field_changes: dict) -> str:
             old_val = _fmt_value(field_name, change.get('old'))
             new_val = _fmt_value(field_name, change.get('new'))
             lines.append(f'{label} alterado para {new_val} (era {old_val})')
+        elif isinstance(change, str) and ' → ' in change:
+            parts = change.split(' → ', 1)
+            old_val = _fmt_value(field_name, parts[0].strip())
+            new_val = _fmt_value(field_name, parts[1].strip())
+            lines.append(f'{label} alterado para {new_val} (era {old_val})')
         else:
             lines.append(f'{label}: {_fmt_value(field_name, change)}')
     return '\n'.join(lines) if lines else 'Mudanças detectadas na fonte oficial.'

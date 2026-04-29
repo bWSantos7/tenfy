@@ -33,7 +33,6 @@ type Step = 'form' | 'otp' | 'profile';
 const GENDER_OPTIONS = [{ value: 'M', label: 'Masculino' }, { value: 'F', label: 'Feminino' }];
 const ROLE_OPTIONS = [
   { value: 'player', label: 'Jogador(a)' },
-  { value: 'coach', label: 'Treinador(a)' },
   { value: 'parent', label: 'Responsável / Pai ou Mãe' },
 ];
 const UF_OPTIONS = [

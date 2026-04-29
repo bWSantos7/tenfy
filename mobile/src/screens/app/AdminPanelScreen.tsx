@@ -77,6 +77,18 @@ const STATUS_COLORS: Record<string, string> = {
   running: '#3b82f6',
 };
 
+const STATUS_LABELS: Record<string, string> = {
+  unknown:       'Desconhecido',
+  announced:     'Anunciado',
+  open:          'Aberto',
+  closing_soon:  'Fechando',
+  closed:        'Encerrado',
+  draws_published: 'Chaves',
+  in_progress:   'Em andamento',
+  finished:      'Finalizado',
+  canceled:      'Cancelado',
+};
+
 export function AdminPanelScreen({ navigation }: Props) {
   const { colors } = useTheme();
   const [tab, setTab] = useState<Tab>('dashboard');
@@ -281,8 +293,8 @@ function StatsTab() {
   const maxStatus = Math.max(...data.tournaments_by_status.map((r) => r.count), 1);
 
   return (
-    <ScrollView showsVerticalScrollIndicator={false}>
-      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 2 }}>
+    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 16, paddingBottom: 100 }}>
+      <View style={{ flexDirection: 'row', gap: 8 }}>
         {[7, 30, 90].map((d) => (
           <Pressable key={d} onPress={() => { setDays(d); load(d); }}
             style={{ paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: days === d ? colors.accentNeon : colors.borderSubtle, backgroundColor: days === d ? `${colors.accentNeon}15` : 'transparent' }}>
@@ -292,15 +304,15 @@ function StatsTab() {
       </View>
 
       <View style={{ flexDirection: 'row', gap: 8 }}>
-        <View style={{ flex: 1, backgroundColor: colors.bgCard, borderRadius: 16, padding: 12, alignItems: 'center' }}>
+        <View style={{ flex: 1, backgroundColor: colors.bgCard, borderRadius: 16, padding: 14, alignItems: 'center' }}>
           <AppText variant="muted" style={{ fontSize: 10 }}>USUÁRIOS</AppText>
           <AppText variant="title" style={{ color: colors.accentNeon }}>{data.totals.users}</AppText>
         </View>
-        <View style={{ flex: 1, backgroundColor: colors.bgCard, borderRadius: 16, padding: 12, alignItems: 'center' }}>
+        <View style={{ flex: 1, backgroundColor: colors.bgCard, borderRadius: 16, padding: 14, alignItems: 'center' }}>
           <AppText variant="muted" style={{ fontSize: 10 }}>ATIVOS</AppText>
           <AppText variant="title">{data.totals.active_users}</AppText>
         </View>
-        <View style={{ flex: 1, backgroundColor: colors.bgCard, borderRadius: 16, padding: 12, alignItems: 'center' }}>
+        <View style={{ flex: 1, backgroundColor: colors.bgCard, borderRadius: 16, padding: 14, alignItems: 'center' }}>
           <AppText variant="muted" style={{ fontSize: 10 }}>NOVOS ({days}d)</AppText>
           <AppText variant="title" style={{ color: colors.accentBlue }}>{data.totals.new_users_period}</AppText>
         </View>
@@ -327,7 +339,7 @@ function StatsTab() {
           return (
             <View key={r.role} style={{ marginBottom: 8 }}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                <AppText variant="caption">{r.role}</AppText>
+                <AppText variant="caption">{ROLE_LABELS[r.role] ?? r.role}</AppText>
                 <AppText variant="caption" style={{ fontWeight: '700' }}>{r.count}</AppText>
               </View>
               <View style={{ height: 6, backgroundColor: `${barColors[i % barColors.length]}30`, borderRadius: 3 }}>
@@ -343,7 +355,7 @@ function StatsTab() {
         {data.tournaments_by_status.map((r) => (
           <View key={r.status} style={{ marginBottom: 8 }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-              <AppText variant="caption">{r.status}</AppText>
+              <AppText variant="caption">{STATUS_LABELS[r.status] ?? r.status}</AppText>
               <AppText variant="caption" style={{ fontWeight: '700' }}>{r.count}</AppText>
             </View>
             <View style={{ height: 6, backgroundColor: `${colors.accentBlue}30`, borderRadius: 3 }}>

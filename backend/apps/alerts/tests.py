@@ -54,6 +54,17 @@ class FieldFormattingTestCase(TestCase):
         body = _build_change_body({})
         self.assertEqual(body, 'Mudanças detectadas na fonte oficial.')
 
+    def test_build_change_body_string_arrow_format(self):
+        """Old alerts stored body as 'old → new' string — must be formatted correctly."""
+        field_changes = {
+            'entry_close_at': '2026-04-28T02:59:00+00:00 → 2026-04-27T23:59:00+00:00',
+        }
+        body = _build_change_body(field_changes)
+        self.assertIn('Prazo de inscrição', body)
+        self.assertNotIn('entry_close_at', body)
+        self.assertNotIn('+00:00', body)
+        self.assertIn('alterado para', body)
+
 
 class AlertModelTestCase(TestCase):
     def setUp(self):

@@ -174,7 +174,7 @@ def send_otp_email(self, user_id: int, email: str, full_name: str, code: str, su
         f'Seu código de verificação é: {code}\n\n'
         f'Válido por 10 minutos. Não compartilhe com ninguém.\n\n'
         f'Se não foi você, ignore este e-mail.\n\n'
-        f'— {APP_NAME} | {FRONTEND}'
+        f'— {APP_NAME} | {_frontend()}'
     )
 
     try:
@@ -227,7 +227,7 @@ def send_password_reset_email(self, user_id: int, email: str, full_name: str, re
         f'Acesse o link abaixo para criar uma nova senha (válido por 24h):\n\n'
         f'{reset_url}\n\n'
         f'Se não foi você, ignore este e-mail. Sua senha não será alterada.\n\n'
-        f'— {APP_NAME} | {FRONTEND}'
+        f'— {APP_NAME} | {_frontend()}'
     )
 
     try:

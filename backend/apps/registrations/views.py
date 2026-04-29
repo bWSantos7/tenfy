@@ -1,11 +1,14 @@
+import hmac
+import logging
 from collections import defaultdict
 
+from django.conf import settings
 from django.db.models import F, Window
 from django.db.models.functions import RowNumber
 from django.utils import timezone
 from rest_framework import status, viewsets
-from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
 
 from apps.players.models import PlayerProfile
@@ -21,6 +24,32 @@ from .serializers import (
     RegistrationCreateSerializer,
     compute_registration_status,
 )
+
+logger = logging.getLogger('apps.registrations')
+
+# ── Import token auth helper ───────────────────────────────────────────────────
+
+def _check_import_auth(request) -> bool:
+    """
+    Accepts import requests from:
+      1. Django staff users (standard JWT auth)
+      2. Requests with X-Import-Token header matching IMPORT_API_TOKEN env var
+
+    The import token is meant for n8n / external pipelines.
+    Never expose IMPORT_API_TOKEN in mobile or frontend code.
+    """
+    if request.user and request.user.is_authenticated and request.user.is_staff:
+        return True
+    token = settings.IMPORT_API_TOKEN
+    if not token:
+        return False
+    incoming = request.META.get('HTTP_X_IMPORT_TOKEN', '')
+    return bool(incoming) and hmac.compare_digest(incoming.encode(), token.encode())
+
+# ── Entry defaults ─────────────────────────────────────────────────────────────
+
+_VALID_PAYMENT = {FederationEntry.PAYMENT_PAID, FederationEntry.PAYMENT_PENDING, FederationEntry.PAYMENT_UNKNOWN}
+_VALID_CONFIDENCE = {FederationEntry.CONFIDENCE_HIGH, FederationEntry.CONFIDENCE_MEDIUM, FederationEntry.CONFIDENCE_LOW}
 
 
 def _annotate_slot_positions(qs):
@@ -395,43 +424,123 @@ class FederationEntryViewSet(viewsets.GenericViewSet):
     @action(detail=False, methods=['post'], url_path='bulk-import')
     def bulk_import(self, request):
         """
-        POST /api/federation-entries/bulk-import/
-        Admin: importar lista de inscrições em lote.
+        POST /api/registrations/federation/bulk-import/
 
-        Payload: { "edition_id": int, "source": str, "entries": [...] }
-        Cada entry: { "category_text", "player_name", "player_external_id"?,
-                      "ranking_position"?, "payment_status"?, "notes"? }
+        Admin import. Supports staff JWT auth OR X-Import-Token header (for n8n).
+
+        Payload:
+          {
+            "edition_id": int,
+            "source": "cosat|cbt|fpt|manual|...",
+            "source_url": "https://...",          # optional
+            "confidence": "high|medium|low",      # default: medium
+            "dry_run": false,                      # default: false
+            "entries": [
+              {
+                "player_name": str,               # required
+                "category_text": str,              # required
+                "player_external_id": str,         # optional — used as dedup key
+                "ranking_position": int|null,
+                "ranking_source": str,             # e.g. "CBT 2026", "COSAT Jan/26"
+                "payment_status": "paid|pending|unknown",
+                "removed_or_replaced": bool,
+                "replacement_reason": str,
+                "notes": str,
+                "source_url": str                  # entry-level override
+              }
+            ]
+          }
+
+        dry_run=true: validates and previews without saving. Returns what would happen.
+
+        Returns:
+          { "created": int, "updated": int, "skipped": int, "errors": [...], "detail": str,
+            "dry_run": bool, "previews": [...] if dry_run }
         """
-        err = self._require_staff(request)
-        if err:
-            return err
+        if not _check_import_auth(request):
+            return Response({'detail': 'Autenticação necessária. Use JWT de staff ou X-Import-Token.'}, status=status.HTTP_403_FORBIDDEN)
 
         edition_id = request.data.get('edition_id')
-        source = request.data.get('source', FederationEntry.SOURCE_MANUAL)
+        source = (request.data.get('source') or FederationEntry.SOURCE_MANUAL).strip()
+        source_url_default = (request.data.get('source_url') or '').strip()
+        confidence_default = (request.data.get('confidence') or FederationEntry.CONFIDENCE_MEDIUM).strip()
+        dry_run = bool(request.data.get('dry_run', False))
         entries_data = request.data.get('entries', [])
 
         if not edition_id:
             return Response({'detail': 'edition_id obrigatório.'}, status=status.HTTP_400_BAD_REQUEST)
         if not entries_data:
             return Response({'detail': 'entries não pode ser vazio.'}, status=status.HTTP_400_BAD_REQUEST)
+        if confidence_default not in _VALID_CONFIDENCE:
+            return Response({'detail': f'confidence inválido. Valores: {", ".join(_VALID_CONFIDENCE)}'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             edition = TournamentEdition.objects.get(pk=edition_id)
         except TournamentEdition.DoesNotExist:
             return Response({'detail': 'Edição não encontrada.'}, status=status.HTTP_404_NOT_FOUND)
 
-        created_count = 0
-        updated_count = 0
+        created_count = updated_count = skipped_count = 0
         errors = []
+        previews = []
 
         for i, entry_data in enumerate(entries_data):
+            row_num = i + 1
             try:
                 player_name = (entry_data.get('player_name') or '').strip()
                 category_text = (entry_data.get('category_text') or '').strip()
                 external_id = (entry_data.get('player_external_id') or '').strip()
 
-                if not player_name or not category_text:
-                    errors.append(f'Linha {i + 1}: player_name e category_text são obrigatórios.')
+                if not player_name:
+                    errors.append({'row': row_num, 'error': 'player_name obrigatório.', 'data': entry_data})
+                    continue
+                if not category_text:
+                    errors.append({'row': row_num, 'error': 'category_text obrigatório.', 'data': entry_data})
+                    continue
+
+                raw_payment = (entry_data.get('payment_status') or FederationEntry.PAYMENT_UNKNOWN).strip()
+                if raw_payment not in _VALID_PAYMENT:
+                    raw_payment = FederationEntry.PAYMENT_UNKNOWN
+
+                entry_confidence = (entry_data.get('confidence') or confidence_default).strip()
+                if entry_confidence not in _VALID_CONFIDENCE:
+                    entry_confidence = confidence_default
+
+                defaults = {
+                    'player_name': player_name,
+                    'ranking_position': entry_data.get('ranking_position') or None,
+                    'payment_status': raw_payment,
+                    'removed_or_replaced': bool(entry_data.get('removed_or_replaced', False)),
+                    'replacement_reason': (entry_data.get('replacement_reason') or '').strip()[:300],
+                    'source_url': (entry_data.get('source_url') or source_url_default).strip()[:500],
+                    'confidence': entry_confidence,
+                    'notes': (entry_data.get('notes') or '').strip()[:300],
+                    'raw_data': {
+                        **{k: v for k, v in entry_data.items() if k != 'raw_data'},
+                        '_imported_at': timezone.now().isoformat(),
+                        '_ranking_source': (entry_data.get('ranking_source') or '').strip(),
+                    },
+                }
+
+                if dry_run:
+                    exists = FederationEntry.objects.filter(
+                        edition=edition,
+                        category_text=category_text,
+                        player_external_id=external_id,
+                        source=source,
+                    ).exists()
+                    previews.append({
+                        'row': row_num,
+                        'action': 'update' if exists else 'create',
+                        'player_name': player_name,
+                        'category_text': category_text,
+                        'payment_status': raw_payment,
+                        'removed_or_replaced': defaults['removed_or_replaced'],
+                        'confidence': entry_confidence,
+                    })
+                    if exists:
+                        updated_count += 1
+                    else:
+                        created_count += 1
                     continue
 
                 obj, was_created = FederationEntry.objects.update_or_create(
@@ -439,27 +548,42 @@ class FederationEntryViewSet(viewsets.GenericViewSet):
                     category_text=category_text,
                     player_external_id=external_id,
                     source=source,
-                    defaults={
-                        'player_name': player_name,
-                        'ranking_position': entry_data.get('ranking_position'),
-                        'payment_status': entry_data.get('payment_status', FederationEntry.PAYMENT_UNKNOWN),
-                        'notes': entry_data.get('notes', ''),
-                        'raw_data': entry_data,
-                    },
+                    defaults=defaults,
                 )
                 if was_created:
                     created_count += 1
                 else:
                     updated_count += 1
-            except Exception as exc:
-                errors.append(f'Linha {i + 1}: {exc}')
 
-        return Response({
+            except Exception as exc:
+                logger.warning('Import row %d failed: %s', row_num, exc)
+                errors.append({'row': row_num, 'error': str(exc)})
+
+        if not dry_run:
+            logger.info(
+                'Federation import edition=%s source=%s created=%d updated=%d errors=%d dry_run=%s',
+                edition_id, source, created_count, updated_count, len(errors), dry_run,
+            )
+
+        result = {
+            'dry_run': dry_run,
+            'edition_id': edition.id,
+            'edition_title': edition.title,
+            'source': source,
             'created': created_count,
             'updated': updated_count,
+            'skipped': skipped_count,
             'errors': errors,
-            'detail': f'{created_count} criadas, {updated_count} atualizadas, {len(errors)} erros.',
-        })
+            'detail': (
+                f'[DRY RUN] Prévia: {created_count} seriam criadas, {updated_count} atualizadas, {len(errors)} rejeitadas.'
+                if dry_run
+                else f'{created_count} criadas, {updated_count} atualizadas, {len(errors)} erros.'
+            ),
+        }
+        if dry_run:
+            result['previews'] = previews
+
+        return Response(result)
 
     @action(detail=False, methods=['delete'], url_path=r'clear/(?P<edition_id>\d+)')
     def clear_edition(self, request, edition_id=None):

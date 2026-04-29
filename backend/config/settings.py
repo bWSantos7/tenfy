@@ -324,6 +324,12 @@ SCRAPER_RATE_LIMIT_SECONDS = config('SCRAPER_RATE_LIMIT_SECONDS', default=2, cas
 
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
 
+# Import API token — used by n8n / external pipelines to authenticate against
+# the federation entry import endpoint without needing a user account.
+# Set IMPORT_API_TOKEN in Railway Variables (generate with: python -c "import secrets; print(secrets.token_hex(32))")
+# Never expose this token in mobile/frontend code.
+IMPORT_API_TOKEN = config('IMPORT_API_TOKEN', default='')
+
 # Web Push (VAPID) — generate keys with: python -c "from py_vapid import Vapid; v=Vapid(); v.generate_keys(); print(v.private_key, v.public_key)"
 VAPID_PRIVATE_KEY = config('VAPID_PRIVATE_KEY', default='')
 VAPID_PUBLIC_KEY = config('VAPID_PUBLIC_KEY', default='')

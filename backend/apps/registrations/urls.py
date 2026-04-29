@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import FederationEntryViewSet, RegistrationViewSet
+from .views import FederationEntryViewSet, RegistrationViewSet, federation_import
 
 reg = RegistrationViewSet.as_view
 fed = FederationEntryViewSet.as_view
@@ -25,4 +25,7 @@ urlpatterns = [
     path('federation/<int:pk>/', fed({'patch': 'partial_update', 'delete': 'destroy'}), name='fedentry-detail'),
     path('federation/bulk-import/', fed({'post': 'bulk_import'}), name='fedentry-bulk-import'),
     path('federation/clear/<int:edition_id>/', fed({'delete': 'clear_edition'}), name='fedentry-clear'),
+
+    # ── External import — n8n / pipelines (AllowAny + token check inside) ────
+    path('import/', federation_import, name='federation-import'),
 ]

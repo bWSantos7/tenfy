@@ -45,26 +45,130 @@ _CIRCUIT_TO_SOURCE = {
     'CBT':   'cbt',
     'FPT':   'fpt',
     'FCT':   'fct',
+    'FMT':   'fmt',
     'COSAT': 'cosat',
     'ITF':   'itf',
     'UTR':   'utr',
 }
 
+# connector_key prefix → source
+_CONNECTOR_TO_SOURCE = {
+    'cbt_':    'cbt',
+    'fpt_':    'fpt',
+    'fct_':    'fct',
+    'fmt_':    'fmt',
+    'cosat_':  'cosat',
+    'itf_':    'itf',
+    'utr_':    'utr',
+    'cbt':     'cbt',
+    'fpt':     'fpt',
+    'fct':     'fct',
+    'cosat':   'cosat',
+}
+
+# URL domain → source (tenisintegrado handled separately: could be cbt/fct/fmt)
+_URL_DOMAIN_TO_SOURCE = [
+    ('fpt.com.br',                   'fpt'),
+    ('cbt-tenis.com.br',             'cbt'),
+    ('tennistool.tenisintegrado.com', None),   # need connector_key to distinguish
+    ('tenisintegrado.com.br',        None),    # need connector_key to distinguish
+    ('tournamentsoftware.com',       'cosat'),
+    ('itftennis.com',                'itf'),
+    ('utrsports.net',                'utr'),
+]
+
 # Inscription link URL path patterns (lowercased)
 _ENTRY_LINK_PATTERNS = [
     '/inscrit', '/inscricao', '/inscrição', '/entry', '/entries',
     '/players', '/draw', '/chaves', '/acceptance', '/participant',
+    '/torneio_painel', '/inscritos',
 ]
 _RANKING_LINK_PATTERNS = ['/ranking', '/classificacao', '/classification']
 
 
-def _edition_source(edition: TournamentEdition) -> str:
-    """Infer source from circuit name."""
+def infer_source_from_url(url: str) -> str:
+    """
+    Infer federation source from URL domain.
+    Returns source key or '' when domain not recognised.
+
+    Note: tenisintegrado.com.br returns '' (ambiguous: could be CBT, FCT, FMT).
+    Use infer_source_from_edition() for full resolution with connector_key context.
+    """
+    if not url:
+        return ''
+    url_lower = url.lower()
+    for domain, src in _URL_DOMAIN_TO_SOURCE:
+        if domain in url_lower:
+            return src or ''   # None → '' for ambiguous domains
+    return ''
+
+
+def infer_source_from_edition(edition: TournamentEdition) -> str:
+    """
+    Infer source using full edition context, in priority order:
+
+    1. data_source.connector_key  — most reliable; set by ingestion pipeline
+    2. tournament.circuit         — set when ingested from known circuit
+    3. official_source_url domain — URL pattern matching
+    4. source_name                — fallback text hint
+    5. raw_payload host fields    — CBT payload has 'host' key
+    6. 'manual'                   — default when no evidence found
+
+    For tenisintegrado.com.br (ambiguous): resolves to cbt/fct/fmt via
+    connector_key or circuit; defaults to 'cbt' when unknown (most common).
+    """
+    # 1. connector_key from data_source FK
+    try:
+        ck = (getattr(edition.data_source, 'connector_key', None) or '').lower()
+        if ck:
+            for prefix, src in _CONNECTOR_TO_SOURCE.items():
+                if ck.startswith(prefix) or ck == prefix.rstrip('_'):
+                    return src
+    except Exception:
+        pass
+
+    # 2. circuit field
     circuit = (edition.tournament.circuit or '').upper().strip()
     for key, src in _CIRCUIT_TO_SOURCE.items():
         if key in circuit:
             return src
+
+    # 3. official_source_url domain
+    url = edition.official_source_url or ''
+    url_src = infer_source_from_url(url)
+    if url_src:
+        return url_src
+
+    # tenisintegrado is ambiguous — check hints before defaulting to cbt
+    if 'tenisintegrado' in url.lower():
+        # Check source_name for FCT/FMT hint
+        sname = (edition.source_name or '').upper()
+        if 'FCT' in sname:
+            return 'fct'
+        if 'FMT' in sname:
+            return 'fmt'
+        # Check raw_payload host field (CBT connector sets 'host': 'cbt-tenis.com.br')
+        payload = edition.raw_payload or {}
+        host = str(payload.get('host', '')).lower()
+        if 'fct' in host:
+            return 'fct'
+        if 'fmt' in host:
+            return 'fmt'
+        # Default for tenisintegrado when no distinguishing hint: cbt (most common)
+        return 'cbt'
+
+    # 4. source_name text hint
+    sname_upper = (edition.source_name or '').upper()
+    for key, src in _CIRCUIT_TO_SOURCE.items():
+        if key in sname_upper:
+            return src
+
     return 'manual'
+
+
+def _edition_source(edition: TournamentEdition) -> str:
+    """Wrapper kept for backward compat — delegates to infer_source_from_edition."""
+    return infer_source_from_edition(edition)
 
 
 def derive_entries_source_url(edition: TournamentEdition):
@@ -106,22 +210,27 @@ def derive_entries_source_url(edition: TournamentEdition):
     if entries_url:
         return entries_url, ranking_url, candidates
 
-    # 2. FPT: try to derive inscrição URL from /Torneio/Info/ pattern
+    # 1b. source_url itself may already be an inscription/entries page
+    # (e.g. FPT /Inscricao/InscricaoTorneio/ or tenisintegrado /torneio_painel_info/)
+    if source_url and any(p in source_url.lower() for p in _ENTRY_LINK_PATTERNS):
+        entries_url = source_url
+        return entries_url, ranking_url, candidates
+
+    # 2. FPT: derive inscrição URL from /Torneio/Info/ pattern
     if 'fpt.com.br' in source_url:
         m = re.search(r'/Torneio/Info/(.+)-(\d+)/?$', source_url)
         if m:
             slug, tid = m.group(1), m.group(2)
             fpt_candidates = [
                 f'https://fpt.com.br/Inscricao/Torneio/{slug}-{tid}',
+                f'https://fpt.com.br/Inscricao/InscricaoTorneio/Tenis/{slug}-{tid}',
                 f'https://fpt.com.br/Torneio/Inscritos/{slug}-{tid}',
-                f'https://fpt.com.br/Inscricao/Lista/{slug}-{tid}',
             ]
             candidates.extend(fpt_candidates)
-            # First candidate is best guess
             if not entries_url:
                 entries_url = fpt_candidates[0]
 
-    # 3. CBT: check raw_payload for redirect URLs that may have entry pages
+    # 3. CBT/Tenisintegrado: check raw_payload + extract tournament ID
     if not entries_url and ('tenisintegrado' in source_url or 'cbt-tenis' in source_url.lower()):
         payload = edition.raw_payload or {}
         redirect = (
@@ -132,14 +241,20 @@ def derive_entries_source_url(edition: TournamentEdition):
         if redirect and redirect != source_url:
             candidates.append(redirect)
         # Extract tournament ID from external_id: cbt:12345
-        m = re.match(r'cbt:(\d+)', edition.external_id or '')
-        if m:
-            tid = m.group(1)
-            cbt_candidates = [
-                f'https://www.tenisintegrado.com.br/torneio/{tid}',
+        m_eid = re.match(r'(?:cbt|fct|fmt):(\d+)', edition.external_id or '')
+        if not m_eid:
+            # Also try extracting from URL: /torneio_painel_info/index/<id>
+            m_eid = re.search(r'/(?:torneio_painel_info|torneio)/(?:index/)?(\d+)', source_url)
+        if m_eid:
+            tid = m_eid.group(1)
+            ti_candidates = [
+                f'https://www.tenisintegrado.com.br/torneio_painel_info/index/{tid}',
                 f'https://www.tenisintegrado.com.br/torneio/{tid}/inscricoes',
+                f'https://www.tenisintegrado.com.br/torneio/{tid}',
             ]
-            candidates.extend(cbt_candidates)
+            candidates.extend(ti_candidates)
+            if not entries_url:
+                entries_url = ti_candidates[0]
 
     # 4. COSAT: official_source_url is best we have
     if not entries_url and 'tournamentsoftware' in source_url:
@@ -234,7 +349,7 @@ def federation_sync_targets(request):
 
     qs = (
         TournamentEdition.objects
-        .select_related('tournament')
+        .select_related('tournament', 'data_source')   # data_source needed for connector_key
         .prefetch_related('links')
         .filter(official_source_url__gt='')
         .exclude(status__in=[TournamentEdition.STATUS_FINISHED, TournamentEdition.STATUS_CANCELED])
@@ -249,7 +364,7 @@ def federation_sync_targets(request):
     )
 
     results = []
-    for edition in qs.select_related('tournament')[:limit * 3]:
+    for edition in qs[:limit * 3]:
         source = _edition_source(edition)
         dynamic_status = edition.compute_dynamic_status()
 
@@ -293,8 +408,12 @@ def federation_sync_targets(request):
             'needs_sync': needs_sync,
             'sync_priority': priority,
             'parser_available': bool(get_parser(source)),
-            'parser_limitation': get_limitation(source),
+            'parser_limitation': get_limitation(source) if source != 'manual' else (
+                get_limitation(infer_source_from_url(edition.official_source_url))
+                or get_limitation('manual')
+            ),
         })
+        # Note: source is already inferred — 'manual' only when truly unrecognised
 
     results.sort(
         key=lambda r: (-r['sync_priority'], r['entry_close_at'] or now.replace(year=2099)),
@@ -324,9 +443,24 @@ def parse_entries(request):
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    source = (request.data.get('source') or 'manual').strip().lower()
+    source_requested = (request.data.get('source') or 'manual').strip().lower()
     html_or_text = (request.data.get('html_or_text') or '').strip()
     source_url = (request.data.get('source_url') or '').strip()
+
+    # Auto-detect source from URL when source=manual but URL indicates a known federation
+    source_detected = source_requested
+    if source_requested == 'manual' and source_url:
+        inferred = infer_source_from_url(source_url)
+        if inferred:
+            source_detected = inferred
+            logger.info(
+                'parse-entries: source_requested=manual but URL suggests %s (%s) — using %s parser',
+                inferred, source_url[:80], inferred,
+            )
+        elif 'tenisintegrado' in source_url.lower():
+            source_detected = 'cbt'   # default for tenisintegrado ambiguity
+
+    source = source_detected   # parser uses detected source
 
     parser = get_parser(source)
     if not parser:
@@ -338,6 +472,9 @@ def parse_entries(request):
                 f'Fontes: {", ".join(sorted(["cosat","cbt","fpt","fct","manual"]))}'
             ),
             'confidence': 'low',
+            'source_requested': source_requested,
+            'source_detected': source_detected,
+            'parser_used': None,
             'source': source,
             'count': 0,
         })
@@ -392,8 +529,11 @@ def parse_entries(request):
 
     result.update({
         'count': count,
-        'source_url': source_url,       # echo back for n8n traceability
-        'warnings': warnings_list,       # normalized as list (warning_message kept for compat)
+        'source_url': source_url,
+        'source_requested': source_requested,
+        'source_detected': source_detected,
+        'parser_used': source_detected,
+        'warnings': warnings_list,
         'quality_gate': quality_gate,
     })
     return Response(result)

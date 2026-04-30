@@ -1124,3 +1124,166 @@ class DryRunParsingTestCase(TestCase):
             FederationEntry.objects.filter(edition=ed).count(), 0,
             'dry_run="false" must save data to DB'
         )
+
+
+# ── Source inference tests ─────────────────────────────────────────────────────
+
+class SourceInferenceTestCase(TestCase):
+    """Tests for infer_source_from_url and infer_source_from_edition."""
+
+    def test_fpt_url_returns_fpt(self):
+        from apps.registrations.integration_views import infer_source_from_url
+        self.assertEqual(infer_source_from_url('https://fpt.com.br/Torneio/Info/Test-123'), 'fpt')
+
+    def test_fpt_inscricao_url_returns_fpt(self):
+        from apps.registrations.integration_views import infer_source_from_url
+        self.assertEqual(infer_source_from_url('https://fpt.com.br/Inscricao/InscricaoTorneio/Tenis/Test-123'), 'fpt')
+
+    def test_cbt_tenis_url_returns_cbt(self):
+        from apps.registrations.integration_views import infer_source_from_url
+        self.assertEqual(infer_source_from_url('https://cbt-tenis.com.br/torneio/123'), 'cbt')
+
+    def test_cosat_tournamentsoftware_returns_cosat(self):
+        from apps.registrations.integration_views import infer_source_from_url
+        self.assertEqual(infer_source_from_url('https://cosat.tournamentsoftware.com/sport/tournament?id=X'), 'cosat')
+
+    def test_tenisintegrado_url_returns_empty(self):
+        """tenisintegrado is ambiguous — returns '' to force edition-level resolution."""
+        from apps.registrations.integration_views import infer_source_from_url
+        result = infer_source_from_url('https://www.tenisintegrado.com.br/torneio_painel_info/index/123')
+        self.assertEqual(result, '', 'tenisintegrado domain alone is ambiguous — must return empty')
+
+    def test_unknown_url_returns_empty(self):
+        from apps.registrations.integration_views import infer_source_from_url
+        self.assertEqual(infer_source_from_url('https://example.com/something'), '')
+
+    def test_empty_url_returns_empty(self):
+        from apps.registrations.integration_views import infer_source_from_url
+        self.assertEqual(infer_source_from_url(''), '')
+
+    def test_edition_with_fpt_url_returns_fpt(self):
+        from apps.registrations.integration_views import infer_source_from_edition
+        from apps.sources.models import Organization
+        from apps.tournaments.models import Tournament, TournamentEdition
+        org, _ = Organization.objects.get_or_create(
+            short_name='INFSRC', defaults={'name': 'InfSrc', 'type': 'confederation'}
+        )
+        t, _ = Tournament.objects.get_or_create(
+            canonical_slug='inf-fpt-test', defaults={
+                'canonical_name': 'Inf FPT', 'circuit': '',  # empty circuit
+                'modality': 'tennis', 'organization': org,
+            }
+        )
+        edition = TournamentEdition.objects.create(
+            tournament=t, title='FPT Infer', external_id='inf:fpt:1',
+            season_year=2026, status='open',
+            official_source_url='https://fpt.com.br/Torneio/Info/TestInfer-999',
+        )
+        result = infer_source_from_edition(edition)
+        self.assertEqual(result, 'fpt', f'Expected fpt, got {result}')
+
+    def test_edition_with_tenisintegrado_url_returns_cbt_default(self):
+        from apps.registrations.integration_views import infer_source_from_edition
+        from apps.sources.models import Organization
+        from apps.tournaments.models import Tournament, TournamentEdition
+        org, _ = Organization.objects.get_or_create(
+            short_name='INFCBT', defaults={'name': 'InfCBT', 'type': 'confederation'}
+        )
+        t, _ = Tournament.objects.get_or_create(
+            canonical_slug='inf-cbt-test', defaults={
+                'canonical_name': 'Inf CBT', 'circuit': '',
+                'modality': 'tennis', 'organization': org,
+            }
+        )
+        edition = TournamentEdition.objects.create(
+            tournament=t, title='CBT Infer', external_id='inf:cbt:1',
+            season_year=2026, status='open',
+            official_source_url='https://www.tenisintegrado.com.br/torneio_painel_info/index/9999',
+        )
+        result = infer_source_from_edition(edition)
+        self.assertIn(result, ('cbt', 'fct', 'fmt'), f'tenisintegrado should be cbt/fct/fmt, got {result}')
+
+    def test_sync_targets_fpt_url_not_manual(self):
+        """sync-targets must not return source=manual for FPT URL editions."""
+        from apps.sources.models import Organization
+        from apps.tournaments.models import Tournament, TournamentEdition
+        org, _ = Organization.objects.get_or_create(
+            short_name='FPT_INF', defaults={'name': 'FPT_INF', 'type': 'federation'}
+        )
+        t, _ = Tournament.objects.get_or_create(
+            canonical_slug='sync-fpt-infer', defaults={
+                'canonical_name': 'Sync FPT Infer', 'circuit': '',  # empty circuit
+                'modality': 'tennis', 'organization': org,
+            }
+        )
+        TournamentEdition.objects.create(
+            tournament=t, title='Sync FPT', external_id='sync:fpt:1',
+            season_year=2026, status='open',
+            official_source_url='https://fpt.com.br/Inscricao/InscricaoTorneio/Tenis/Campeonato-Estadual-999',
+        )
+        client = APIClient()
+        staff = User.objects.create_user(email='infstaff@test.com', password='pass', is_staff=True)
+        client.force_authenticate(user=staff)
+        res = client.get('/api/integrations/federation-sync-targets/')
+        self.assertEqual(res.status_code, 200)
+        sources = {r['source'] for r in res.data['results']}
+        fpt_editions = [r for r in res.data['results'] if 'fpt.com.br' in r.get('source_url', '')]
+        for r in fpt_editions:
+            self.assertNotEqual(r['source'], 'manual', f'FPT URL should not be manual: {r}')
+            self.assertEqual(r['source'], 'fpt')
+
+
+class ParseEntriesSourceDetectionTestCase(TestCase):
+    """parse-entries auto-detects source from URL when source=manual."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.staff = User.objects.create_user(
+            email='pd_staff@test.com', password='pass', is_staff=True
+        )
+        self.client.force_authenticate(user=self.staff)
+
+    def test_manual_plus_fpt_url_uses_fpt_parser(self):
+        res = self.client.post('/api/integrations/parse-entries/', {
+            'source': 'manual',
+            'html_or_text': '',
+            'source_url': 'https://fpt.com.br/Inscricao/InscricaoTorneio/Tenis/Test-999',
+        }, format='json')
+        self.assertEqual(res.status_code, 200)
+        self.assertIn('source_detected', res.data)
+        self.assertIn('source_requested', res.data)
+        self.assertIn('parser_used', res.data)
+        self.assertEqual(res.data['source_requested'], 'manual')
+        self.assertEqual(res.data['source_detected'], 'fpt')
+        self.assertEqual(res.data['parser_used'], 'fpt')
+
+    def test_manual_plus_tenisintegrado_url_uses_cbt_parser(self):
+        res = self.client.post('/api/integrations/parse-entries/', {
+            'source': 'manual',
+            'html_or_text': '',
+            'source_url': 'https://www.tenisintegrado.com.br/torneio_painel_info/index/9999',
+        }, format='json')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data['source_requested'], 'manual')
+        self.assertIn(res.data['source_detected'], ('cbt', 'fct', 'fmt'))
+
+    def test_explicit_source_not_overridden(self):
+        """If source=fpt is explicitly passed, don't override it."""
+        res = self.client.post('/api/integrations/parse-entries/', {
+            'source': 'fpt',
+            'html_or_text': '',
+            'source_url': 'https://fpt.com.br/Test',
+        }, format='json')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data['source_requested'], 'fpt')
+        self.assertEqual(res.data['source_detected'], 'fpt')
+
+    def test_response_has_new_traceability_fields(self):
+        res = self.client.post('/api/integrations/parse-entries/', {
+            'source': 'cosat',
+            'html_or_text': '',
+            'source_url': 'https://cosat.tournamentsoftware.com/sport/tournament?id=X',
+        }, format='json')
+        self.assertEqual(res.status_code, 200)
+        for field in ('source_requested', 'source_detected', 'parser_used', 'source_url', 'quality_gate'):
+            self.assertIn(field, res.data, f'Missing field: {field}')

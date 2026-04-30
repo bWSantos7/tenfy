@@ -1287,3 +1287,131 @@ class ParseEntriesSourceDetectionTestCase(TestCase):
         self.assertEqual(res.status_code, 200)
         for field in ('source_requested', 'source_detected', 'parser_used', 'source_url', 'quality_gate'):
             self.assertIn(field, res.data, f'Missing field: {field}')
+
+
+class TenisIntegradoParserTestCase(TestCase):
+    """Unit tests for the CBT/TenisIntegrado parser and table extractor."""
+
+    # Minimal realistic HTML for one category (12 Anos Masculino Simples)
+    _TABLE_HTML = """
+    <table>
+      <tr>
+        <th>Participantes</th><th>WTN</th><th>Posição</th><th>Sit. Financeira</th>
+      </tr>
+      <tr>
+        <td>
+          <a href="perfil2/index/405248">
+            <img src="avatar.jpg">
+          </a>
+          <a href="perfil2/index/405248">Miguel Soares Vonjonie</a>
+          Sinop
+          UF:MT, ID:405248, Idade:12
+        </td>
+        <td><img src="wtn.png">31,28</td>
+        <td>28º</td>
+        <td>Pendente</td>
+      </tr>
+      <tr>
+        <td>
+          <a href="perfil2/index/278849">Carlos Eduardo Molin De Andrade</a>
+          Cuiaba
+          UF:MT, ID:278849, Idade:12
+        </td>
+        <td></td>
+        <td></td>
+        <td>Confirmado</td>
+      </tr>
+    </table>
+    """
+
+    def test_parse_table_extracts_names(self):
+        from apps.registrations.parsers import _parse_tenisintegrado_table
+        entries = _parse_tenisintegrado_table(
+            self._TABLE_HTML, '12 Anos Masculino Simples', 'cbt',
+            'https://www.tenisintegrado.com.br/torneio_painel_insc/index/22251',
+        )
+        self.assertEqual(len(entries), 2)
+        names = [e['player_name'] for e in entries]
+        self.assertIn('Miguel Soares Vonjonie', names)
+        self.assertIn('Carlos Eduardo Molin De Andrade', names)
+
+    def test_parse_table_player_external_id(self):
+        from apps.registrations.parsers import _parse_tenisintegrado_table
+        entries = _parse_tenisintegrado_table(
+            self._TABLE_HTML, '12 Anos Masculino Simples', 'cbt', '',
+        )
+        ids = {e['player_external_id'] for e in entries}
+        self.assertIn('tenisintegrado:405248', ids)
+        self.assertIn('tenisintegrado:278849', ids)
+
+    def test_parse_table_payment_status(self):
+        from apps.registrations.parsers import _parse_tenisintegrado_table
+        entries = _parse_tenisintegrado_table(
+            self._TABLE_HTML, '12 Anos Masculino Simples', 'cbt', '',
+        )
+        by_id = {e['player_external_id']: e for e in entries}
+        self.assertEqual(by_id['tenisintegrado:405248']['payment_status'], 'pending')
+        self.assertEqual(by_id['tenisintegrado:278849']['payment_status'], 'paid')
+
+    def test_parse_table_ranking_position(self):
+        from apps.registrations.parsers import _parse_tenisintegrado_table
+        entries = _parse_tenisintegrado_table(
+            self._TABLE_HTML, '12 Anos Masculino Simples', 'cbt', '',
+        )
+        by_id = {e['player_external_id']: e for e in entries}
+        self.assertEqual(by_id['tenisintegrado:405248']['ranking_position'], 28)
+        self.assertIsNone(by_id['tenisintegrado:278849']['ranking_position'])
+
+    def test_parse_table_category_text(self):
+        from apps.registrations.parsers import _parse_tenisintegrado_table
+        entries = _parse_tenisintegrado_table(
+            self._TABLE_HTML, '14 Anos Feminino Simples', 'cbt', '',
+        )
+        for e in entries:
+            self.assertEqual(e['category_text'], '14 Anos Feminino Simples')
+
+    def test_parse_table_skips_header_row(self):
+        """Header <tr> has <th> not <td> — should not produce entries."""
+        from apps.registrations.parsers import _parse_tenisintegrado_table
+        entries = _parse_tenisintegrado_table(
+            self._TABLE_HTML, '12 Anos Masculino Simples', 'cbt', '',
+        )
+        names = [e['player_name'] for e in entries]
+        self.assertNotIn('Participantes', names)
+
+    def test_fetch_uses_auto_mode_when_url_and_no_html(self):
+        """parse_cbt_entries auto-delegates to fetch when source_url has tenisintegrado."""
+        from unittest.mock import patch as _patch
+        from apps.registrations.parsers import parse_cbt_entries
+        mock_result = {
+            'entries': [{'player_name': 'Mock Player', 'category_text': '12 Masc',
+                         'player_external_id': 'tenisintegrado:999', 'ranking_position': 1,
+                         'ranking_source': 'CBT', 'payment_status': 'paid',
+                         'removed_or_replaced': False, 'replacement_reason': '',
+                         'source_url': '', 'confidence': 'high'}],
+            'parser_warning': False, 'warning_message': '', 'confidence': 'high', 'source': 'cbt',
+        }
+        with _patch(
+            'apps.registrations.parsers.fetch_tenisintegrado_entries',
+            return_value=mock_result,
+        ) as mock_fetch:
+            result = parse_cbt_entries(
+                '', source_url='https://www.tenisintegrado.com.br/torneio_painel_insc/index/22251'
+            )
+        mock_fetch.assert_called_once()
+        self.assertEqual(result['confidence'], 'high')
+        self.assertEqual(len(result['entries']), 1)
+
+    def test_fetch_no_url_returns_warning(self):
+        """parse_cbt_entries returns warning when no html and no tenisintegrado URL."""
+        from apps.registrations.parsers import parse_cbt_entries
+        result = parse_cbt_entries('', source_url='')
+        self.assertTrue(result['parser_warning'])
+        self.assertEqual(result['entries'], [])
+
+    def test_fetch_bad_url_returns_warning(self):
+        """fetch_tenisintegrado_entries returns warning when URL has no tournament ID."""
+        from apps.registrations.parsers import fetch_tenisintegrado_entries
+        result = fetch_tenisintegrado_entries('https://www.tenisintegrado.com.br/torneio')
+        self.assertTrue(result['parser_warning'])
+        self.assertEqual(result['entries'], [])

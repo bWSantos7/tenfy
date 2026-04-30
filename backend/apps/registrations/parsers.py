@@ -380,16 +380,215 @@ def parse_cosat_entries(html_or_text: str, source_url: str = '') -> dict:
     }
 
 
+_TENISINTEGRADO_INSC_URL = 'https://www.tenisintegrado.com.br/torneio_painel_insc/index/{tid}'
+_TENISINTEGRADO_UA = 'TennisHubDataSync/1.0 (contato@tennis.app.br; data-research; no-automation)'
+_TENISINTEGRADO_RATE = 1.2  # seconds between category requests
+
+
+def _parse_tenisintegrado_table(html: str, category_text: str,
+                                source: str, insc_url: str) -> list:
+    """
+    Parse one tenisintegrado inscription page (POST response for a given id_categoria).
+
+    Table structure:
+      <th>Participantes</th><th>WTN</th><th>Posição</th><th>Sit. Financeira</th>
+
+    Player cell contains:
+      - <a href="perfil2/index/{id}">Name</a>
+      - City text node
+      - "UF:XX, ID:NNNNNN, Idade:NN" text
+    """
+    import time as _time  # avoid shadowing at module level
+
+    entries = []
+    rows = re.findall(r'<tr[^>]*>(.*?)</tr>', html, re.DOTALL | re.IGNORECASE)
+
+    for row_html in rows:
+        cells = re.findall(r'<td[^>]*>(.*?)</td>', row_html, re.DOTALL | re.IGNORECASE)
+        if len(cells) < 4:
+            continue
+
+        player_cell = cells[0]
+
+        # Player external ID from profile URL
+        id_m = re.search(r'perfil2/index/(\d+)', player_cell, re.IGNORECASE)
+        player_external_id = f'tenisintegrado:{id_m.group(1)}' if id_m else ''
+
+        # Player name from anchor text — skip anchors that only contain an image (avatar link)
+        player_name = ''
+        for name_m in re.finditer(
+            r'<a[^>]+perfil2/index/\d+[^>]*>(.*?)</a>',
+            player_cell, re.IGNORECASE | re.DOTALL,
+        ):
+            text = re.sub(r'<[^>]+>', '', name_m.group(1)).strip()
+            if text and len(text) >= 2:
+                player_name = text
+                break
+        if not player_name:
+            continue
+
+        # UF / state from "UF:XX, ID:..."
+        uf_m = re.search(r'UF:([A-Z]{2})', player_cell)
+
+        # WTN: "31,28" → float string, strip img tags
+        wtn_cell = re.sub(r'<[^>]+>', '', cells[1]).strip()
+        wtn_str = wtn_cell.replace(',', '.') if wtn_cell else ''
+
+        # Ranking position: "367º" → 367
+        pos_cell = re.sub(r'<[^>]+>', '', cells[2]).strip()
+        ranking_position = _safe_int(pos_cell) if pos_cell else None
+
+        # Payment status
+        fin_text = re.sub(r'<[^>]+>', '', cells[3]).strip().lower()
+        payment_status = _classify_payment(fin_text)
+
+        # Dedup: if tenisintegrado ID available, use it; otherwise deterministic slug
+        if player_external_id:
+            ext_id = player_external_id
+        else:
+            ext_id = f'{source}:{_slugify_simple(player_name)}:{_slugify_simple(category_text)}'
+
+        entries.append({
+            'player_name': player_name,
+            'category_text': category_text,
+            'player_external_id': ext_id,
+            'ranking_position': ranking_position,
+            'ranking_source': 'CBT',
+            'payment_status': payment_status,
+            'removed_or_replaced': False,
+            'replacement_reason': '',
+            'source_url': insc_url,
+            'confidence': 'high',
+        })
+
+    return entries
+
+
+def fetch_tenisintegrado_entries(tournament_url: str, source: str = 'cbt') -> dict:
+    """
+    Auto-fetch all inscription entries from a tenisintegrado tournament URL.
+
+    Steps:
+      1. GET /torneio_painel_insc/index/{id} → extract id_categoria options
+      2. POST with each id_categoria → parse table rows
+      3. Return combined entries
+
+    Returns standard parser result dict.
+    """
+    import time as _time
+
+    try:
+        import requests as _requests
+    except ImportError:
+        return {
+            'entries': [], 'parser_warning': True,
+            'warning_message': 'requests not installed — cannot auto-fetch TenisIntegrado.',
+            'confidence': 'low', 'source': source,
+        }
+
+    tid_m = re.search(r'/(\d+)/?$', tournament_url.rstrip('/'))
+    if not tid_m:
+        return {
+            'entries': [], 'parser_warning': True,
+            'warning_message': f'CBT: não foi possível extrair ID do torneio de: {tournament_url}',
+            'confidence': 'low', 'source': source,
+        }
+
+    tid = tid_m.group(1)
+    insc_url = _TENISINTEGRADO_INSC_URL.format(tid=tid)
+
+    session = _requests.Session()
+    session.headers.update({
+        'User-Agent': _TENISINTEGRADO_UA,
+        'Accept': 'text/html,application/xhtml+xml',
+        'Accept-Language': 'pt-BR,pt;q=0.9',
+    })
+
+    # Step 1: fetch category list
+    try:
+        r0 = session.get(insc_url, timeout=10)
+        r0.raise_for_status()
+    except Exception as exc:
+        return {
+            'entries': [], 'parser_warning': True,
+            'warning_message': f'CBT: falha ao buscar {insc_url}: {exc}',
+            'confidence': 'low', 'source': source,
+        }
+
+    categories = {}
+    for m in re.finditer(
+        r'<option[^>]+value=["\'](\d+)["\'][^>]*>(.*?)</option>',
+        r0.text, re.IGNORECASE,
+    ):
+        categories[m.group(1)] = m.group(2).strip()
+
+    if not categories:
+        return {
+            'entries': [], 'parser_warning': True,
+            'warning_message': (
+                f'CBT: nenhuma categoria encontrada em {insc_url}. '
+                'Torneio pode não ter inscrições abertas ainda.'
+            ),
+            'confidence': 'low', 'source': source,
+        }
+
+    # Step 2: POST each category
+    all_entries: list = []
+    warnings: list = []
+
+    for cat_id, cat_text in categories.items():
+        _time.sleep(_TENISINTEGRADO_RATE)
+        try:
+            r1 = session.post(
+                insc_url,
+                data={'id_categoria': cat_id},
+                headers={'Referer': insc_url},
+                timeout=10,
+            )
+            r1.raise_for_status()
+        except Exception as exc:
+            warnings.append(f'Categoria "{cat_text}" falhou: {exc}')
+            continue
+
+        cat_entries = _parse_tenisintegrado_table(r1.text, cat_text, source, insc_url)
+        all_entries.extend(cat_entries)
+
+    if not all_entries:
+        return {
+            'entries': [], 'parser_warning': True,
+            'warning_message': (
+                f'CBT: {len(categories)} categorias processadas, nenhum inscrito extraído. '
+                + (' Avisos: ' + '; '.join(warnings) if warnings else '')
+            ),
+            'confidence': 'low', 'source': source,
+        }
+
+    return {
+        'entries': all_entries,
+        'parser_warning': bool(warnings),
+        'warning_message': '; '.join(warnings) if warnings else '',
+        'confidence': 'high',
+        'source': source,
+    }
+
+
 def parse_cbt_entries(html_or_text: str, source_url: str = '') -> dict:
     """
     CBT/Tênis Integrado entry parser.
 
-    STATUS: LIMITED.
-    - TenisIntegrado API /getRegistrations returns 404 — no individual athlete endpoint.
-    - Use case: admin pastes HTML/text from CBT tournament detail page.
+    Auto-fetch mode (preferred):
+      When html_or_text is empty and source_url is a tenisintegrado URL,
+      the parser fetches all categories automatically via POST /torneio_painel_insc.
+
+    Manual mode:
+      When html_or_text is provided, falls back to generic HTML/text table parser.
     """
     source = 'cbt'
     ranking_source = 'CBT'
+
+    # Auto-fetch: no raw content but a tenisintegrado URL provided
+    if not (html_or_text or '').strip() and 'tenisintegrado' in (source_url or '').lower():
+        return fetch_tenisintegrado_entries(source_url, source=source)
 
     if not (html_or_text or '').strip():
         return {
@@ -397,8 +596,8 @@ def parse_cbt_entries(html_or_text: str, source_url: str = '') -> dict:
             'parser_warning': True,
             'warning_message': (
                 'CBT: sem dados de entrada. '
-                'A API TenisIntegrado não expõe lista nominal (/getRegistrations retorna 404). '
-                'Cole HTML da página do torneio CBT como input.'
+                'Forneça source_url de um torneio TenisIntegrado para busca automática, '
+                'ou cole HTML/CSV da página de inscritos como input.'
             ),
             'confidence': 'low',
             'source': source,
@@ -412,8 +611,8 @@ def parse_cbt_entries(html_or_text: str, source_url: str = '') -> dict:
             'parser_warning': True,
             'warning_message': (
                 'CBT: nenhum inscrito extraído do HTML fornecido. '
-                'CBT não retorna lista nominal via API pública. '
-                'Use importação manual CSV ou cole HTML da página de inscritos.'
+                'Forneça source_url TenisIntegrado para busca automática, '
+                'ou use CSV com colunas nome/categoria.'
             ),
             'confidence': 'low',
             'source': source,
@@ -526,8 +725,8 @@ PARSER_LIMITATIONS = {
         'Sem API pública. Import manual ou n8n com HTML colado.'
     ),
     'cbt': (
-        'TenisIntegrado API retorna 404 para inscritos individuais. '
-        'Import manual ou n8n com HTML colado.'
+        'TenisIntegrado: lista de inscritos pública via POST /torneio_painel_insc/index/{id}. '
+        'Forneça source_url do torneio para busca automática por categoria.'
     ),
     'fpt': (
         '/Inscricao/Lista/ retorna 404. '

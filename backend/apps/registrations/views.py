@@ -8,7 +8,7 @@ from django.db.models.functions import RowNumber
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated, IsAdminUser
+from rest_framework.permissions import AllowAny, IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
 
 from apps.players.models import PlayerProfile
@@ -390,6 +390,12 @@ class FederationEntryViewSet(viewsets.GenericViewSet):
     """ViewSet para gerenciar inscrições publicadas pela federação."""
     permission_classes = [IsAuthenticated]
 
+    def get_permissions(self):
+        # bulk_import uses AllowAny so X-Import-Token reaches _check_import_auth
+        if getattr(self, 'action', None) == 'bulk_import':
+            return [AllowAny()]
+        return super().get_permissions()
+
     def _require_staff(self, request):
         if not request.user.is_staff:
             return Response({'detail': 'Acesso negado.'}, status=status.HTTP_403_FORBIDDEN)
@@ -429,12 +435,13 @@ class FederationEntryViewSet(viewsets.GenericViewSet):
             return Response({'detail': 'Não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @action(detail=False, methods=['post'], url_path='bulk-import')
+    @action(detail=False, methods=['post'], url_path='bulk-import', permission_classes=[AllowAny])
     def bulk_import(self, request):
         """
         POST /api/registrations/federation/bulk-import/
 
         Admin import. Supports staff JWT auth OR X-Import-Token header (for n8n).
+        AllowAny lets X-Import-Token reach _check_import_auth before DRF blocks it.
 
         Payload:
           {
@@ -642,10 +649,8 @@ class FederationEntryViewSet(viewsets.GenericViewSet):
 
 
 # ── Standalone import endpoint (n8n / external pipelines) ─────────────────────
-# Uses AllowAny so DRF doesn't reject X-Import-Token requests before auth runs.
-# Auth is enforced inside the view via _check_import_auth().
-
-from rest_framework.permissions import AllowAny  # noqa: E402
+# AllowAny (imported at top) lets X-Import-Token reach _check_import_auth.
+# Auth enforced inside the view via _check_import_auth().
 
 
 def _run_import(request):

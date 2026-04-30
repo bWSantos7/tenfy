@@ -741,9 +741,20 @@ PARSER_LIMITATIONS = {
 }
 
 
+# Sources that can fetch their own data from source_url without html_or_text input.
+# Used by quality_gate in parse-entries: empty html_or_text is valid for these sources
+# when source_url is provided and the parser returned entries successfully.
+SOURCES_AUTO_FETCH = {'cbt', 'fct'}
+
+
 def get_parser(source: str):
     """Return parser function for source, or None if unsupported."""
     return PARSERS.get(source.lower())
+
+
+def supports_auto_fetch(source: str) -> bool:
+    """True when the parser can self-fetch from source_url without html_or_text."""
+    return source.lower() in SOURCES_AUTO_FETCH
 
 
 def get_limitation(source: str) -> str:

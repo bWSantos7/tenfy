@@ -24,7 +24,7 @@ from rest_framework import status
 
 from apps.registrations.views import _check_import_auth
 from apps.registrations.models import FederationEntry
-from apps.registrations.parsers import get_parser, get_limitation
+from apps.registrations.parsers import get_parser, get_limitation, supports_auto_fetch
 from apps.tournaments.models import TournamentEdition
 
 logger = logging.getLogger('apps.registrations.integration')
@@ -507,6 +507,22 @@ def parse_entries(request):
     # Normalize warnings: always a list for n8n consistency
     warnings_list = [warning_message] if warning_message else []
 
+    # Determine if auto-fetch was used (parser fetched data from source_url, no html input)
+    html_empty = not (html_or_text or '').strip()
+    _source_supports_auto_fetch = supports_auto_fetch(source)
+    auto_fetch_used = (
+        html_empty
+        and _source_supports_auto_fetch
+        and bool(source_url)
+    )
+    # Auto-fetch succeeded when it was used and the parser returned real entries
+    auto_fetch_succeeded = (
+        auto_fetch_used
+        and count > 0
+        and not parser_warning
+        and confidence != 'low'
+    )
+
     # Quality gate — n8n uses can_save to decide whether to proceed to import
     reasons_no_save = []
     if count == 0:
@@ -515,7 +531,9 @@ def parse_entries(request):
         reasons_no_save.append('parser_warning ativo — fonte sem lista nominal acessível')
     if confidence == 'low':
         reasons_no_save.append('confidence=low — dados insuficientes para importação automática')
-    if not html_or_text.strip() if html_or_text else True:
+    # html_or_text empty is only a blocker when auto-fetch was NOT used successfully.
+    # For sources with auto-fetch (e.g. CBT), empty html is expected and valid.
+    if html_empty and not auto_fetch_succeeded:
         reasons_no_save.append('html_or_text vazio — nenhum conteúdo para parsear')
 
     quality_gate = {
@@ -533,6 +551,8 @@ def parse_entries(request):
         'source_requested': source_requested,
         'source_detected': source_detected,
         'parser_used': source_detected,
+        'supports_auto_fetch': _source_supports_auto_fetch,
+        'auto_fetch_used': auto_fetch_used,
         'warnings': warnings_list,
         'quality_gate': quality_gate,
     })

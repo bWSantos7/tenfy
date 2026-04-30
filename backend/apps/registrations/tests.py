@@ -1415,3 +1415,139 @@ class TenisIntegradoParserTestCase(TestCase):
         result = fetch_tenisintegrado_entries('https://www.tenisintegrado.com.br/torneio')
         self.assertTrue(result['parser_warning'])
         self.assertEqual(result['entries'], [])
+
+
+class QualityGateAutoFetchTestCase(TestCase):
+    """
+    quality_gate must not block auto-fetch success (CBT/TenisIntegrado).
+
+    Rules:
+    - CBT + empty html + valid tenisintegrado URL + entries > 0 + confidence=high → can_save=True
+    - manual + empty html → can_save=False (no auto-fetch)
+    - fpt + empty html + no entries → can_save=False
+    - Any source with entries > 0 + no warning → no 'html_or_text vazio' reason
+    """
+
+    def setUp(self):
+        self.client = APIClient()
+        self.staff = User.objects.create_user(
+            email='qg_staff@test.com', password='pass', is_staff=True
+        )
+        self.client.force_authenticate(user=self.staff)
+
+    _MOCK_ENTRY = {
+        'player_name': 'Miguel Soares Vonjonie',
+        'category_text': '12 Anos Masculino Simples',
+        'player_external_id': 'tenisintegrado:405248',
+        'ranking_position': 28,
+        'ranking_source': 'CBT',
+        'payment_status': 'pending',
+        'removed_or_replaced': False,
+        'replacement_reason': '',
+        'source_url': 'https://www.tenisintegrado.com.br/torneio_painel_insc/index/22251',
+        'confidence': 'high',
+    }
+
+    def _mock_cbt_result(self, n=3):
+        return {
+            'entries': [dict(self._MOCK_ENTRY, player_external_id=f'tenisintegrado:{405248+i}',
+                             player_name=f'Atleta {i}') for i in range(n)],
+            'parser_warning': False,
+            'warning_message': '',
+            'confidence': 'high',
+            'source': 'cbt',
+        }
+
+    def test_cbt_auto_fetch_success_can_save_true(self):
+        """CBT empty html + valid tenisintegrado URL + entries → can_save=True."""
+        with self.settings(IMPORT_API_TOKEN=''):
+            with patch('apps.registrations.parsers.fetch_tenisintegrado_entries',
+                       return_value=self._mock_cbt_result(3)):
+                res = self.client.post('/api/integrations/parse-entries/', {
+                    'source': 'cbt',
+                    'source_url': 'https://www.tenisintegrado.com.br/torneio_painel_insc/index/22251',
+                    'html_or_text': '',
+                }, format='json')
+        self.assertEqual(res.status_code, 200)
+        qg = res.data['quality_gate']
+        self.assertTrue(qg['can_save'], f"Expected can_save=True, reasons: {qg['reasons']}")
+        self.assertNotIn('html_or_text vazio — nenhum conteúdo para parsear', qg['reasons'])
+        self.assertEqual(qg['entries_count'], 3)
+
+    def test_cbt_auto_fetch_response_fields(self):
+        """Response includes supports_auto_fetch and auto_fetch_used fields."""
+        with patch('apps.registrations.parsers.fetch_tenisintegrado_entries',
+                   return_value=self._mock_cbt_result(1)):
+            res = self.client.post('/api/integrations/parse-entries/', {
+                'source': 'cbt',
+                'source_url': 'https://www.tenisintegrado.com.br/torneio_painel_insc/index/22251',
+                'html_or_text': '',
+            }, format='json')
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.data.get('supports_auto_fetch'))
+        self.assertTrue(res.data.get('auto_fetch_used'))
+
+    def test_manual_empty_html_cannot_save(self):
+        """manual + empty html → quality_gate.can_save=False."""
+        res = self.client.post('/api/integrations/parse-entries/', {
+            'source': 'manual',
+            'html_or_text': '',
+            'source_url': '',
+        }, format='json')
+        self.assertEqual(res.status_code, 200)
+        qg = res.data['quality_gate']
+        self.assertFalse(qg['can_save'])
+        self.assertIn('html_or_text vazio — nenhum conteúdo para parsear', qg['reasons'])
+
+    def test_fpt_empty_html_no_entries_cannot_save(self):
+        """fpt + empty html + no entries → can_save=False, html_or_text reason present."""
+        res = self.client.post('/api/integrations/parse-entries/', {
+            'source': 'fpt',
+            'html_or_text': '',
+            'source_url': 'https://fpt.com.br/Inscricao/InscricaoTorneio/Tenis/2026/test-999',
+        }, format='json')
+        self.assertEqual(res.status_code, 200)
+        qg = res.data['quality_gate']
+        self.assertFalse(qg['can_save'])
+        self.assertIn('html_or_text vazio — nenhum conteúdo para parsear', qg['reasons'])
+
+    def test_fpt_supports_auto_fetch_false(self):
+        """FPT does not support auto-fetch — response field reflects this."""
+        res = self.client.post('/api/integrations/parse-entries/', {
+            'source': 'fpt',
+            'html_or_text': '',
+            'source_url': '',
+        }, format='json')
+        self.assertEqual(res.status_code, 200)
+        self.assertFalse(res.data.get('supports_auto_fetch'))
+        self.assertFalse(res.data.get('auto_fetch_used'))
+
+    def test_cbt_with_html_provided_does_not_use_auto_fetch(self):
+        """If html_or_text is provided, auto_fetch_used=False even for CBT."""
+        html = '<table><tr><th>Nome</th><th>Categoria</th></tr>' \
+               '<tr><td>João Silva</td><td>14 Anos Masc</td></tr></table>'
+        res = self.client.post('/api/integrations/parse-entries/', {
+            'source': 'cbt',
+            'html_or_text': html,
+            'source_url': 'https://www.tenisintegrado.com.br/torneio_painel_insc/index/22251',
+        }, format='json')
+        self.assertEqual(res.status_code, 200)
+        self.assertFalse(res.data.get('auto_fetch_used'))
+
+    def test_cbt_auto_fetch_zero_entries_cannot_save(self):
+        """CBT auto-fetch but parser returns 0 entries → can_save=False."""
+        empty_result = {
+            'entries': [], 'parser_warning': True,
+            'warning_message': 'nenhum inscrito', 'confidence': 'low', 'source': 'cbt',
+        }
+        with patch('apps.registrations.parsers.fetch_tenisintegrado_entries',
+                   return_value=empty_result):
+            res = self.client.post('/api/integrations/parse-entries/', {
+                'source': 'cbt',
+                'source_url': 'https://www.tenisintegrado.com.br/torneio_painel_insc/index/22251',
+                'html_or_text': '',
+            }, format='json')
+        self.assertEqual(res.status_code, 200)
+        qg = res.data['quality_gate']
+        self.assertFalse(qg['can_save'])
+        self.assertIn('entries vazio — nenhum inscrito extraído', qg['reasons'])

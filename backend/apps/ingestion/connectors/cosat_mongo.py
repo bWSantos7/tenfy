@@ -40,6 +40,22 @@ from django.conf import settings
 
 logger = logging.getLogger('apps.ingestion.cosat_mongo')
 
+def _sanitize_exc(exc: Exception) -> str:
+    """Return str(exc) with MongoDB credentials redacted.
+
+    pymongo embeds the full connection URI in some error messages.
+    Replace user:password@ with ***:***@ before logging.
+    """
+    msg = str(exc)
+    # Pattern: mongodb[+srv]://user:pass@host or mongodb://user:pass@host
+    sanitized = re.sub(
+        r'(mongodb(?:\+srv)?://)([^@]+)@',
+        r'\1***:***@',
+        msg,
+    )
+    return sanitized
+
+
 # Month abbreviation map (EN + ES/PT abbreviations from COSAT)
 _MONTH_MAP = {
     'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
@@ -107,18 +123,25 @@ class CosatMongoConnector:
 
         try:
             self._client = _get_client()
-            db_name = getattr(settings, 'COSAT_MONGO_DB', 'cosat_db')
+            db_name = getattr(settings, 'COSAT_MONGO_DB', '')
+            if not db_name:
+                raise ValueError(
+                    'COSAT_MONGO_DB is empty. '
+                    'Set it in Railway Variables (e.g. COSAT_MONGO_DB=cosat_db).'
+                )
             self._db = self._client[db_name]
             # Trigger actual network check (throws ServerSelectionTimeoutError if down)
             self._client.admin.command('ping')
             self._available = True
             logger.info('CosatMongoConnector: connected to db=%s', db_name)
         except Exception as exc:
+            # Sanitize: never log the raw URI which may contain credentials
+            safe_exc = _sanitize_exc(exc)
             logger.warning(
                 'CosatMongoConnector: MongoDB unavailable — %s. '
                 'COSAT data will be skipped this run. '
                 'Check COSAT_MONGO_URL and Railway connectivity.',
-                exc,
+                safe_exc,
             )
             self._available = False
 

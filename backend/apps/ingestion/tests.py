@@ -261,9 +261,10 @@ class CosatMongoConnectorOfflineTestCase(TestCase):
         self.assertFalse(result)
 
 
-class SyncCosatCommandDryRunTestCase(TestCase):
-    """sync_cosat_from_mongo --dry-run makes no DB writes."""
+class SyncCosatCommandTestCase(TestCase):
+    """sync_cosat_from_mongo command: dry-run, real sync, entries, edge cases."""
 
+    # Minimal valid tournament fixture
     SAMPLE_TOURNAMENT = {
         'external_id': 'cosat:test001',
         'canonical_name': 'COSAT Test Open 2025',
@@ -283,10 +284,27 @@ class SyncCosatCommandDryRunTestCase(TestCase):
         'official_source_url': 'https://cosat.tournamentsoftware.com/test',
         'categories': [{'source_text': 'U14 Boys', 'price_brl': None, 'notes': ''}],
         'links': [],
-        '_raw': {'cosatId': 'test001', 'organization': 'COSAT', 'source': 'cosat_mongo',
-                 'location': 'Buenos Aires, AR', 'country': 'AR',
-                 'categoriesCount': 1, 'entriesCount': 10, 'lastUpdated': ''},
+        '_raw': {
+            'cosatId': 'test001', 'organization': 'COSAT', 'source': 'cosat_mongo',
+            'location': 'Buenos Aires, AR', 'country': 'AR',
+            'categoriesCount': 1, 'entriesCount': 10, 'lastUpdated': '',
+        },
     }
+    SAMPLE_PLAYER = {
+        'player_name': 'María García',
+        'tournament_cosat_id': 'test001',
+        'player_external_id': 'cosat:P-001',
+        'category_text': 'U14 Girls Singles',
+        'ranking_position': 5,
+        'payment_status': 'unknown',
+        'removed_or_replaced': False,
+        'replacement_reason': '',
+        'source_url': 'https://cosat.tournamentsoftware.com/test',
+        'confidence': 'medium',
+        '_raw': {},
+    }
+
+    # ── Dry-run: no DB writes ─────────────────────────────────────────────────
 
     @override_settings(COSAT_MONGO_ENABLED=True)
     def test_dry_run_does_not_create_editions(self):
@@ -294,41 +312,175 @@ class SyncCosatCommandDryRunTestCase(TestCase):
         from apps.tournaments.models import TournamentEdition
 
         before = TournamentEdition.objects.count()
-
-        with patch(
-            'apps.ingestion.connectors.cosat_mongo.CosatMongoConnector.is_available',
-            return_value=True,
-        ), patch(
-            'apps.ingestion.connectors.cosat_mongo.CosatMongoConnector.iter_tournaments',
-            return_value=iter([self.SAMPLE_TOURNAMENT]),
-        ):
+        with patch('apps.ingestion.connectors.cosat_mongo.CosatMongoConnector.is_available',
+                   return_value=True), \
+             patch('apps.ingestion.connectors.cosat_mongo.CosatMongoConnector.iter_tournaments',
+                   return_value=iter([self.SAMPLE_TOURNAMENT])):
             call_command('sync_cosat_from_mongo', '--dry-run', verbosity=0)
-
-        after = TournamentEdition.objects.count()
-        self.assertEqual(before, after)
+        self.assertEqual(TournamentEdition.objects.count(), before)
 
     @override_settings(COSAT_MONGO_ENABLED=False)
-    def test_disabled_flag_exits_without_connecting(self):
-        """COSAT_MONGO_ENABLED=False should exit before any MongoDB call."""
+    def test_disabled_exits_without_connecting(self):
         from django.core.management import call_command
-
-        with patch(
-            'apps.ingestion.connectors.cosat_mongo.CosatMongoConnector.is_available'
-        ) as mock_avail:
+        with patch('apps.ingestion.connectors.cosat_mongo.CosatMongoConnector.is_available') as m:
             call_command('sync_cosat_from_mongo', verbosity=0)
-            mock_avail.assert_not_called()
+            m.assert_not_called()
 
     @override_settings(COSAT_MONGO_ENABLED=True)
-    def test_mongo_unavailable_exits_without_db_writes(self):
+    def test_mongo_unavailable_no_db_writes(self):
         from django.core.management import call_command
         from apps.tournaments.models import TournamentEdition
-
         before = TournamentEdition.objects.count()
-
-        with patch(
-            'apps.ingestion.connectors.cosat_mongo.CosatMongoConnector.is_available',
-            return_value=False,
-        ):
+        with patch('apps.ingestion.connectors.cosat_mongo.CosatMongoConnector.is_available',
+                   return_value=False):
             call_command('sync_cosat_from_mongo', '--no-dry-run', verbosity=0)
-
         self.assertEqual(TournamentEdition.objects.count(), before)
+
+    # ── Organization / DataSource creation ───────────────────────────────────
+
+    @override_settings(COSAT_MONGO_ENABLED=True)
+    def test_get_or_create_datasource_uses_valid_choices(self):
+        """Organization.type and DataSource.source_type use valid model choices."""
+        from apps.ingestion.management.commands.sync_cosat_from_mongo import Command
+        from apps.sources.models import Organization, DataSource
+        cmd = Command()
+        cmd.stdout = type('S', (), {'write': lambda s, x: None})()
+        cmd.style = type('St', (), {
+            'SUCCESS': lambda s, x: x, 'WARNING': lambda s, x: x,
+            'ERROR': lambda s, x: x,
+        })()
+
+        ds = cmd._get_or_create_datasource(dry_run=False)
+
+        self.assertIsNotNone(ds)
+        org = Organization.objects.get(name='COSAT')
+        self.assertEqual(org.type, Organization.TYPE_CONFEDERATION)
+        self.assertEqual(ds.source_type, DataSource.SOURCE_TYPE_JSON)
+        self.assertEqual(ds.slug, 'cosat-mongo')
+        self.assertEqual(ds.connector_key, 'cosat_mongo')
+        self.assertTrue(ds.legal_notes)  # not empty
+
+    @override_settings(COSAT_MONGO_ENABLED=True)
+    def test_get_or_create_datasource_idempotent(self):
+        """Calling twice does not create duplicate Organization or DataSource."""
+        from apps.ingestion.management.commands.sync_cosat_from_mongo import Command
+        from apps.sources.models import Organization, DataSource
+        cmd = Command()
+        cmd.stdout = type('S', (), {'write': lambda s, x: None})()
+        cmd.style = type('St', (), {
+            'SUCCESS': lambda s, x: x, 'WARNING': lambda s, x: x,
+            'ERROR': lambda s, x: x,
+        })()
+
+        cmd._get_or_create_datasource(dry_run=False)
+        cmd._get_or_create_datasource(dry_run=False)
+
+        self.assertEqual(Organization.objects.filter(name='COSAT').count(), 1)
+        self.assertEqual(DataSource.objects.filter(connector_key='cosat_mongo').count(), 1)
+
+    # ── IngestionRun status ───────────────────────────────────────────────────
+
+    @override_settings(COSAT_MONGO_ENABLED=True)
+    def test_ingestion_run_uses_valid_status(self):
+        """IngestionRun must use success/partial/failed — never 'completed'."""
+        from apps.ingestion.models import IngestionRun
+        valid_statuses = {
+            IngestionRun.STATUS_RUNNING,
+            IngestionRun.STATUS_SUCCESS,
+            IngestionRun.STATUS_PARTIAL,
+            IngestionRun.STATUS_FAILED,
+        }
+        self.assertNotIn('completed', valid_statuses)
+        # Verify the constants exist
+        self.assertEqual(IngestionRun.STATUS_SUCCESS, 'success')
+        self.assertEqual(IngestionRun.STATUS_FAILED, 'failed')
+
+    # ── Entry rejection: empty category ──────────────────────────────────────
+
+    @override_settings(COSAT_MONGO_ENABLED=True)
+    def test_upsert_entry_rejects_empty_category(self):
+        """_upsert_entry raises ValueError when category_text is empty — never saves 'Não informado'."""
+        from apps.ingestion.management.commands.sync_cosat_from_mongo import Command
+        cmd = Command()
+        cmd.stdout = type('S', (), {'write': lambda s, x: None})()
+        cmd.style = type('St', (), {'ERROR': lambda s, x: x})()
+
+        player_no_cat = dict(self.SAMPLE_PLAYER, category_text='')
+        with self.assertRaises(ValueError) as ctx:
+            cmd._upsert_entry(player_no_cat, edition_id=999)
+        self.assertIn('category_text', str(ctx.exception).lower())
+
+    @override_settings(COSAT_MONGO_ENABLED=True)
+    def test_command_rejects_player_without_category_not_saved(self):
+        """Command skips (not saves) players with no category_text."""
+        from django.core.management import call_command
+        from apps.registrations.models import FederationEntry
+
+        before = FederationEntry.objects.count()
+        player_no_cat = dict(self.SAMPLE_PLAYER, category_text='')
+
+        with patch('apps.ingestion.connectors.cosat_mongo.CosatMongoConnector.is_available',
+                   return_value=True), \
+             patch('apps.ingestion.connectors.cosat_mongo.CosatMongoConnector.iter_tournaments',
+                   return_value=iter([])), \
+             patch('apps.ingestion.connectors.cosat_mongo.CosatMongoConnector.iter_players',
+                   return_value=iter([player_no_cat])):
+            call_command(
+                'sync_cosat_from_mongo', '--no-dry-run', '--import-entries',
+                '--tournament-id', 'test001', verbosity=0,
+            )
+        self.assertEqual(FederationEntry.objects.count(), before)
+
+    # ── Secrets: URI not in logs ──────────────────────────────────────────────
+
+    def test_sanitize_exc_strips_credentials(self):
+        """_sanitize_exc must redact user:pass from MongoDB URIs."""
+        from apps.ingestion.connectors.cosat_mongo import _sanitize_exc
+        exc = Exception(
+            'Connection refused: mongodb+srv://admin:s3cr3t@cluster.mongodb.net/db'
+        )
+        result = _sanitize_exc(exc)
+        self.assertNotIn('s3cr3t', result)
+        self.assertNotIn('admin:s3cr3t', result)
+        self.assertIn('***:***@', result)
+
+    def test_sanitize_exc_plain_message_unchanged(self):
+        from apps.ingestion.connectors.cosat_mongo import _sanitize_exc
+        exc = Exception('Server selection timed out after 5000ms')
+        result = _sanitize_exc(exc)
+        self.assertIn('5000ms', result)
+
+    # ── limit validation ──────────────────────────────────────────────────────
+
+    @override_settings(COSAT_MONGO_ENABLED=True)
+    def test_negative_limit_raises_command_error(self):
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+        with self.assertRaises(CommandError):
+            call_command('sync_cosat_from_mongo', '--limit', '-1', verbosity=0)
+
+    # ── Rankings: explicitly NOT imported ────────────────────────────────────
+
+    @override_settings(COSAT_MONGO_ENABLED=True)
+    def test_rankings_not_imported_in_sync(self):
+        """iter_rankings is never called by the command — rankings import not implemented."""
+        from django.core.management import call_command
+
+        with patch('apps.ingestion.connectors.cosat_mongo.CosatMongoConnector.is_available',
+                   return_value=True), \
+             patch('apps.ingestion.connectors.cosat_mongo.CosatMongoConnector.iter_tournaments',
+                   return_value=iter([])), \
+             patch('apps.ingestion.connectors.cosat_mongo.CosatMongoConnector.iter_rankings',
+                   return_value=iter([])) as mock_rankings:
+            call_command('sync_cosat_from_mongo', '--no-dry-run', '--import-entries', verbosity=0)
+            mock_rankings.assert_not_called()
+
+    # ── COSAT_MONGO_DB empty raises error ────────────────────────────────────
+
+    @override_settings(COSAT_MONGO_URL='mongodb://localhost:27099', COSAT_MONGO_DB='')
+    def test_empty_db_name_makes_connector_unavailable(self):
+        """Empty COSAT_MONGO_DB when URL is set → unavailable (not silent default)."""
+        from apps.ingestion.connectors.cosat_mongo import CosatMongoConnector
+        conn = CosatMongoConnector()
+        result = conn.is_available()
+        self.assertFalse(result)

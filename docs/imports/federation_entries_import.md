@@ -151,12 +151,20 @@ Chave única: `(edition_id, category_text, player_external_id, source)`
 
 ## Como importar dados da COSAT
 
+COSAT usa fluxo exclusivo via MongoDB do crawler — **não usa n8n**.
+
+```bash
+# Sync automático (recomendado):
+python manage.py sync_cosat_from_mongo --no-dry-run --import-entries
+```
+
+Ver documentação completa: `docs/integrations/cosat_mongo_sync.md`
+
+**Importação manual (fallback):**
 1. Abra a página pública do torneio em `cosat.tournamentsoftware.com`
-2. Localize a lista de inscritos (seção Entry List ou Draw)
-3. Selecione e copie a tabela
-4. Use n8n com AI Agent para parsear o texto em JSON (ver `docs/integrations/cosat_n8n_pipeline.md`)
-5. Execute com `dry_run=true` para revisar
-6. Execute com `dry_run=false` para salvar
+2. Copie a tabela de inscritos
+3. Use o endpoint `/api/registrations/import/` com `source=cosat` e `dry_run=true` para revisar
+4. Execute com `dry_run=false` para salvar
 
 ## Como revisar no mobile
 

@@ -118,15 +118,24 @@ Resposta:
 
 ---
 
-## Passo 9 — Configurar n8n para automação
+## Passo 9 — Sincronização automática via MongoDB (fluxo oficial COSAT)
 
-1. Importar workflow: `docs/integrations/n8n_cosat_import_workflow.json`
-2. Configurar variável de ambiente no n8n:
-   ```
-   TENNIS_HUB_IMPORT_TOKEN = <mesmo valor do IMPORT_API_TOKEN>
-   ```
-3. Ajustar `edition_id` no nó de configuração
-4. Executar manualmente (Manual Trigger) ou agendar
+COSAT **não usa n8n**. O fluxo oficial é via management command:
+
+```bash
+# Dry-run — preview sem salvar:
+python manage.py sync_cosat_from_mongo --limit 5
+
+# Sync real:
+python manage.py sync_cosat_from_mongo --no-dry-run
+
+# Sync real + inscritos:
+python manage.py sync_cosat_from_mongo --no-dry-run --import-entries
+```
+
+Pré-requisito: variáveis Railway configuradas (`COSAT_MONGO_ENABLED`, `COSAT_MONGO_URL`, `COSAT_MONGO_DB`).
+
+Ver documentação completa: [cosat_mongo_sync.md](cosat_mongo_sync.md)
 
 ---
 

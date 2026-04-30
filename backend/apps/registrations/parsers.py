@@ -14,27 +14,69 @@ Parsers NEVER invent data. If extraction fails, return empty entries + warning.
 """
 import logging
 import re
+import unicodedata
 from typing import Optional
 
 logger = logging.getLogger('apps.registrations.parsers')
 
 # ── Shared helpers ─────────────────────────────────────────────────────────────
 
-PAYMENT_WORDS_PAID = {'pago', 'paid', 'confirmado', 'confirmed', 'sim', 'yes', 'pg'}
-PAYMENT_WORDS_PENDING = {'pendente', 'pending', 'aguardando', 'awaiting', 'nao', 'não', 'no'}
+# Words that confirm payment when NO negation precedes them
+_PAID_STEMS = {'pag', 'paid', 'confirm', 'efetuad', 'aprovad', 'quitad', 'sim', 'yes', 'pg', 'ok'}
+PAYMENT_WORDS_PAID = {
+    'pago', 'paid', 'confirmado', 'confirmed', 'sim', 'yes', 'pg',
+    'quitado', 'efetuado', 'aprovado', 'ok', 'paga',
+}
+PAYMENT_WORDS_PENDING = {
+    'pendente', 'pending', 'aguardando', 'awaiting',
+    'a pagar', 'em aberto', 'aberto', 'devido',
+    'não pago', 'nao pago', 'não confirmado', 'nao confirmado',
+    'pagamento não', 'pagamento nao',
+}
+
+# Negation prefixes — if any of these immediately precede a paid stem, result is pending
+_NEGATION_RE = re.compile(
+    r'\b(não|nao|not|no|sem|without)\s+\w*(pag|confirm|efetuad|aprovad|quitad|paid)\w*',
+    re.IGNORECASE,
+)
 
 REMOVED_WORDS = {
     'substituído', 'substituida', 'substituido', 'removed', 'removido',
     'cortado', 'excluído', 'excluido', 'eliminado', 'out',
+    'retirado', 'desistiu', 'desistência', 'cancelado',
+    'waitlist', 'alternates', 'alternate', 'lista de espera',
+    'withdrawn', 'withdraw',
 }
 
 
 def _classify_payment(text: str) -> str:
+    """
+    Classify payment status from raw text.
+    Priority order:
+      1. Negation pattern ("não pago", "nao pago", "not confirmed") → pending
+      2. Explicit pending keywords → pending
+      3. Explicit paid keywords (whole-word boundary) → paid
+      4. Unknown
+    This order prevents "não pago" from matching 'pago' and returning paid.
+    """
     t = text.lower().strip()
-    if any(w in t for w in PAYMENT_WORDS_PAID):
-        return 'paid'
-    if any(w in t for w in PAYMENT_WORDS_PENDING):
+    if not t:
+        return 'unknown'
+
+    # Priority 1: negation before a paid stem → pending
+    if _NEGATION_RE.search(t):
         return 'pending'
+
+    # Priority 2: pending multi-word phrases and keywords first
+    for w in PAYMENT_WORDS_PENDING:
+        if w in t:
+            return 'pending'
+
+    # Priority 3: paid keywords (word-boundary to avoid "não pago" → paid)
+    for w in PAYMENT_WORDS_PAID:
+        if re.search(r'\b' + re.escape(w) + r'\b', t):
+            return 'paid'
+
     return 'unknown'
 
 
@@ -43,11 +85,22 @@ def _classify_removed(text: str) -> bool:
     return any(w in t for w in REMOVED_WORDS)
 
 
+def _slugify_simple(text: str) -> str:
+    """ASCII slug for deterministic dedup key — no external deps."""
+    s = unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode()
+    return re.sub(r'[^a-z0-9]+', '-', s.lower()).strip('-')[:50]
+
+
 def _safe_int(value) -> Optional[int]:
-    try:
-        return int(str(value).strip())
-    except (ValueError, TypeError):
-        return None
+    """Extract first integer from value, ignoring non-numeric suffixes like 'º'."""
+    s = str(value or '').strip()
+    m = re.search(r'\d+', s)
+    if m:
+        try:
+            return int(m.group(0))
+        except ValueError:
+            pass
+    return None
 
 
 def _clean(value) -> str:
@@ -58,44 +111,60 @@ def _clean(value) -> str:
 
 def _extract_html_table(html: str, source_url: str = '') -> list:
     """
-    Generic HTML <table> parser — works for any federation page pasted by admin.
-    Returns list of raw row dicts with keys lowercased.
-    Tries BeautifulSoup first; falls back to regex on ImportError.
+    Generic HTML <table> parser. Uses BeautifulSoup if available.
+    Returns list of raw row dicts with lowercased keys.
+    Picks the table most likely to contain entries (most rows, or with name-like headers).
     """
     try:
         from bs4 import BeautifulSoup
+    except ImportError:
+        logger.warning('BeautifulSoup not available')
+        return []
+
+    try:
         soup = BeautifulSoup(html, 'html.parser')
         tables = soup.find_all('table')
         if not tables:
             return []
 
-        # Use the largest table (most likely the entry list)
-        table = max(tables, key=lambda t: len(t.find_all('tr')))
+        # Score tables: prefer ones with headers suggesting player/category content
+        NAME_SIGNALS = {'nome', 'name', 'atleta', 'jogador', 'player', 'atletas', 'participante'}
+
+        def table_score(t):
+            rows = t.find_all('tr')
+            if len(rows) < 2:
+                return -1
+            header_text = t.find('tr').get_text(' ', strip=True).lower()
+            signal_bonus = 5 if any(s in header_text for s in NAME_SIGNALS) else 0
+            return len(rows) + signal_bonus
+
+        table = max(tables, key=table_score)
         rows = table.find_all('tr')
         if len(rows) < 2:
             return []
 
+        # Build headers from first row (th or td)
+        header_row = rows[0].find_all(['th', 'td'])
+        if not header_row:
+            return []
         headers = [
-            th.get_text(' ', strip=True).lower().replace(' ', '_')
-            for th in rows[0].find_all(['th', 'td'])
+            re.sub(r'\s+', '_', th.get_text(' ', strip=True).lower().strip())
+            for th in header_row
         ]
-        if not headers:
+        # Remove empty headers
+        if not any(headers):
             return []
 
         result = []
         for row in rows[1:]:
             cells = [td.get_text(' ', strip=True) for td in row.find_all(['td', 'th'])]
-            if len(cells) < 2:
+            if not any(c.strip() for c in cells):
                 continue
-            # Pad cells to match header length
             while len(cells) < len(headers):
                 cells.append('')
             result.append(dict(zip(headers, cells[:len(headers)])))
         return result
 
-    except ImportError:
-        logger.warning('BeautifulSoup not available — skipping HTML table extraction')
-        return []
     except Exception as exc:
         logger.warning('HTML table extraction failed: %s', exc)
         return []
@@ -103,10 +172,10 @@ def _extract_html_table(html: str, source_url: str = '') -> list:
 
 def _extract_text_table(text: str) -> list:
     """
-    Parse tab/semicolon/pipe-separated text copied from a browser table.
-    Tries to detect delimiter and header row automatically.
+    Parse tab/semicolon/pipe/comma separated text copied from a browser table.
+    Detects delimiter and header row automatically.
     """
-    lines = [l.strip() for l in text.strip().splitlines() if l.strip()]
+    lines = [l for l in text.strip().splitlines() if l.strip()]
     if len(lines) < 2:
         return []
 
@@ -114,12 +183,27 @@ def _extract_text_table(text: str) -> list:
     delimiters = ['\t', ';', '|', ',']
     delimiter = max(delimiters, key=lambda d: lines[0].count(d))
     if lines[0].count(delimiter) == 0:
-        return []
+        # Try space-separated if nothing else — last resort
+        if '  ' in lines[0]:
+            delimiter = None
+        else:
+            return []
 
-    headers = [h.strip().lower().replace(' ', '_') for h in lines[0].split(delimiter)]
+    def split_line(line):
+        if delimiter:
+            return [c.strip() for c in line.split(delimiter)]
+        # multi-space split
+        return [c.strip() for c in re.split(r'\s{2,}', line)]
+
+    headers = [
+        re.sub(r'\s+', '_', h.lower().strip())
+        for h in split_line(lines[0])
+    ]
     result = []
     for line in lines[1:]:
-        cells = [c.strip() for c in line.split(delimiter)]
+        cells = split_line(line)
+        if not any(c.strip() for c in cells):
+            continue
         while len(cells) < len(headers):
             cells.append('')
         result.append(dict(zip(headers, cells[:len(headers)])))
@@ -130,49 +214,70 @@ def _extract_text_table(text: str) -> list:
 
 _NAME_ALIASES = {
     'nome', 'name', 'atleta', 'athlete', 'jogador', 'player', 'player_name',
-    'nome_completo', 'full_name',
+    'nome_completo', 'full_name', 'participants', 'participante',
+    'atletas', 'jogadores', 'players',
 }
 _CAT_ALIASES = {
     'categoria', 'category', 'cat', 'division', 'divisao', 'chave', 'draw',
-    'category_text', 'categoria_text',
+    'category_text', 'categoria_text', 'classe', 'class', 'naipe', 'evento',
+    'modalidade', 'event',
 }
 _RANK_ALIASES = {
     'ranking', 'rank', 'posicao', 'posição', 'pos', 'ranking_position',
-    'colocacao', 'colocação', 'classificacao', 'classificação',
+    'colocacao', 'colocação', 'classificacao', 'classificação', 'ranked',
+    'seed', 'cabeça_de_chave', 'cabeca',
 }
 _PAYMENT_ALIASES = {
-    'pagamento', 'payment', 'pago', 'paid', 'payment_status', 'situacao',
-    'situação', 'status_pagamento',
+    'pagamento', 'payment', 'pago', 'paid', 'payment_status', 'situacao_pagamento',
+    'situação_pagamento', 'status_pagamento', 'financeiro', 'taxa', 'inscricao_paga',
 }
 _ID_ALIASES = {
     'id', 'player_id', 'external_id', 'cod', 'codigo', 'código',
-    'player_external_id', 'numero', 'número', 'num',
+    'player_external_id', 'numero', 'número', 'num', 'matricula', 'matrícula',
 }
 _STATUS_ALIASES = {
-    'status', 'situacao', 'situação', 'state', 'inscricao', 'inscrição',
+    'status', 'situacao', 'situação', 'state', 'inscricao', 'inscrição', 'situação',
+    'status_inscricao', 'situacao_inscricao',
 }
 
 
 def _find_column(row: dict, aliases: set) -> str:
+    """Find column value from row dict, using exact match first, then substring."""
+    # Exact match
     for key in row:
         if key in aliases:
             return row[key]
-        # fuzzy: any alias in key
+    # Substring match (any alias appears in column name)
+    for key in row:
+        key_clean = key.replace('_', ' ').strip()
         for alias in aliases:
-            if alias in key:
+            if alias in key or alias in key_clean:
                 return row[key]
     return ''
 
 
 def _row_to_entry(row: dict, source: str, source_url: str, ranking_source: str) -> Optional[dict]:
-    """Convert a raw row dict into a bulk-import entry dict. Returns None if no name found."""
+    """
+    Convert a raw row dict into a bulk-import entry dict.
+    Returns None (row rejected) if:
+      - player_name missing or is a header word
+      - category_text missing (never substitute with generic string)
+    """
     player_name = _clean(_find_column(row, _NAME_ALIASES))
-    if not player_name:
+    if not player_name or len(player_name) < 2:
+        return None
+
+    # Skip header-like rows that crept through
+    if player_name.lower() in {
+        'nome', 'name', 'atleta', 'jogador', 'player', 'participante', '-', '—',
+    }:
         return None
 
     category_text = _clean(_find_column(row, _CAT_ALIASES))
+    # RULE: reject rows without a real category — never invent "Categoria não identificada"
     if not category_text:
-        category_text = 'Categoria não identificada'
+        logger.debug('Row rejected — no category found for player "%s"', player_name)
+        return None
 
     rank_raw = _find_column(row, _RANK_ALIASES)
     ranking_position = _safe_int(rank_raw)
@@ -184,9 +289,18 @@ def _row_to_entry(row: dict, source: str, source_url: str, ranking_source: str) 
     removed = _classify_removed(status_raw) or _classify_removed(payment_raw)
     replacement_reason = ''
     if removed:
-        replacement_reason = _clean(status_raw) or 'Substituído por critério de ranking.'
+        detail = _clean(status_raw) or _clean(payment_raw)
+        replacement_reason = detail if detail.lower() not in {'pago', 'paid'} else 'Substituído por critério de ranking.'
 
-    external_id = _clean(_find_column(row, _ID_ALIASES))
+    raw_external_id = _clean(_find_column(row, _ID_ALIASES))
+
+    # DEDUP SAFETY: generate deterministic external_id when none provided.
+    # Prevents multiple athletes without an id in the same category/source from
+    # overwriting each other on upsert.
+    if raw_external_id:
+        external_id = raw_external_id
+    else:
+        external_id = f'{source}:{_slugify_simple(player_name)}:{_slugify_simple(category_text)}'
 
     return {
         'player_name': player_name,
@@ -203,7 +317,7 @@ def _row_to_entry(row: dict, source: str, source_url: str, ranking_source: str) 
 
 def _parse_generic(html_or_text: str, source: str, source_url: str,
                    ranking_source: str) -> list:
-    """Try HTML table then text table; return list of entry dicts."""
+    """Try HTML table then text table; return list of entry dicts. Never invents data."""
     rows = _extract_html_table(html_or_text, source_url)
     if not rows:
         rows = _extract_text_table(html_or_text)
@@ -222,12 +336,9 @@ def parse_cosat_entries(html_or_text: str, source_url: str = '') -> dict:
     """
     COSAT/Tournament Software entry parser.
 
-    STATUS: LIMITED — robots.txt disallows /sport/ /tournament/ /ranking/.
-    Use case: admin pastes HTML/text from COSAT page manually.
-    Auto-scraping not supported — parser_warning always True for auto mode.
-
-    Returns entries extracted from pasted HTML/text, or empty list with warning
-    if input is empty.
+    STATUS: LIMITED.
+    - robots.txt disallows /sport/ /tournament/ /ranking/ for all crawlers.
+    - Auto-scraping not supported. Use case: admin pastes HTML/text from COSAT page.
     """
     source = 'cosat'
     ranking_source = 'COSAT'
@@ -238,8 +349,8 @@ def parse_cosat_entries(html_or_text: str, source_url: str = '') -> dict:
             'parser_warning': True,
             'warning_message': (
                 'COSAT: sem dados de entrada. '
-                'Copie o HTML/texto da página de inscritos COSAT e passe como input. '
-                'Scraping automático não suportado — robots.txt desabilita /sport/ e /tournament/.'
+                'Cole HTML/texto da página de inscritos COSAT como input. '
+                'Auto-scraping bloqueado por robots.txt (/sport/ /tournament/ /ranking/ são Disallow).'
             ),
             'confidence': 'low',
             'source': source,
@@ -252,9 +363,9 @@ def parse_cosat_entries(html_or_text: str, source_url: str = '') -> dict:
             'entries': [],
             'parser_warning': True,
             'warning_message': (
-                'COSAT: nenhum inscrito extraído do HTML/texto fornecido. '
-                'Verifique se o conteúdo copiado contém uma tabela com colunas de nome e categoria. '
-                'Use o CSV de exemplo em docs/examples/cosat_bulk_import_example.csv como referência.'
+                'COSAT: nenhum inscrito extraído. '
+                'Verifique se o conteúdo copiado contém tabela com colunas nome/categoria. '
+                'Use docs/examples/cosat_bulk_import_example.csv como referência de formato.'
             ),
             'confidence': 'low',
             'source': source,
@@ -273,11 +384,9 @@ def parse_cbt_entries(html_or_text: str, source_url: str = '') -> dict:
     """
     CBT/Tênis Integrado entry parser.
 
-    STATUS: LIMITED — TenisIntegrado API returns 404 for individual registration endpoints.
-    The public site (tenisintegrado.com.br) may have HTML tables on tournament detail pages
-    but structure changes frequently. Auto-fetch not reliable.
-
-    Use case: admin pastes HTML/text from CBT tournament detail page.
+    STATUS: LIMITED.
+    - TenisIntegrado API /getRegistrations returns 404 — no individual athlete endpoint.
+    - Use case: admin pastes HTML/text from CBT tournament detail page.
     """
     source = 'cbt'
     ranking_source = 'CBT'
@@ -288,8 +397,8 @@ def parse_cbt_entries(html_or_text: str, source_url: str = '') -> dict:
             'parser_warning': True,
             'warning_message': (
                 'CBT: sem dados de entrada. '
-                'A API TenisIntegrado não expõe lista nominal de inscritos (/getRegistrations retorna 404). '
-                'Cole o HTML da página de inscritos do torneio CBT como input.'
+                'A API TenisIntegrado não expõe lista nominal (/getRegistrations retorna 404). '
+                'Cole HTML da página do torneio CBT como input.'
             ),
             'confidence': 'low',
             'source': source,
@@ -302,9 +411,9 @@ def parse_cbt_entries(html_or_text: str, source_url: str = '') -> dict:
             'entries': [],
             'parser_warning': True,
             'warning_message': (
-                'CBT: nenhum inscrito extraído. '
-                'O TenisIntegrado não retorna lista nominal via API pública. '
-                'Importe manualmente usando o CSV de exemplo ou cole o HTML da página.'
+                'CBT: nenhum inscrito extraído do HTML fornecido. '
+                'CBT não retorna lista nominal via API pública. '
+                'Use importação manual CSV ou cole HTML da página de inscritos.'
             ),
             'confidence': 'low',
             'source': source,
@@ -323,10 +432,10 @@ def parse_fpt_entries(html_or_text: str, source_url: str = '') -> dict:
     """
     FPT entry parser.
 
-    STATUS: LIMITED — FPT does not expose a public entries/inscritos endpoint.
-    /Inscricao/Lista/ returns 404. Manual paste is the only reliable path.
-
-    Use case: admin pastes HTML/text from FPT tournament page.
+    STATUS: LIMITED.
+    - FPT /Inscricao/Lista/ returns 404.
+    - /Torneio/Info/ pages may contain entry tables — try HTML extraction.
+    - Use case: admin pastes HTML from FPT tournament info page.
     """
     source = 'fpt'
     ranking_source = 'FPT'
@@ -337,8 +446,8 @@ def parse_fpt_entries(html_or_text: str, source_url: str = '') -> dict:
             'parser_warning': True,
             'warning_message': (
                 'FPT: sem dados de entrada. '
-                '/Inscricao/Lista/ retorna 404 — FPT não tem endpoint público de inscritos. '
-                'Cole o HTML da página de inscritos FPT como input.'
+                '/Inscricao/Lista/ retorna 404. '
+                'Cole HTML da página de inscritos FPT como input.'
             ),
             'confidence': 'low',
             'source': source,
@@ -352,8 +461,8 @@ def parse_fpt_entries(html_or_text: str, source_url: str = '') -> dict:
             'parser_warning': True,
             'warning_message': (
                 'FPT: nenhum inscrito extraído. '
-                'FPT não expõe lista nominal via API pública. '
-                'Use importação manual CSV ou cole o HTML da página de inscritos.'
+                'FPT não expõe lista nominal via endpoint público (/Inscricao/Lista/ 404). '
+                'Use importação manual CSV ou cole HTML da página de inscritos.'
             ),
             'confidence': 'low',
             'source': source,
@@ -368,11 +477,18 @@ def parse_fpt_entries(html_or_text: str, source_url: str = '') -> dict:
     }
 
 
+def parse_fct_entries(html_or_text: str, source_url: str = '') -> dict:
+    """FCT uses same TenisIntegrado platform as CBT — same limitations apply."""
+    result = parse_cbt_entries(html_or_text, source_url)
+    result['source'] = 'fct'
+    return result
+
+
 def parse_manual_entries(html_or_text: str, source_url: str = '',
                          source: str = 'manual') -> dict:
     """
-    Generic parser for manually pasted HTML/CSV/text.
-    Used when admin pastes content from any source.
+    Generic parser for manually pasted HTML/CSV/text from any source.
+    Highest confidence when data is provided — admin is responsible for accuracy.
     """
     if not (html_or_text or '').strip():
         return {
@@ -397,20 +513,32 @@ def parse_manual_entries(html_or_text: str, source_url: str = '',
 # ── Parser registry ────────────────────────────────────────────────────────────
 
 PARSERS = {
-    'cosat':   parse_cosat_entries,
-    'cbt':     parse_cbt_entries,
-    'fpt':     parse_fpt_entries,
-    'fct':     parse_fpt_entries,   # same structure as FPT
-    'manual':  parse_manual_entries,
+    'cosat':  parse_cosat_entries,
+    'cbt':    parse_cbt_entries,
+    'fpt':    parse_fpt_entries,
+    'fct':    parse_fct_entries,
+    'manual': parse_manual_entries,
 }
 
 PARSER_LIMITATIONS = {
-    'cosat': 'robots.txt disabilita /sport/ /tournament/ /ranking/. Sem API pública. Import manual ou n8n com HTML colado.',
-    'cbt':   'TenisIntegrado API retorna 404 para inscritos individuais. Import manual ou n8n com HTML colado.',
-    'fpt':   '/Inscricao/Lista/ retorna 404. Sem endpoint público de inscritos. Import manual.',
-    'fct':   'Sem endpoint público de inscritos. Import manual.',
-    'itf':   'ITF API requer autenticação. Verificar parceria oficial.',
-    'utr':   'UTR API requer chave. Sem acesso público a inscritos.',
+    'cosat': (
+        'robots.txt disabilita /sport/ /tournament/ /ranking/ para todos crawlers. '
+        'Sem API pública. Import manual ou n8n com HTML colado.'
+    ),
+    'cbt': (
+        'TenisIntegrado API retorna 404 para inscritos individuais. '
+        'Import manual ou n8n com HTML colado.'
+    ),
+    'fpt': (
+        '/Inscricao/Lista/ retorna 404. '
+        'Sem endpoint público de inscritos. Import manual.'
+    ),
+    'fct': (
+        'FCT usa TenisIntegrado — mesmas limitações do CBT. '
+        'Sem endpoint público de inscritos.'
+    ),
+    'itf':  'ITF API requer autenticação. Verificar parceria oficial.',
+    'utr':  'UTR API requer chave. Sem acesso público a inscritos.',
 }
 
 

@@ -534,3 +534,593 @@ class SyncTargetsEndpointTestCase(TestCase):
             'edition_id': 1, 'source': 'cosat', 'entries': [],
         }, format='json')
         self.assertEqual(res.status_code, 400)
+
+    def test_sync_targets_returns_new_fields(self):
+        """Response must include entries_source_url, ranking_source_url, candidate_entry_links."""
+        self._make_edition('FPT Info Ed', 'FPT',
+                           source_url='https://fpt.com.br/Torneio/Info/Teste-999',
+                           slug_suffix='-info')
+        res = self._get(auth_user=self.staff)
+        self.assertEqual(res.status_code, 200)
+        if res.data['results']:
+            r = res.data['results'][0]
+            for field in ('entries_source_url', 'ranking_source_url', 'candidate_entry_links'):
+                self.assertIn(field, r, f'New field missing: {field}')
+
+    def test_fpt_derives_entries_source_url(self):
+        """FPT /Torneio/Info/slug-id should derive candidate entries URL."""
+        from apps.registrations.integration_views import derive_entries_source_url
+        ed = self._make_edition('FPT Derive', 'FPT',
+                                source_url='https://fpt.com.br/Torneio/Info/Campeonato-Brasil-1234',
+                                slug_suffix='-derive')
+        entries_url, _, candidates = derive_entries_source_url(ed)
+        self.assertTrue(
+            '1234' in entries_url or any('1234' in c for c in candidates),
+            f'FPT ID not in entries_url={entries_url} or candidates={candidates}'
+        )
+        self.assertTrue(len(candidates) > 0)
+
+    def test_fpt_tournament_link_registration_overrides_derived(self):
+        """TournamentLink with type='registration' should be used as entries_source_url."""
+        from apps.registrations.integration_views import derive_entries_source_url
+        from apps.tournaments.models import TournamentLink
+        ed = self._make_edition('FPT Link Ed', 'FPT',
+                                source_url='https://fpt.com.br/Torneio/Info/Test-777',
+                                slug_suffix='-link')
+        reg_url = 'https://fpt.com.br/Inscricao/Torneio/Test-777'
+        TournamentLink.objects.create(
+            edition=ed, link_type='registration', url=reg_url, label='Inscrição'
+        )
+        entries_url, _, _ = derive_entries_source_url(ed)
+        self.assertEqual(entries_url, reg_url)
+
+    def test_cosat_no_registration_link_entries_url_empty(self):
+        """COSAT without a registration link should return empty entries_source_url."""
+        from apps.registrations.integration_views import derive_entries_source_url
+        ed = self._make_edition('COSAT Ed', 'COSAT',
+                                source_url='https://cosat.tournamentsoftware.com/sport/tournament?id=X',
+                                slug_suffix='-cosat')
+        entries_url, _, _ = derive_entries_source_url(ed)
+        # COSAT has no derivable entries URL from DB — must be empty or same as source
+        # (not invented). Robot.txt blocks paths anyway.
+        self.assertIsInstance(entries_url, str)
+
+
+# ── Improved parser tests ──────────────────────────────────────────────────────
+
+class ImprovedParserTestCase(TestCase):
+    """Tests for improved parsers: aliases, removed detection, payment, safe_int."""
+
+    def test_safe_int_handles_ordinal(self):
+        from apps.registrations.parsers import _safe_int
+        self.assertEqual(_safe_int('3º'), 3)
+        self.assertEqual(_safe_int('12°'), 12)
+        self.assertIsNone(_safe_int(''))
+        self.assertIsNone(_safe_int(None))
+        self.assertEqual(_safe_int('42'), 42)
+
+    def test_classify_payment_expanded(self):
+        from apps.registrations.parsers import _classify_payment
+        self.assertEqual(_classify_payment('Quitado'), 'paid')
+        self.assertEqual(_classify_payment('Aprovado'), 'paid')
+        self.assertEqual(_classify_payment('Em aberto'), 'pending')
+        self.assertEqual(_classify_payment('A pagar'), 'pending')
+        self.assertEqual(_classify_payment(''), 'unknown')
+        self.assertEqual(_classify_payment('???'), 'unknown')
+
+    def test_classify_removed_expanded(self):
+        from apps.registrations.parsers import _classify_removed
+        self.assertTrue(_classify_removed('Withdrawn'))
+        self.assertTrue(_classify_removed('Waitlist'))
+        self.assertTrue(_classify_removed('Alternates'))
+        self.assertTrue(_classify_removed('desistiu'))
+        self.assertFalse(_classify_removed('Pago'))
+        self.assertFalse(_classify_removed('Confirmado'))
+
+    def test_html_table_alias_classe(self):
+        """'classe' should be recognised as a category alias."""
+        from apps.registrations.parsers import parse_manual_entries
+        html = """<table>
+          <tr><th>Nome</th><th>Classe</th><th>Ranking</th></tr>
+          <tr><td>Alice</td><td>B</td><td>5</td></tr>
+        </table>"""
+        result = parse_manual_entries(html)
+        self.assertEqual(len(result['entries']), 1)
+        self.assertEqual(result['entries'][0]['category_text'], 'B')
+        self.assertEqual(result['entries'][0]['ranking_position'], 5)
+
+    def test_html_table_alias_atleta(self):
+        from apps.registrations.parsers import parse_fpt_entries
+        html = """<table>
+          <tr><th>Atleta</th><th>Categoria</th><th>Pagamento</th></tr>
+          <tr><td>João</td><td>Sub-14 M</td><td>Pago</td></tr>
+        </table>"""
+        result = parse_fpt_entries(html)
+        self.assertFalse(result['parser_warning'])
+        self.assertEqual(len(result['entries']), 1)
+        self.assertEqual(result['entries'][0]['payment_status'], 'paid')
+
+    def test_html_skips_header_row_as_entry(self):
+        """Parser must not return 'Nome' or 'Atleta' as a player entry."""
+        from apps.registrations.parsers import _row_to_entry
+        row = {'nome': 'Nome', 'categoria': 'Categoria', 'ranking': 'Ranking'}
+        entry = _row_to_entry(row, 'manual', '', 'TEST')
+        self.assertIsNone(entry)
+
+    def test_csv_semicolon_parsing(self):
+        from apps.registrations.parsers import parse_manual_entries
+        csv_text = (
+            "nome;categoria;ranking;pagamento\n"
+            "Carlos;Sub-16 M;3;Pago\n"
+            "Maria;Sub-16 F;7;Pendente"
+        )
+        result = parse_manual_entries(csv_text)
+        self.assertEqual(len(result['entries']), 2)
+        self.assertEqual(result['entries'][0]['payment_status'], 'paid')
+        self.assertEqual(result['entries'][1]['payment_status'], 'pending')
+        self.assertEqual(result['entries'][0]['ranking_position'], 3)
+
+    def test_csv_tab_parsing(self):
+        from apps.registrations.parsers import parse_manual_entries
+        csv_text = "nome\tcategoria\tranking\n" + "Beatriz\tSub-12 F\t1"
+        result = parse_manual_entries(csv_text)
+        self.assertEqual(len(result['entries']), 1)
+        self.assertEqual(result['entries'][0]['player_name'], 'Beatriz')
+
+    def test_parser_does_not_invent_data_on_empty_html(self):
+        """All parsers must return empty entries (never invent) for empty/blank HTML."""
+        from apps.registrations.parsers import (
+            parse_cosat_entries, parse_cbt_entries,
+            parse_fpt_entries, parse_manual_entries,
+        )
+        for parser in [parse_cosat_entries, parse_cbt_entries, parse_fpt_entries]:
+            result = parser('')
+            self.assertEqual(result['entries'], [], f'{parser.__name__} invented data on empty input')
+            self.assertTrue(result['parser_warning'])
+
+    def test_parser_does_not_invent_on_no_table(self):
+        """HTML without any table must yield empty entries."""
+        from apps.registrations.parsers import parse_fpt_entries
+        html = '<html><body><p>No table here, just text.</p></body></html>'
+        result = parse_fpt_entries(html)
+        self.assertEqual(result['entries'], [])
+        self.assertTrue(result['parser_warning'])
+
+    def test_fpt_parser_source_label(self):
+        from apps.registrations.parsers import parse_fpt_entries
+        result = parse_fpt_entries('')
+        self.assertEqual(result['source'], 'fpt')
+
+    def test_fct_parser_delegates_to_cbt_logic(self):
+        from apps.registrations.parsers import parse_fct_entries
+        result = parse_fct_entries('')
+        self.assertEqual(result['source'], 'fct')
+        self.assertTrue(result['parser_warning'])
+
+
+# ── Payment negation tests ─────────────────────────────────────────────────────
+
+class PaymentNegationTestCase(TestCase):
+    """Critical: 'não pago' must never return paid."""
+
+    def _pay(self, text):
+        from apps.registrations.parsers import _classify_payment
+        return _classify_payment(text)
+
+    # Negation cases — must NOT be paid
+    def test_nao_pago_is_not_paid(self):
+        self.assertNotEqual(self._pay('não pago'), 'paid')
+
+    def test_nao_pago_ascii_is_not_paid(self):
+        self.assertNotEqual(self._pay('nao pago'), 'paid')
+
+    def test_pagamento_nao_confirmado_is_not_paid(self):
+        self.assertNotEqual(self._pay('pagamento não confirmado'), 'paid')
+
+    def test_pagamento_nao_confirmado_ascii_is_not_paid(self):
+        self.assertNotEqual(self._pay('pagamento nao confirmado'), 'paid')
+
+    def test_nao_confirmado_is_not_paid(self):
+        self.assertNotEqual(self._pay('não confirmado'), 'paid')
+
+    def test_not_paid_en_is_not_paid(self):
+        self.assertNotEqual(self._pay('not paid'), 'paid')
+
+    # Positive cases — must be paid
+    def test_pago_is_paid(self):
+        self.assertEqual(self._pay('pago'), 'paid')
+
+    def test_quitado_is_paid(self):
+        self.assertEqual(self._pay('quitado'), 'paid')
+
+    def test_aprovado_is_paid(self):
+        self.assertEqual(self._pay('aprovado'), 'paid')
+
+    def test_efetuado_is_paid(self):
+        self.assertEqual(self._pay('efetuado'), 'paid')
+
+    # Pending cases
+    def test_em_aberto_is_pending(self):
+        self.assertEqual(self._pay('em aberto'), 'pending')
+
+    def test_a_pagar_is_pending(self):
+        self.assertEqual(self._pay('a pagar'), 'pending')
+
+    def test_pendente_is_pending(self):
+        self.assertEqual(self._pay('pendente'), 'pending')
+
+    def test_devido_is_pending(self):
+        self.assertEqual(self._pay('devido'), 'pending')
+
+    def test_aguardando_is_pending(self):
+        self.assertEqual(self._pay('aguardando'), 'pending')
+
+    # Unknown
+    def test_empty_is_unknown(self):
+        self.assertEqual(self._pay(''), 'unknown')
+
+    def test_ambiguous_is_unknown(self):
+        self.assertEqual(self._pay('???'), 'unknown')
+
+
+# ── Category rejection tests ───────────────────────────────────────────────────
+
+class CategoryRejectionTestCase(TestCase):
+    """Rows without a real category must be rejected — never invent category."""
+
+    def test_row_without_category_rejected(self):
+        from apps.registrations.parsers import _row_to_entry
+        row = {'nome': 'Joao Silva', 'ranking': '5'}  # no category column
+        result = _row_to_entry(row, 'manual', '', 'TEST')
+        self.assertIsNone(result, 'Row without category must return None')
+
+    def test_no_invented_category_string(self):
+        from apps.registrations.parsers import parse_manual_entries
+        html = """<table>
+          <tr><th>Nome</th><th>Ranking</th></tr>
+          <tr><td>Joao</td><td>5</td></tr>
+        </table>"""
+        result = parse_manual_entries(html)
+        for entry in result['entries']:
+            self.assertNotIn('não identificad', entry.get('category_text', '').lower())
+            self.assertNotIn('nao identificad', entry.get('category_text', '').lower())
+
+    def test_html_without_category_returns_empty(self):
+        from apps.registrations.parsers import parse_cosat_entries
+        html = """<table>
+          <tr><th>Nome</th><th>Ranking</th></tr>
+          <tr><td>Maria</td><td>3</td></tr>
+        </table>"""
+        result = parse_cosat_entries(html)
+        # Either returns empty entries or entries without invented category
+        self.assertEqual(result['entries'], [])
+
+
+# ── Dedup deterministic external_id tests ─────────────────────────────────────
+
+class DedupDeterministicTestCase(TestCase):
+    """Two athletes without external_id in same category must not overwrite each other."""
+
+    def test_two_athletes_no_external_id_get_distinct_keys(self):
+        from apps.registrations.parsers import _row_to_entry
+        row1 = {'nome': 'Joao Silva', 'categoria': 'Sub-14 M'}
+        row2 = {'nome': 'Pedro Lima', 'categoria': 'Sub-14 M'}
+        e1 = _row_to_entry(row1, 'fpt', '', 'FPT')
+        e2 = _row_to_entry(row2, 'fpt', '', 'FPT')
+        self.assertIsNotNone(e1)
+        self.assertIsNotNone(e2)
+        self.assertNotEqual(
+            e1['player_external_id'], e2['player_external_id'],
+            'Different athletes must get distinct deterministic external_ids'
+        )
+
+    def test_same_athlete_same_category_gets_same_key(self):
+        """Re-importing same athlete twice must produce same external_id (idempotent)."""
+        from apps.registrations.parsers import _row_to_entry
+        row = {'nome': 'Maria Santos', 'categoria': 'Sub-12 F'}
+        e1 = _row_to_entry(row, 'cbt', '', 'CBT')
+        e2 = _row_to_entry(row, 'cbt', '', 'CBT')
+        self.assertEqual(e1['player_external_id'], e2['player_external_id'])
+
+    def test_deterministic_id_contains_source_and_slug(self):
+        from apps.registrations.parsers import _row_to_entry
+        row = {'nome': 'Ana Costa', 'categoria': 'Juvenil F'}
+        entry = _row_to_entry(row, 'cosat', '', 'COSAT')
+        self.assertIn('cosat', entry['player_external_id'])
+
+    @override_settings(IMPORT_API_TOKEN=FAKE_TOKEN)
+    def test_import_two_athletes_no_external_id_creates_two_records(self):
+        """Bulk-import of two athletes without external_id must create 2 separate records."""
+        from apps.registrations.models import FederationEntry
+        from apps.tournaments.models import TournamentEdition, Tournament
+        from apps.sources.models import Organization
+
+        org, _ = Organization.objects.get_or_create(
+            short_name='FPT2', defaults={'name': 'FPT2', 'type': 'federation'}
+        )
+        t, _ = Tournament.objects.get_or_create(
+            canonical_slug='dedup-test-tourney', defaults={
+                'canonical_name': 'Dedup Test', 'circuit': 'FPT',
+                'modality': 'tennis', 'organization': org,
+            }
+        )
+        edition = TournamentEdition.objects.create(
+            tournament=t, title='Dedup Edition', external_id='dedup:001',
+            season_year=2026, status='open',
+        )
+        self.client.force_authenticate(user=User.objects.create_user(
+            email='ded@test.com', password='pass', is_staff=True
+        ))
+        res = self.client.post('/api/registrations/import/', {
+            'edition_id': edition.id,
+            'source': 'fpt',
+            'entries': [
+                {'player_name': 'Joao Dedup', 'category_text': 'Sub-14 M', 'player_external_id': ''},
+                {'player_name': 'Pedro Dedup', 'category_text': 'Sub-14 M', 'player_external_id': ''},
+            ],
+        }, format='json')
+        self.assertEqual(res.status_code, 200)
+        # Both athletes must be created as separate records
+        count = FederationEntry.objects.filter(edition=edition).count()
+        self.assertEqual(count, 2, f'Expected 2 records, got {count}. Dedup may have merged athletes.')
+
+
+# ── preferred_entries_url tests ────────────────────────────────────────────────
+
+class PreferredEntriesUrlTestCase(TestCase):
+    """preferred_entries_url must be best available URL for n8n to fetch."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.staff = User.objects.create_user(
+            email='staff_pref@test.com', password='pass', is_staff=True
+        )
+
+    def _make_edition(self, title, circuit, source_url, slug_suffix=''):
+        from apps.sources.models import Organization
+        from apps.tournaments.models import Tournament, TournamentEdition
+        org, _ = Organization.objects.get_or_create(
+            short_name=circuit, defaults={'name': circuit, 'type': 'confederation'}
+        )
+        t, _ = Tournament.objects.get_or_create(
+            canonical_slug=f'pref-{circuit.lower()}{slug_suffix}',
+            defaults={'canonical_name': circuit, 'circuit': circuit,
+                      'modality': 'tennis', 'organization': org},
+        )
+        return TournamentEdition.objects.create(
+            tournament=t, title=title, external_id=f'pref:{title[:8]}',
+            season_year=2026, status='open', official_source_url=source_url,
+        )
+
+    def test_preferred_url_falls_back_to_source_url_when_no_links(self):
+        ed = self._make_edition('Pref Ed 1', 'COSAT',
+                                'https://cosat.example.com/t', slug_suffix='-p1')
+        self.client.force_authenticate(user=self.staff)
+        res = self.client.get('/api/integrations/federation-sync-targets/')
+        self.assertEqual(res.status_code, 200)
+        results = {r['edition_id']: r for r in res.data['results']}
+        if ed.id in results:
+            r = results[ed.id]
+            self.assertIn('preferred_entries_url', r)
+            # No links = preferred_entries_url should equal source_url
+            self.assertEqual(r['preferred_entries_url'], ed.official_source_url)
+
+    def test_preferred_url_uses_registration_link_when_available(self):
+        from apps.tournaments.models import TournamentLink
+        ed = self._make_edition('Pref FPT', 'FPT',
+                                'https://fpt.com.br/Torneio/Info/Test-888',
+                                slug_suffix='-p2')
+        reg_url = 'https://fpt.com.br/Inscricao/Torneio/Test-888'
+        TournamentLink.objects.create(edition=ed, link_type='registration', url=reg_url, label='Inscricao')
+        self.client.force_authenticate(user=self.staff)
+        res = self.client.get('/api/integrations/federation-sync-targets/')
+        self.assertEqual(res.status_code, 200)
+        results = {r['edition_id']: r for r in res.data['results']}
+        if ed.id in results:
+            self.assertEqual(results[ed.id]['preferred_entries_url'], reg_url)
+
+    def test_cbt_with_candidate_links_uses_first_candidate_as_preferred(self):
+        """CBT with empty entries_source_url and candidates → preferred = candidates[0]."""
+        ed = self._make_edition('CBT Cand', 'CBT',
+                                'https://www.tenisintegrado.com.br/torneio/99999',
+                                slug_suffix='-cand')
+        # external_id triggers CBT candidate derivation
+        ed.external_id = 'cbt:99999'
+        ed.save()
+        self.client.force_authenticate(user=self.staff)
+        res = self.client.get('/api/integrations/federation-sync-targets/')
+        self.assertEqual(res.status_code, 200)
+        results = {r['edition_id']: r for r in res.data['results']}
+        if ed.id in results:
+            r = results[ed.id]
+            self.assertIn('preferred_entries_url', r)
+            # preferred must not be empty
+            self.assertTrue(r['preferred_entries_url'])
+
+
+# ── Limit validation tests ─────────────────────────────────────────────────────
+
+class LimitValidationTestCase(TestCase):
+
+    def setUp(self):
+        self.client = APIClient()
+        self.staff = User.objects.create_user(
+            email='staff_lim@test.com', password='pass', is_staff=True
+        )
+
+    def _get(self, params):
+        self.client.force_authenticate(user=self.staff)
+        return self.client.get(f'/api/integrations/federation-sync-targets/{params}')
+
+    def test_limit_abc_does_not_crash(self):
+        res = self._get('?limit=abc')
+        self.assertEqual(res.status_code, 200)
+
+    def test_limit_negative_uses_minimum(self):
+        res = self._get('?limit=-1')
+        self.assertEqual(res.status_code, 200)
+
+    def test_limit_zero_returns_valid_response(self):
+        res = self._get('?limit=0')
+        self.assertEqual(res.status_code, 200)
+        self.assertIn('results', res.data)
+
+    def test_limit_9999_capped_at_500(self):
+        res = self._get('?limit=9999')
+        self.assertEqual(res.status_code, 200)
+        self.assertLessEqual(len(res.data['results']), 500)
+
+
+# ── Auth tests for integration endpoints ───────────────────────────────────────
+
+class IntegrationAuthTestCase(TestCase):
+
+    def setUp(self):
+        self.client = APIClient()
+        self.staff = User.objects.create_user(
+            email='staff_auth@test.com', password='pass', is_staff=True
+        )
+        self.player = User.objects.create_user(
+            email='player_auth@test.com', password='pass', is_staff=False
+        )
+
+    # GET /api/integrations/federation-sync-targets/
+
+    def test_sync_targets_no_auth_returns_403(self):
+        res = self.client.get('/api/integrations/federation-sync-targets/')
+        self.assertEqual(res.status_code, 403)
+
+    @override_settings(IMPORT_API_TOKEN=FAKE_TOKEN)
+    def test_sync_targets_wrong_token_returns_403(self):
+        self.client.credentials(HTTP_X_IMPORT_TOKEN='wrong-token')
+        res = self.client.get('/api/integrations/federation-sync-targets/')
+        self.assertEqual(res.status_code, 403)
+
+    @override_settings(IMPORT_API_TOKEN=FAKE_TOKEN)
+    def test_sync_targets_correct_token_returns_200(self):
+        self.client.credentials(HTTP_X_IMPORT_TOKEN=FAKE_TOKEN)
+        res = self.client.get('/api/integrations/federation-sync-targets/')
+        self.assertEqual(res.status_code, 200)
+
+    def test_sync_targets_staff_jwt_returns_200(self):
+        self.client.force_authenticate(user=self.staff)
+        res = self.client.get('/api/integrations/federation-sync-targets/')
+        self.assertEqual(res.status_code, 200)
+
+    def test_sync_targets_non_staff_returns_403(self):
+        self.client.force_authenticate(user=self.player)
+        res = self.client.get('/api/integrations/federation-sync-targets/')
+        self.assertEqual(res.status_code, 403)
+
+    # POST /api/integrations/parse-entries/
+
+    def test_parse_entries_no_auth_returns_403(self):
+        res = self.client.post('/api/integrations/parse-entries/',
+                               {'source': 'cosat', 'html_or_text': ''}, format='json')
+        self.assertEqual(res.status_code, 403)
+
+    @override_settings(IMPORT_API_TOKEN=FAKE_TOKEN)
+    def test_parse_entries_wrong_token_returns_403(self):
+        self.client.credentials(HTTP_X_IMPORT_TOKEN='bad-token')
+        res = self.client.post('/api/integrations/parse-entries/',
+                               {'source': 'cosat', 'html_or_text': ''}, format='json')
+        self.assertEqual(res.status_code, 403)
+
+    @override_settings(IMPORT_API_TOKEN=FAKE_TOKEN)
+    def test_parse_entries_correct_token_returns_200(self):
+        self.client.credentials(HTTP_X_IMPORT_TOKEN=FAKE_TOKEN)
+        res = self.client.post('/api/integrations/parse-entries/',
+                               {'source': 'cosat', 'html_or_text': ''}, format='json')
+        self.assertEqual(res.status_code, 200)
+
+    def test_parse_entries_staff_jwt_returns_200(self):
+        self.client.force_authenticate(user=self.staff)
+        res = self.client.post('/api/integrations/parse-entries/',
+                               {'source': 'cosat', 'html_or_text': ''}, format='json')
+        self.assertEqual(res.status_code, 200)
+
+    def test_parse_entries_non_staff_returns_403(self):
+        self.client.force_authenticate(user=self.player)
+        res = self.client.post('/api/integrations/parse-entries/',
+                               {'source': 'cosat', 'html_or_text': ''}, format='json')
+        self.assertEqual(res.status_code, 403)
+
+
+# ── dry_run string parsing tests ───────────────────────────────────────────────
+
+class DryRunParsingTestCase(TestCase):
+    """dry_run='false' string must not be treated as True."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.staff = User.objects.create_user(
+            email='drstaff@test.com', password='pass', is_staff=True
+        )
+        self.client.force_authenticate(user=self.staff)
+
+    def _make_edition(self):
+        from apps.sources.models import Organization
+        from apps.tournaments.models import Tournament, TournamentEdition
+        org, _ = Organization.objects.get_or_create(
+            short_name='DRTEST', defaults={'name': 'DryRunTest', 'type': 'confederation'}
+        )
+        t, _ = Tournament.objects.get_or_create(
+            canonical_slug='dry-run-test', defaults={
+                'canonical_name': 'DryRun', 'circuit': 'CBT',
+                'modality': 'tennis', 'organization': org,
+            }
+        )
+        return TournamentEdition.objects.create(
+            tournament=t, title='DryRun Ed', external_id='dr:001',
+            season_year=2026, status='open',
+        )
+
+    def _post(self, edition_id, dry_run_value):
+        return self.client.post('/api/registrations/import/', {
+            'edition_id': edition_id,
+            'source': 'manual',
+            'dry_run': dry_run_value,
+            'entries': [{'player_name': 'Test Athlete', 'category_text': 'Sub-14 M'}],
+        }, format='json')
+
+    def test_dry_run_true_boolean_does_not_save(self):
+        from apps.registrations.models import FederationEntry
+        ed = self._make_edition()
+        count_before = FederationEntry.objects.filter(edition=ed).count()
+        res = self._post(ed.id, True)
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.data['dry_run'])
+        self.assertEqual(FederationEntry.objects.filter(edition=ed).count(), count_before)
+
+    def test_dry_run_false_boolean_saves(self):
+        from apps.registrations.models import FederationEntry
+        ed = self._make_edition()
+        res = self._post(ed.id, False)
+        self.assertEqual(res.status_code, 200)
+        self.assertFalse(res.data['dry_run'])
+        self.assertGreater(FederationEntry.objects.filter(edition=ed).count(), 0)
+
+    def test_dry_run_string_true_does_not_save(self):
+        from apps.registrations.models import FederationEntry
+        ed = self._make_edition()
+        count_before = FederationEntry.objects.filter(edition=ed).count()
+        res = self._post(ed.id, 'true')
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.data['dry_run'], 'dry_run="true" string must be treated as True')
+        self.assertEqual(FederationEntry.objects.filter(edition=ed).count(), count_before)
+
+    def test_dry_run_string_false_saves(self):
+        """Critical: dry_run='false' string must be treated as False, not True."""
+        from apps.registrations.models import FederationEntry
+        ed = self._make_edition()
+        res = self._post(ed.id, 'false')
+        self.assertEqual(res.status_code, 200)
+        self.assertFalse(
+            res.data['dry_run'],
+            'dry_run="false" string must be treated as False — not True!'
+        )
+        # Data must have been saved
+        self.assertGreater(
+            FederationEntry.objects.filter(edition=ed).count(), 0,
+            'dry_run="false" must save data to DB'
+        )

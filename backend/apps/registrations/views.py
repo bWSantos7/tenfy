@@ -472,7 +472,12 @@ class FederationEntryViewSet(viewsets.GenericViewSet):
         source = (request.data.get('source') or FederationEntry.SOURCE_MANUAL).strip()
         source_url_default = (request.data.get('source_url') or '').strip()
         confidence_default = (request.data.get('confidence') or FederationEntry.CONFIDENCE_MEDIUM).strip()
-        dry_run = bool(request.data.get('dry_run', False))
+        # Fix: bool("false") is True — parse string values explicitly
+        _dry_raw = request.data.get('dry_run', False)
+        if isinstance(_dry_raw, str):
+            dry_run = _dry_raw.lower() in ('true', '1', 'yes')
+        else:
+            dry_run = bool(_dry_raw)
         entries_data = request.data.get('entries', [])
 
         if not edition_id:
@@ -489,6 +494,7 @@ class FederationEntryViewSet(viewsets.GenericViewSet):
 
         created_count = updated_count = skipped_count = 0
         errors = []
+        warnings = []
         previews = []
 
         for i, entry_data in enumerate(entries_data):
@@ -496,7 +502,7 @@ class FederationEntryViewSet(viewsets.GenericViewSet):
             try:
                 player_name = (entry_data.get('player_name') or '').strip()
                 category_text = (entry_data.get('category_text') or '').strip()
-                external_id = (entry_data.get('player_external_id') or '').strip()
+                raw_external_id = (entry_data.get('player_external_id') or '').strip()
 
                 if not player_name:
                     errors.append({'row': row_num, 'error': 'player_name obrigatório.', 'data': entry_data})
@@ -504,6 +510,18 @@ class FederationEntryViewSet(viewsets.GenericViewSet):
                 if not category_text:
                     errors.append({'row': row_num, 'error': 'category_text obrigatório.', 'data': entry_data})
                     continue
+
+                # DEDUP SAFETY: when player_external_id is empty, generate a deterministic
+                # key so two different athletes in the same category/source don't overwrite.
+                if raw_external_id:
+                    external_id = raw_external_id
+                else:
+                    import unicodedata as _ud, re as _re
+                    def _slug(t):
+                        s = _ud.normalize('NFKD', t).encode('ascii', 'ignore').decode()
+                        return _re.sub(r'[^a-z0-9]+', '-', s.lower()).strip('-')[:50]
+                    external_id = f'{source}:{_slug(player_name)}:{_slug(category_text)}'
+                    warnings.append({'row': row_num, 'warning': f'player_external_id ausente para "{player_name}" — ID determinístico gerado: {external_id}'})
 
                 raw_payment = (entry_data.get('payment_status') or FederationEntry.PAYMENT_UNKNOWN).strip()
                 if raw_payment not in _VALID_PAYMENT:
@@ -582,6 +600,7 @@ class FederationEntryViewSet(viewsets.GenericViewSet):
             'updated': updated_count,
             'skipped': skipped_count,
             'errors': errors,
+            'warnings': warnings,
             'detail': (
                 f'[DRY RUN] Prévia: {created_count} seriam criadas, {updated_count} atualizadas, {len(errors)} rejeitadas.'
                 if dry_run
@@ -620,7 +639,12 @@ def _run_import(request):
     source = (request.data.get('source') or FederationEntry.SOURCE_MANUAL).strip()
     source_url_default = (request.data.get('source_url') or '').strip()
     confidence_default = (request.data.get('confidence') or FederationEntry.CONFIDENCE_MEDIUM).strip()
-    dry_run = bool(request.data.get('dry_run', False))
+    # Fix: bool("false") == True — parse string values explicitly
+    _dry_raw = request.data.get('dry_run', False)
+    if isinstance(_dry_raw, str):
+        dry_run = _dry_raw.lower() in ('true', '1', 'yes')
+    else:
+        dry_run = bool(_dry_raw)
     entries_data = request.data.get('entries', [])
 
     if not edition_id:
@@ -648,7 +672,7 @@ def _run_import(request):
         try:
             player_name = (entry_data.get('player_name') or '').strip()
             category_text = (entry_data.get('category_text') or '').strip()
-            external_id = (entry_data.get('player_external_id') or '').strip()
+            raw_external_id = (entry_data.get('player_external_id') or '').strip()
 
             if not player_name:
                 errors.append({'row': row_num, 'error': 'player_name obrigatório.', 'data': entry_data})
@@ -656,6 +680,17 @@ def _run_import(request):
             if not category_text:
                 errors.append({'row': row_num, 'error': 'category_text obrigatório.', 'data': entry_data})
                 continue
+
+            # DEDUP SAFETY: when player_external_id is empty, generate deterministic key
+            if raw_external_id:
+                external_id = raw_external_id
+            else:
+                import unicodedata as _ud, re as _re
+                def _slug(t):
+                    s = _ud.normalize('NFKD', t).encode('ascii', 'ignore').decode()
+                    return _re.sub(r'[^a-z0-9]+', '-', s.lower()).strip('-')[:50]
+                external_id = f'{source}:{_slug(player_name)}:{_slug(category_text)}'
+                warnings.append({'row': row_num, 'warning': f'player_external_id ausente para "{player_name}" — ID determinístico: {external_id}'})
 
             # Non-blocking warnings
             if not external_id:

@@ -11,9 +11,10 @@ POST /api/integrations/parse-entries/
   Auth: staff JWT or X-Import-Token.
 """
 import logging
+import re
 from datetime import timedelta
 
-from django.db.models import Max, Q
+from django.db.models import Max
 from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.decorators import api_view, permission_classes
@@ -23,7 +24,7 @@ from rest_framework import status
 
 from apps.registrations.views import _check_import_auth
 from apps.registrations.models import FederationEntry
-from apps.registrations.parsers import get_parser, get_limitation, PARSER_LIMITATIONS
+from apps.registrations.parsers import get_parser, get_limitation
 from apps.tournaments.models import TournamentEdition
 
 logger = logging.getLogger('apps.registrations.integration')
@@ -35,7 +36,7 @@ _SYNC_STATUSES = {
     TournamentEdition.STATUS_ANNOUNCED,
     TournamentEdition.STATUS_DRAWS_PUBLISHED,
     TournamentEdition.STATUS_IN_PROGRESS,
-    TournamentEdition.STATUS_CLOSED,   # closed but entries may still update
+    TournamentEdition.STATUS_CLOSED,
     TournamentEdition.STATUS_UNKNOWN,
 }
 
@@ -49,6 +50,13 @@ _CIRCUIT_TO_SOURCE = {
     'UTR':   'utr',
 }
 
+# Inscription link URL path patterns (lowercased)
+_ENTRY_LINK_PATTERNS = [
+    '/inscrit', '/inscricao', '/inscrição', '/entry', '/entries',
+    '/players', '/draw', '/chaves', '/acceptance', '/participant',
+]
+_RANKING_LINK_PATTERNS = ['/ranking', '/classificacao', '/classification']
+
 
 def _edition_source(edition: TournamentEdition) -> str:
     """Infer source from circuit name."""
@@ -59,15 +67,103 @@ def _edition_source(edition: TournamentEdition) -> str:
     return 'manual'
 
 
+def derive_entries_source_url(edition: TournamentEdition):
+    """
+    Compute (entries_source_url, ranking_source_url, candidate_entry_links)
+    without making HTTP requests. Pure DB lookup + URL pattern derivation.
+
+    Uses edition.links.all() (prefetch_related cache) instead of per-edition
+    TournamentLink.objects.filter() calls — avoids N+1 queries when the view
+    calls prefetch_related('links') on the queryset.
+
+    Returns:
+        entries_source_url: str  — best known URL for the entry/inscritos page
+        ranking_source_url: str  — best known URL for ranking page
+        candidate_links:    list — other URLs worth trying
+    """
+    source_url = edition.official_source_url or ''
+    entries_url = ''
+    ranking_url = ''
+    candidates = []
+
+    # 1. Use prefetched links (no extra DB query when prefetch_related('links') used)
+    try:
+        from apps.tournaments.models import TournamentLink
+        # edition.links.all() hits the prefetch cache — O(1), no N+1
+        all_links = list(edition.links.all())
+        for link in all_links:
+            lurl = (link.url or '').lower()
+            if link.link_type == TournamentLink.TYPE_REGISTRATION and not entries_url:
+                entries_url = link.url
+                candidates.append(link.url)
+            elif any(p in lurl for p in _ENTRY_LINK_PATTERNS) and link.url not in candidates:
+                candidates.append(link.url)
+            elif any(p in lurl for p in _RANKING_LINK_PATTERNS):
+                ranking_url = ranking_url or link.url
+    except Exception as exc:
+        logger.debug('TournamentLink lookup failed for edition %s: %s', edition.id, exc)
+
+    if entries_url:
+        return entries_url, ranking_url, candidates
+
+    # 2. FPT: try to derive inscrição URL from /Torneio/Info/ pattern
+    if 'fpt.com.br' in source_url:
+        m = re.search(r'/Torneio/Info/(.+)-(\d+)/?$', source_url)
+        if m:
+            slug, tid = m.group(1), m.group(2)
+            fpt_candidates = [
+                f'https://fpt.com.br/Inscricao/Torneio/{slug}-{tid}',
+                f'https://fpt.com.br/Torneio/Inscritos/{slug}-{tid}',
+                f'https://fpt.com.br/Inscricao/Lista/{slug}-{tid}',
+            ]
+            candidates.extend(fpt_candidates)
+            # First candidate is best guess
+            if not entries_url:
+                entries_url = fpt_candidates[0]
+
+    # 3. CBT: check raw_payload for redirect URLs that may have entry pages
+    if not entries_url and ('tenisintegrado' in source_url or 'cbt-tenis' in source_url.lower()):
+        payload = edition.raw_payload or {}
+        redirect = (
+            payload.get('redirect_tenisintegrado')
+            or payload.get('redirect_site_personal')
+            or ''
+        ).strip()
+        if redirect and redirect != source_url:
+            candidates.append(redirect)
+        # Extract tournament ID from external_id: cbt:12345
+        m = re.match(r'cbt:(\d+)', edition.external_id or '')
+        if m:
+            tid = m.group(1)
+            cbt_candidates = [
+                f'https://www.tenisintegrado.com.br/torneio/{tid}',
+                f'https://www.tenisintegrado.com.br/torneio/{tid}/inscricoes',
+            ]
+            candidates.extend(cbt_candidates)
+
+    # 4. COSAT: official_source_url is best we have
+    if not entries_url and 'tournamentsoftware' in source_url:
+        # Can't add /entry suffix without knowing tournament ID format
+        # Limitation noted — robots.txt also blocks /sport/
+        pass
+
+    # 5. Deduplicate candidates (preserve order)
+    seen = set()
+    unique_candidates = []
+    for c in candidates:
+        if c and c not in seen:
+            seen.add(c)
+            unique_candidates.append(c)
+
+    return entries_url or '', ranking_url or '', unique_candidates
+
+
 def _sync_priority(edition: TournamentEdition, dynamic_status: str,
                    last_synced_at) -> int:
-    """
-    0–30 priority score. Higher = sync sooner.
-    """
+    """0–30 priority score. Higher = sync sooner."""
     score = 0
     now = timezone.now()
 
-    # Status priority
     if dynamic_status in ('open', 'closing_soon'):
         score += 10
     elif dynamic_status in ('draws_published', 'in_progress'):
@@ -77,7 +173,6 @@ def _sync_priority(edition: TournamentEdition, dynamic_status: str,
     elif dynamic_status == 'closed':
         score += 2
 
-    # Never synced
     if last_synced_at is None:
         score += 8
     else:
@@ -89,7 +184,6 @@ def _sync_priority(edition: TournamentEdition, dynamic_status: str,
         elif hours_since > 6:
             score += 1
 
-    # Entry close proximity
     if edition.entry_close_at:
         days_to_close = (edition.entry_close_at - now).days
         if 0 <= days_to_close <= 3:
@@ -97,26 +191,9 @@ def _sync_priority(edition: TournamentEdition, dynamic_status: str,
         elif 0 <= days_to_close <= 7:
             score += 4
         elif -7 <= days_to_close < 0:
-            score += 2  # recently closed
+            score += 2
 
     return min(score, 30)
-
-
-class SyncTargetSerializer(serializers.Serializer):
-    edition_id          = serializers.IntegerField()
-    tournament_name     = serializers.CharField()
-    circuit             = serializers.CharField()
-    source              = serializers.CharField()
-    source_url          = serializers.CharField()
-    status              = serializers.CharField()
-    dynamic_status      = serializers.CharField()
-    start_date          = serializers.DateField(allow_null=True)
-    entry_close_at      = serializers.DateTimeField(allow_null=True)
-    last_synced_at      = serializers.DateTimeField(allow_null=True)
-    needs_sync          = serializers.BooleanField()
-    sync_priority       = serializers.IntegerField()
-    parser_available    = serializers.BooleanField()
-    parser_limitation   = serializers.CharField()
 
 
 @api_view(['GET'])
@@ -126,12 +203,17 @@ def federation_sync_targets(request):
     GET /api/integrations/federation-sync-targets/
 
     Returns tournament editions that need federation entry sync, ordered by priority.
-    Excludes: finished, canceled, and editions without official_source_url.
+    Excludes: finished, canceled, editions without official_source_url.
 
     Filters:
       ?source=cosat|cbt|fpt|...
       ?needs_sync=true
-      ?limit=50 (default 100)
+      ?limit=50 (default 100, max 500)
+
+    Response includes computed fields:
+      entries_source_url   — best URL for the entry/inscritos page
+      ranking_source_url   — best URL for rankings (when derivable)
+      candidate_entry_links — other URLs worth trying
     """
     if not _check_import_auth(request):
         return Response(
@@ -141,20 +223,23 @@ def federation_sync_targets(request):
 
     source_filter = request.query_params.get('source', '').strip().lower()
     needs_sync_only = request.query_params.get('needs_sync', '').lower() == 'true'
-    limit = min(int(request.query_params.get('limit', 100)), 500)
+    try:
+        limit = int(request.query_params.get('limit', 100))
+    except (ValueError, TypeError):
+        limit = 100
+    limit = max(1, min(limit, 500))
 
     now = timezone.now()
     stale_threshold = now - timedelta(hours=12)
 
-    # Base queryset: has source URL, not finished/canceled
     qs = (
         TournamentEdition.objects
         .select_related('tournament')
+        .prefetch_related('links')
         .filter(official_source_url__gt='')
         .exclude(status__in=[TournamentEdition.STATUS_FINISHED, TournamentEdition.STATUS_CANCELED])
     )
 
-    # Get last_synced_at per edition from FederationEntry
     synced_map = dict(
         FederationEntry.objects
         .filter(edition__in=qs)
@@ -168,20 +253,27 @@ def federation_sync_targets(request):
         source = _edition_source(edition)
         dynamic_status = edition.compute_dynamic_status()
 
-        # Skip non-syncable statuses
         if dynamic_status not in _SYNC_STATUSES and edition.status not in _SYNC_STATUSES:
             continue
 
         last_synced = synced_map.get(edition.id)
         needs_sync = (last_synced is None) or (last_synced < stale_threshold)
 
-        # Source filter
         if source_filter and source != source_filter:
             continue
         if needs_sync_only and not needs_sync:
             continue
 
         priority = _sync_priority(edition, dynamic_status, last_synced)
+        entries_url, ranking_url, candidate_links = derive_entries_source_url(edition)
+
+        # preferred_entries_url: best URL for n8n to fetch entry data
+        # Order: registration link > derived entries URL > first candidate > source_url
+        preferred_entries_url = (
+            entries_url
+            or (candidate_links[0] if candidate_links else '')
+            or edition.official_source_url
+        )
 
         results.append({
             'edition_id': edition.id,
@@ -189,6 +281,10 @@ def federation_sync_targets(request):
             'circuit': edition.tournament.circuit or '',
             'source': source,
             'source_url': edition.official_source_url,
+            'entries_source_url': entries_url,
+            'preferred_entries_url': preferred_entries_url,
+            'ranking_source_url': ranking_url,
+            'candidate_entry_links': candidate_links[:5],
             'status': edition.status,
             'dynamic_status': dynamic_status,
             'start_date': edition.start_date,
@@ -200,7 +296,6 @@ def federation_sync_targets(request):
             'parser_limitation': get_limitation(source),
         })
 
-    # Sort by priority desc, then by entry_close_at asc (soonest first)
     results.sort(
         key=lambda r: (-r['sync_priority'], r['entry_close_at'] or now.replace(year=2099)),
     )
@@ -219,24 +314,9 @@ def parse_entries(request):
     POST /api/integrations/parse-entries/
 
     Parse raw HTML/text/CSV into entry list without saving to DB.
-    Use this to preview what would be imported before calling /api/registrations/import/.
 
     Payload:
-      {
-        "source": "cosat|cbt|fpt|manual",
-        "html_or_text": "<html>...</html> or CSV text or plain text",
-        "source_url": "https://..."  (optional, attached to each entry)
-      }
-
-    Returns:
-      {
-        "entries": [...],        # ready for /api/registrations/import/
-        "parser_warning": bool,
-        "warning_message": str,
-        "confidence": str,
-        "source": str,
-        "count": int
-      }
+      { "source": str, "html_or_text": str, "source_url": str }
     """
     if not _check_import_auth(request):
         return Response(
@@ -253,7 +333,10 @@ def parse_entries(request):
         return Response({
             'entries': [],
             'parser_warning': True,
-            'warning_message': f'Source "{source}" não tem parser registrado. Fontes: {", ".join(sorted(["cosat","cbt","fpt","fct","manual"]))}',
+            'warning_message': (
+                f'Source "{source}" não tem parser. '
+                f'Fontes: {", ".join(sorted(["cosat","cbt","fpt","fct","manual"]))}'
+            ),
             'confidence': 'low',
             'source': source,
             'count': 0,
@@ -262,7 +345,7 @@ def parse_entries(request):
     try:
         result = parser(html_or_text, source_url=source_url)
     except Exception as exc:
-        logger.warning('Parser failed for source=%s: %s', source, exc)
+        logger.warning('Parser failed source=%s: %s', source, exc)
         result = {
             'entries': [],
             'parser_warning': True,

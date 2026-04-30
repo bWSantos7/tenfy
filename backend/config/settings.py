@@ -330,6 +330,19 @@ FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
 # Never expose this token in mobile/frontend code.
 IMPORT_API_TOKEN = config('IMPORT_API_TOKEN', default='')
 
+# ── COSAT MongoDB (external crawler service) ─────────────────────────────────
+# The COSAT scraper runs as a separate Railway service (bWSantos7/crawler.git)
+# and writes tournament/player/ranking data to a dedicated MongoDB.
+# This backend reads from that MongoDB and normalizes into PostgreSQL.
+# Configure via Railway Variables — never hardcode credentials.
+COSAT_MONGO_ENABLED = config('COSAT_MONGO_ENABLED', default=False, cast=bool)
+COSAT_MONGO_URL = config('COSAT_MONGO_URL', default='')
+COSAT_MONGO_DB = config('COSAT_MONGO_DB', default='cosat_db')
+COSAT_MONGO_COLLECTION_TOURNAMENTS = config('COSAT_MONGO_COLLECTION_TOURNAMENTS', default='tournaments')
+COSAT_MONGO_COLLECTION_ENTRIES = config('COSAT_MONGO_COLLECTION_ENTRIES', default='players')
+COSAT_MONGO_COLLECTION_RANKINGS = config('COSAT_MONGO_COLLECTION_RANKINGS', default='rankingentries')
+COSAT_MONGO_CONNECT_TIMEOUT_MS = config('COSAT_MONGO_CONNECT_TIMEOUT_MS', default=5000, cast=int)
+
 # Web Push (VAPID) — generate keys with: python -c "from py_vapid import Vapid; v=Vapid(); v.generate_keys(); print(v.private_key, v.public_key)"
 VAPID_PRIVATE_KEY = config('VAPID_PRIVATE_KEY', default='')
 VAPID_PUBLIC_KEY = config('VAPID_PUBLIC_KEY', default='')

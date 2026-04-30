@@ -55,3 +55,22 @@ logs/*.log
 *.pyc
 .claude
 .tools/
+
+# Local exports / temp files
+cbt-targets.json
+*-targets.json
+parse-result.json
+sync-targets.json
+*.tmp
+.tmp/
+temp/
+tmp/
+
+# n8n exports
+Sync*.json
+*Tennis Hub*.json
+*n8n*.json
+
+# Claude / local tools
+.claude/
+.tools/

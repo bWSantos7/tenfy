@@ -44,6 +44,7 @@ _SYNC_STATUSES = {
 _CIRCUIT_TO_SOURCE = {
     'CBT':   'cbt',
     'FPT':   'fpt',
+    'FBT':   'fbt',
     'FCT':   'fct',
     'FMT':   'fmt',
     'COSAT': 'cosat',
@@ -55,6 +56,7 @@ _CIRCUIT_TO_SOURCE = {
 _CONNECTOR_TO_SOURCE = {
     'cbt_':    'cbt',
     'fpt_':    'fpt',
+    'fbt_':    'fbt',
     'fct_':    'fct',
     'fmt_':    'fmt',
     'cosat_':  'cosat',
@@ -62,6 +64,7 @@ _CONNECTOR_TO_SOURCE = {
     'utr_':    'utr',
     'cbt':     'cbt',
     'fpt':     'fpt',
+    'fbt':     'fbt',
     'fct':     'fct',
     'cosat':   'cosat',
 }
@@ -69,6 +72,7 @@ _CONNECTOR_TO_SOURCE = {
 # URL domain → source (tenisintegrado handled separately: could be cbt/fct/fmt)
 _URL_DOMAIN_TO_SOURCE = [
     ('fpt.com.br',                   'fpt'),
+    ('fbt.com.br',                   'fbt'),
     ('cbt-tenis.com.br',             'cbt'),
     ('tennistool.tenisintegrado.com', None),   # need connector_key to distinguish
     ('tenisintegrado.com.br',        None),    # need connector_key to distinguish
@@ -469,7 +473,7 @@ def parse_entries(request):
             'parser_warning': True,
             'warning_message': (
                 f'Source "{source}" não tem parser. '
-                f'Fontes: {", ".join(sorted(["cosat","cbt","fpt","fct","manual"]))}'
+                f'Fontes: {", ".join(sorted(["cosat","cbt","fbt","fpt","fct","manual"]))}'
             ),
             'confidence': 'low',
             'source_requested': source_requested,

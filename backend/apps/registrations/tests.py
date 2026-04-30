@@ -375,7 +375,7 @@ class ParserTestCase(TestCase):
 
     def test_get_parser_known_sources(self):
         from apps.registrations.parsers import get_parser
-        for src in ('cosat', 'cbt', 'fpt', 'fct', 'manual'):
+        for src in ('cosat', 'cbt', 'fbt', 'fpt', 'fct', 'manual'):
             self.assertIsNotNone(get_parser(src), f'No parser for {src}')
 
     def test_get_parser_unknown_source_returns_none(self):
@@ -1139,6 +1139,10 @@ class SourceInferenceTestCase(TestCase):
         from apps.registrations.integration_views import infer_source_from_url
         self.assertEqual(infer_source_from_url('https://fpt.com.br/Inscricao/InscricaoTorneio/Tenis/Test-123'), 'fpt')
 
+    def test_fbt_url_returns_fbt(self):
+        from apps.registrations.integration_views import infer_source_from_url
+        self.assertEqual(infer_source_from_url('https://fbt.com.br/Torneio/Info/Test-123'), 'fbt')
+
     def test_cbt_tenis_url_returns_cbt(self):
         from apps.registrations.integration_views import infer_source_from_url
         self.assertEqual(infer_source_from_url('https://cbt-tenis.com.br/torneio/123'), 'cbt')
@@ -1181,6 +1185,27 @@ class SourceInferenceTestCase(TestCase):
         )
         result = infer_source_from_edition(edition)
         self.assertEqual(result, 'fpt', f'Expected fpt, got {result}')
+
+    def test_edition_with_fbt_circuit_returns_fbt(self):
+        from apps.registrations.integration_views import infer_source_from_edition
+        from apps.sources.models import Organization
+        from apps.tournaments.models import Tournament, TournamentEdition
+        org, _ = Organization.objects.get_or_create(
+            short_name='INFFBT', defaults={'name': 'InfFBT', 'type': 'federation'}
+        )
+        t, _ = Tournament.objects.get_or_create(
+            canonical_slug='inf-fbt-test', defaults={
+                'canonical_name': 'Inf FBT', 'circuit': 'FBT',
+                'modality': 'tennis', 'organization': org,
+            }
+        )
+        edition = TournamentEdition.objects.create(
+            tournament=t, title='FBT Infer', external_id='inf:fbt:1',
+            season_year=2026, status='open',
+            official_source_url='https://fbt.com.br/Torneio/Info/TestInfer-999',
+        )
+        result = infer_source_from_edition(edition)
+        self.assertEqual(result, 'fbt', f'Expected fbt, got {result}')
 
     def test_edition_with_tenisintegrado_url_returns_cbt_default(self):
         from apps.registrations.integration_views import infer_source_from_edition
@@ -1256,6 +1281,30 @@ class ParseEntriesSourceDetectionTestCase(TestCase):
         self.assertEqual(res.data['source_requested'], 'manual')
         self.assertEqual(res.data['source_detected'], 'fpt')
         self.assertEqual(res.data['parser_used'], 'fpt')
+
+    def test_manual_plus_fbt_url_uses_fbt_parser(self):
+        res = self.client.post('/api/integrations/parse-entries/', {
+            'source': 'manual',
+            'html_or_text': '',
+            'source_url': 'https://fbt.com.br/Inscricao/InscricaoTorneio/Tenis/Test-999',
+        }, format='json')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data['source_requested'], 'manual')
+        self.assertEqual(res.data['source_detected'], 'fbt')
+        self.assertEqual(res.data['parser_used'], 'fbt')
+
+    def test_explicit_fbt_source_uses_fbt_parser(self):
+        res = self.client.post('/api/integrations/parse-entries/', {
+            'source': 'fbt',
+            'html_or_text': """nome;categoria;ranking\nAna Bahia;Sub-14 F;2""",
+            'source_url': 'https://fbt.com.br/Test',
+        }, format='json')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data['source_requested'], 'fbt')
+        self.assertEqual(res.data['source_detected'], 'fbt')
+        self.assertEqual(res.data['parser_used'], 'fbt')
+        self.assertEqual(res.data['entries'][0]['source_url'], 'https://fbt.com.br/Test')
+        self.assertEqual(res.data['entries'][0]['ranking_source'], 'FBT')
 
     def test_manual_plus_tenisintegrado_url_uses_cbt_parser(self):
         res = self.client.post('/api/integrations/parse-entries/', {

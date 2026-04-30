@@ -144,6 +144,7 @@ class FederationEntry(TimestampedModel):
 
     SOURCE_CBT = 'cbt'
     SOURCE_FPT = 'fpt'
+    SOURCE_FBT = 'fbt'
     SOURCE_FCT = 'fct'
     SOURCE_COSAT = 'cosat'
     SOURCE_MANUAL = 'manual'

@@ -202,6 +202,7 @@ FED_STATUS_LABELS = {
 
 SOURCE_LABELS = {
     'cbt':    'CBT',
+    'fbt':    'FBT',
     'fpt':    'FPT',
     'fct':    'FCT',
     'cosat':  'COSAT',

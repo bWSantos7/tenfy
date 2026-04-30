@@ -676,6 +676,51 @@ def parse_fpt_entries(html_or_text: str, source_url: str = '') -> dict:
     }
 
 
+def parse_fbt_entries(html_or_text: str, source_url: str = '') -> dict:
+    """
+    FBT entry parser.
+
+    Uses the same generic table/CSV extraction strategy as FPT:
+    admin/n8n provides HTML/text with name/category columns; no auto-fetch.
+    """
+    source = 'fbt'
+    ranking_source = 'FBT'
+
+    if not (html_or_text or '').strip():
+        return {
+            'entries': [],
+            'parser_warning': True,
+            'warning_message': (
+                'FBT: sem dados de entrada. '
+                'Cole HTML/texto da página de inscritos FBT como input.'
+            ),
+            'confidence': 'low',
+            'source': source,
+        }
+
+    entries = _parse_generic(html_or_text, source, source_url, ranking_source)
+
+    if not entries:
+        return {
+            'entries': [],
+            'parser_warning': True,
+            'warning_message': (
+                'FBT: nenhum inscrito extraído. '
+                'Use importação manual CSV ou cole HTML da página de inscritos.'
+            ),
+            'confidence': 'low',
+            'source': source,
+        }
+
+    return {
+        'entries': entries,
+        'parser_warning': False,
+        'warning_message': '',
+        'confidence': 'medium',
+        'source': source,
+    }
+
+
 def parse_fct_entries(html_or_text: str, source_url: str = '') -> dict:
     """FCT uses same TenisIntegrado platform as CBT — same limitations apply."""
     result = parse_cbt_entries(html_or_text, source_url)
@@ -714,6 +759,7 @@ def parse_manual_entries(html_or_text: str, source_url: str = '',
 PARSERS = {
     'cosat':  parse_cosat_entries,
     'cbt':    parse_cbt_entries,
+    'fbt':    parse_fbt_entries,
     'fpt':    parse_fpt_entries,
     'fct':    parse_fct_entries,
     'manual': parse_manual_entries,
@@ -731,6 +777,10 @@ PARSER_LIMITATIONS = {
     'fpt': (
         '/Inscricao/Lista/ retorna 404. '
         'Sem endpoint público de inscritos. Import manual.'
+    ),
+    'fbt': (
+        'Sem endpoint público de inscritos conhecido. '
+        'Import manual ou n8n com HTML/CSV colado.'
     ),
     'fct': (
         'FCT usa TenisIntegrado — mesmas limitações do CBT. '

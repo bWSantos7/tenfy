@@ -591,16 +591,31 @@ class FederationEntryViewSet(viewsets.GenericViewSet):
                 edition_id, source, created_count, updated_count, len(errors), dry_run,
             )
 
+        synthetic_count = sum(
+            1 for w in warnings
+            if isinstance(w, dict) and 'determinístico' in w.get('warning', '')
+        )
+        quality_gate = {
+            'can_save': len(errors) == 0 and (created_count + updated_count) > 0,
+            'reasons': [e.get('error', str(e)) for e in errors[:5]] if errors else [],
+            'entries_count': len(entries_data),
+            'synthetic_ids_count': synthetic_count,
+            'errors_count': len(errors),
+            'warnings_count': len(warnings),
+        }
+
         result = {
             'dry_run': dry_run,
             'edition_id': edition.id,
             'edition_title': edition.title,
             'source': source,
+            'entries_count': len(entries_data),
             'created': created_count,
             'updated': updated_count,
             'skipped': skipped_count,
             'errors': errors,
             'warnings': warnings,
+            'quality_gate': quality_gate,
             'detail': (
                 f'[DRY RUN] Prévia: {created_count} seriam criadas, {updated_count} atualizadas, {len(errors)} rejeitadas.'
                 if dry_run
@@ -768,16 +783,31 @@ def _run_import(request):
             edition_id, source, created_count, updated_count, len(errors),
         )
 
+    synthetic_count = sum(
+        1 for w in warnings
+        if isinstance(w, dict) and 'determinístico' in w.get('warning', '')
+    )
+    quality_gate = {
+        'can_save': len(errors) == 0 and (created_count + updated_count) > 0,
+        'reasons': [e.get('error', str(e)) for e in errors[:5]] if errors else [],
+        'entries_count': len(entries_data),
+        'synthetic_ids_count': synthetic_count,
+        'errors_count': len(errors),
+        'warnings_count': len(warnings),
+    }
+
     result = {
         'dry_run': dry_run,
         'edition_id': edition.id,
         'edition_title': edition.title,
         'source': source,
+        'entries_count': len(entries_data),
         'created': created_count,
         'updated': updated_count,
         'skipped': skipped_count,
         'errors': errors,
         'warnings': warnings,
+        'quality_gate': quality_gate,
         'detail': (
             f'[DRY RUN] Prévia: {created_count} seriam criadas, {updated_count} atualizadas, {len(errors)} rejeitadas.'
             if dry_run

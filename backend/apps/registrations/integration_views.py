@@ -354,5 +354,46 @@ def parse_entries(request):
             'source': source,
         }
 
-    result['count'] = len(result.get('entries', []))
+    entries = result.get('entries', [])
+    count = len(entries)
+    parser_warning = result.get('parser_warning', False)
+    confidence = result.get('confidence', 'low')
+    warning_message = result.get('warning_message', '')
+
+    # Count entries with synthetic (deterministic) external_id — colons indicate auto-generated
+    # Format: "source:name-slug:category-slug" — distinct from real federation IDs
+    synthetic_count = sum(
+        1 for e in entries
+        if (e.get('player_external_id') or '').startswith(f'{source}:')
+    )
+
+    # Normalize warnings: always a list for n8n consistency
+    warnings_list = [warning_message] if warning_message else []
+
+    # Quality gate — n8n uses can_save to decide whether to proceed to import
+    reasons_no_save = []
+    if count == 0:
+        reasons_no_save.append('entries vazio — nenhum inscrito extraído')
+    if parser_warning:
+        reasons_no_save.append('parser_warning ativo — fonte sem lista nominal acessível')
+    if confidence == 'low':
+        reasons_no_save.append('confidence=low — dados insuficientes para importação automática')
+    if not html_or_text.strip() if html_or_text else True:
+        reasons_no_save.append('html_or_text vazio — nenhum conteúdo para parsear')
+
+    quality_gate = {
+        'can_save': len(reasons_no_save) == 0,
+        'reasons': reasons_no_save,
+        'entries_count': count,
+        'synthetic_ids_count': synthetic_count,
+        'confidence': confidence,
+        'parser_warning': parser_warning,
+    }
+
+    result.update({
+        'count': count,
+        'source_url': source_url,       # echo back for n8n traceability
+        'warnings': warnings_list,       # normalized as list (warning_message kept for compat)
+        'quality_gate': quality_gate,
+    })
     return Response(result)

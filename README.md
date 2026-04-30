@@ -1,330 +1,605 @@
 # Tennis Hub
 
-A player-centric tournament aggregator for tennis in Brazil. Consolidates calendars, registration rules, and eligibility information from multiple official sources into a single mobile app.
+**Tennis Hub** é uma plataforma centrada no jogador para agregar torneios de tênis no Brasil, consolidando calendário, regras de inscrição, categorias, elegibilidade, listas de inscritos, rankings e alertas em um único ecossistema.
+
+O projeto é composto por backend Django, frontend web, aplicativo mobile Expo/React Native, PostgreSQL, Redis/Celery, integrações de pagamento, notificações, pipelines de ingestão e automações externas via n8n.
 
 ---
 
-## Table of Contents
+## Sumário
 
-- [Overview](#overview)
-- [Architecture](#architecture)
-- [Tech Stack](#tech-stack)
-- [Project Structure](#project-structure)
-- [Local Development](#local-development)
-- [Environment Variables](#environment-variables)
-- [Running Tests](#running-tests)
-- [Production Deployment](#production-deployment)
-- [Mobile Builds](#mobile-builds)
-
----
-
-## Overview
-
-Tennis Hub solves the fragmentation problem in the Brazilian tennis tournament ecosystem. Players currently need to visit multiple federation websites, read PDF regulations, and manually track registration deadlines. This platform aggregates all of that into one place.
-
-**Core features:**
-
-- **Tournament discovery** — unified calendar from multiple official sources (national and state federations, international circuits)
-- **Eligibility engine** — tells players exactly which categories they can enter based on age, class, and circuit rules
-- **Watchlist & alerts** — save tournaments and receive deadline notifications via push and in-app
-- **Subscription plans** — Free / Pro / Elite tiers with feature gating
-- **Admin panel** — data curation, source management, and ingestion monitoring
+- [Visão geral](#visão-geral)
+- [Status atual](#status-atual)
+- [Arquitetura](#arquitetura)
+- [Stack técnica](#stack-técnica)
+- [Estrutura do projeto](#estrutura-do-projeto)
+- [Integrações de dados](#integrações-de-dados)
+- [Automações n8n](#automações-n8n)
+- [Desenvolvimento local](#desenvolvimento-local)
+- [Variáveis de ambiente](#variáveis-de-ambiente)
+- [Testes](#testes)
+- [Deploy em produção](#deploy-em-produção)
+- [Build mobile](#build-mobile)
+- [Segurança](#segurança)
+- [Contribuição e fluxo de trabalho](#contribuição-e-fluxo-de-trabalho)
+- [Licença](#licença)
 
 ---
 
-## Architecture
+## Visão geral
 
-```
-┌─────────────────────────────────────────────────────┐
-│                   Mobile App (Expo)                 │
-│           React Native · TypeScript · EAS           │
-└──────────────────────┬──────────────────────────────┘
-                       │ HTTPS / REST
-┌──────────────────────▼──────────────────────────────┐
-│                  Django REST API                    │
-│         Python · DRF · Celery · PostgreSQL          │
-│                                                     │
-│  ┌────────────┐  ┌──────────┐  ┌────────────────┐  │
-│  │ Ingestion  │  │ Billing  │  │  Eligibility   │  │
-│  │  Pipeline  │  │          │  │    Engine      │  │
-│  └────────────┘  └──────────┘  └────────────────┘  │
-└──────────────────────┬──────────────────────────────┘
-                       │
-        ┌──────────────┼──────────────┐
-        ▼              ▼              ▼
-   PostgreSQL        Redis       Cloudinary
-```
+O Tennis Hub resolve a fragmentação do ecossistema de torneios de tênis. Hoje, jogadores, pais e treinadores precisam consultar múltiplos sites de confederações, federações estaduais, plataformas de inscrição e regulamentos em PDF para descobrir:
 
-**Ingestion pipeline:**
+- quais torneios estão abertos;
+- quais categorias existem;
+- quais categorias são compatíveis com o perfil do jogador;
+- quais prazos estão próximos;
+- quais atletas estão inscritos;
+- qual o ranking/posição dos inscritos quando a fonte fornece esse dado;
+- qual é o link oficial de inscrição;
+- quais dados foram alterados desde a última sincronização.
 
-```
-Scheduler (Celery Beat)
-  → fetch_source()       — HTTP request to official source
-  → parse_normalize()    — extract structured tournament data
-  → dedup_fingerprint()  — cross-source deduplication
-  → upsert_edition()     — persist or update
-  → diff_detect()        — detect field changes
-  → dispatch_alerts()    — notify affected watchers
-```
+A proposta do app é ser uma camada de inteligência e organização, sem substituir a fonte oficial. Sempre que possível, o sistema mantém `source_url`, `source_name`, `synced_at`, `confidence` e histórico de alterações.
 
 ---
 
-## Tech Stack
+## Status atual
+
+### Funcionalidades principais
+
+- Cadastro, login, recuperação de senha e verificação de e-mail.
+- Perfil de jogador e preferências.
+- Catálogo de torneios.
+- Página de torneio com fonte oficial, datas, categorias, status e lista de inscritos.
+- Watchlist e alertas.
+- Painel administrativo.
+- Integrações com fontes externas.
+- Importação de inscrições por fonte.
+- Pipeline de qualidade com `dry_run`, `quality_gate`, warnings e errors.
+- App mobile em Expo/React Native.
+- Backend Django REST API em produção.
+- Deploy no Railway.
+
+### Fontes de inscrições
+
+| Fonte | Status |
+|---|---|
+| CBT / Tênis Integrado | Automação validada. Coleta inscritos, categorias, ranking/posição quando disponível e status financeiro. |
+| FBT | Suporte de backend/parser adicionado. Deve ser validado em fluxo seguro antes de importação real. |
+| FPT | Torneios podem ser catalogados, mas listas nominais podem exigir login ou não estar disponíveis publicamente. |
+| COSAT/COSANT | Consumo planejado via MongoDB exclusivo do scraper COSAT, sincronizando para PostgreSQL oficial. |
+| Manual/Admin | Permitido como fallback operacional, com rastreabilidade. |
+
+---
+
+## Arquitetura
+
+```text
+┌──────────────────────────────────────────────────────────────┐
+│                    Aplicativo Mobile                         │
+│              Expo · React Native · TypeScript                │
+└──────────────────────────────┬───────────────────────────────┘
+                               │ HTTPS / REST
+┌──────────────────────────────▼───────────────────────────────┐
+│                     Backend Django REST                       │
+│       Django · DRF · Celery · PostgreSQL · Redis              │
+│                                                              │
+│  ┌─────────────────┐ ┌────────────────┐ ┌─────────────────┐ │
+│  │ Ingestão/Dados  │ │ Assinaturas    │ │ Elegibilidade   │ │
+│  │ Fontes externas │ │ Asaas          │ │ Categorias      │ │
+│  └─────────────────┘ └────────────────┘ └─────────────────┘ │
+└──────────────────────────────┬───────────────────────────────┘
+                               │
+          ┌────────────────────┼────────────────────┐
+          ▼                    ▼                    ▼
+     PostgreSQL              Redis              Cloudinary
+  Banco oficial        Fila/cache Celery       Mídia/avatars
+
+          ┌────────────────────┐
+          │ n8n / Workflows    │
+          │ CBT, FBT, fontes   │
+          └────────────────────┘
+
+          ┌────────────────────┐
+          │ Mongo COSAT        │
+          │ Somente scraper    │
+          └────────────────────┘
+```
+
+### Princípios
+
+- PostgreSQL é o banco oficial do produto.
+- MongoDB COSAT é fonte intermediária exclusiva do scraper COSAT.
+- O backend principal não deve fazer scraping COSAT diretamente.
+- Frontend/mobile nunca devem conter segredos ou regras críticas.
+- Qualquer importação externa deve passar por validação, `dry_run` e `quality_gate`.
+- Dados externos devem preservar origem e confiança.
+
+---
+
+## Stack técnica
 
 ### Backend
-| Layer | Technology |
+
+| Camada | Tecnologia |
 |---|---|
 | Framework | Django + Django REST Framework |
-| Database | PostgreSQL |
-| Cache / Queue | Redis |
-| Task runner | Celery + Celery Beat |
-| Auth | JWT (SimpleJWT) with refresh rotation and blacklist |
-| Email | Resend API |
-| Storage | Cloudinary |
-| Payments | Asaas |
-| Error tracking | Sentry |
-| Web server | Gunicorn (gthread workers) |
+| Banco oficial | PostgreSQL |
+| Cache/fila | Redis |
+| Jobs | Celery + Celery Beat |
+| Autenticação | JWT / SimpleJWT |
+| E-mail | Resend |
+| Mídia | Cloudinary |
+| Pagamentos | Asaas |
+| Observabilidade | Sentry |
+| Servidor | Gunicorn |
 
 ### Mobile
-| Layer | Technology |
-|---|---|
-| Framework | React Native (Expo) |
-| Language | TypeScript |
-| Navigation | React Navigation v6 |
-| Build | EAS Build |
-| Token storage | expo-secure-store (Keychain / EncryptedSharedPreferences) |
 
-### Infrastructure
-| Service | Provider |
+| Camada | Tecnologia |
 |---|---|
-| Hosting | Railway |
-| CI/CD | GitHub → Railway (auto-deploy on push to master) |
-| Mobile builds | Expo EAS |
+| Framework | React Native / Expo |
+| Linguagem | TypeScript |
+| Navegação | React Navigation |
+| Storage seguro | expo-secure-store |
+| Build | EAS Build |
+
+### Infraestrutura
+
+| Serviço | Uso |
+|---|---|
+| Railway | Deploy backend, frontend, worker, Redis, Postgres e serviços auxiliares |
+| PostgreSQL | Banco oficial |
+| Redis | Broker/cache |
+| n8n | Workflows de sincronização |
+| MongoDB | Banco intermediário exclusivo do scraper COSAT |
+| GitHub | Versionamento |
+| Resend | E-mails transacionais |
+| Cloudinary | Imagens |
+| Sentry | Erros em produção |
 
 ---
 
-## Project Structure
+## Estrutura do projeto
 
-```
+```text
 tennis_hub/
-├── backend/                    # Django API
+├── backend/
 │   ├── apps/
-│   │   ├── accounts/           # Auth, OTP, user management, LGPD
-│   │   ├── alerts/             # Push/in-app notification system
-│   │   ├── admin_panel/        # Internal admin API
-│   │   ├── audit/              # Audit logging
-│   │   ├── billing/            # Subscriptions, payments, webhooks
-│   │   ├── eligibility/        # Category compatibility engine
-│   │   ├── ingestion/          # Data pipeline + connectors
-│   │   │   └── connectors/     # Per-source scrapers/APIs
-│   │   ├── marketplace/        # Merchant offers (schema only)
-│   │   ├── players/            # Player profiles + category taxonomy
-│   │   ├── registrations/      # Tournament registration tracking
-│   │   ├── sources/            # Data source registry
-│   │   ├── tournaments/        # Tournament and Edition models
-│   │   └── watchlist/          # Watchlist + results
+│   │   ├── accounts/        # usuários, autenticação, OTP, LGPD
+│   │   ├── alerts/          # alertas, notificações e preferências
+│   │   ├── admin_panel/     # APIs do painel administrativo
+│   │   ├── audit/           # logs e auditoria
+│   │   ├── billing/         # planos, assinaturas, Asaas e webhooks
+│   │   ├── eligibility/     # motor de compatibilidade/elegibilidade
+│   │   ├── ingestion/       # conectores e pipeline de ingestão
+│   │   ├── marketplace/     # base futura de marketplace
+│   │   ├── players/         # perfis de jogadores
+│   │   ├── registrations/   # listas de inscritos e integrações de federações
+│   │   ├── sources/         # cadastro de fontes
+│   │   ├── tournaments/     # torneios e edições
+│   │   └── watchlist/       # favoritos/watchlist
 │   ├── config/
-│   │   ├── settings.py         # All settings (environment-driven)
-│   │   ├── urls.py
-│   │   ├── celery.py
-│   │   └── email_backend.py    # Resend integration
-│   ├── nixpacks.toml           # Build + startup config
-│   ├── railway.json            # Backend service config
-│   ├── railway.worker.json     # Worker+beat service config
-│   └── requirements.txt
+│   ├── requirements.txt
+│   ├── railway.json
+│   └── railway.worker.json
 │
-├── mobile/                     # Expo React Native app
+├── frontend/
+│   └── ...
+│
+├── mobile/
 │   ├── src/
-│   │   ├── components/         # Reusable UI components
-│   │   ├── contexts/           # Auth, Theme contexts
-│   │   ├── hooks/              # Custom hooks
-│   │   ├── navigation/         # Stack + Tab navigators
-│   │   ├── screens/
-│   │   │   ├── app/            # Authenticated screens
-│   │   │   └── auth/           # Login, Register, ForgotPassword
-│   │   ├── services/           # API client + feature services
-│   │   ├── types/              # TypeScript interfaces
-│   │   └── utils/              # Formatters, helpers
-│   ├── app.json                # Expo config
-│   └── eas.json                # EAS build profiles
+│   ├── app.json
+│   └── eas.json
 │
+├── docs/
+├── CLAUDE.md
+├── AI_CONTEXT.md
 └── README.md
 ```
 
 ---
 
-## Local Development
+## Integrações de dados
 
-### Prerequisites
+### CBT / Tênis Integrado
+
+A CBT/Tênis Integrado é a integração mais madura. O fluxo validado coleta:
+
+- nome do atleta;
+- categoria;
+- identificador externo do atleta;
+- ranking/posição quando disponível;
+- status financeiro/pagamento quando disponível;
+- fonte;
+- confiança;
+- timestamp de sincronização.
+
+Fluxo esperado:
+
+```text
+n8n
+→ federation-sync-targets?source=cbt
+→ parse-entries
+→ quality_gate
+→ import dry_run=true
+→ quality_gate
+→ import dry_run=false
+→ PostgreSQL
+```
+
+### FBT
+
+O backend reconhece `source=fbt` e possui parser dedicado. O fluxo deve ser testado inicialmente em modo seguro:
+
+```text
+Manual Trigger
+→ source=fbt
+→ parse
+→ dry_run=true
+→ sem salvar dados reais
+```
+
+A importação real deve ser ativada somente após validação de entries reais, `errors=[]` e `quality_gate.can_save=true`.
+
+### FPT
+
+A fonte FPT pode exigir login para algumas listas nominais de inscritos. Quando não houver lista pública acessível, o sistema deve registrar limitação/pendência e não inventar dados.
+
+### COSAT/COSANT
+
+O scraper COSAT roda separadamente e grava dados em um MongoDB dedicado. O Tennis Hub deve consumir esse Mongo como fonte intermediária e sincronizar os dados normalizados para o PostgreSQL oficial.
+
+Diretriz:
+
+```text
+scraper COSAT
+→ Mongo COSAT
+→ backend Django sync_cosat_from_mongo
+→ PostgreSQL
+→ app/API
+```
+
+---
+
+## Automações n8n
+
+### Workflow CBT
+
+Workflow recomendado:
+
+```text
+Sync CBT Inscritos
+```
+
+Configuração esperada:
+
+```text
+source=cbt
+needs_sync=true
+limit=50
+Cron: a cada 1 hora
+SALVAR dry_run=false: ativo somente após validação
+Quality gates: obrigatórios
+```
+
+O workflow deve processar somente CBT. FPT, COSAT, FBT ou fontes genéricas devem ficar em workflows separados.
+
+### Workflow FBT
+
+Workflow recomendado:
+
+```text
+Sync FBT Inscritos
+```
+
+Configuração inicial:
+
+```text
+source=fbt
+needs_sync=true
+limit=50
+Cron: desativado inicialmente
+SALVAR dry_run=false: desativado inicialmente
+Execução: Manual Trigger
+```
+
+### Boas práticas n8n
+
+- Nunca inserir token hardcoded em nodes.
+- Usar variável global `TENNIS_IMPORT_TOKEN`.
+- Enviar token somente no header `X-Import-Token`.
+- Nunca salvar se `parser_warning=true`.
+- Nunca salvar se `quality_gate.can_save=false`.
+- Nunca salvar se `entries_count=0`.
+- Nunca salvar se `errors.length > 0`.
+- Manter FBT/FPT/COSAT separados até cada fonte estar validada.
+
+---
+
+## Desenvolvimento local
+
+### Pré-requisitos
 
 - Python 3.11+
 - Node.js 18+
 - PostgreSQL 14+
 - Redis 7+
+- Git
 
 ### Backend
 
 ```bash
 cd backend
 
-# Create and activate virtual environment
-python -m venv venv
-source venv/bin/activate       # Linux/macOS
-# venv\Scripts\activate        # Windows
+python -m venv .venv
+# Windows PowerShell
+.\.venv\Scripts\Activate.ps1
 
-# Install dependencies
+# Linux/macOS
+source .venv/bin/activate
+
 pip install -r requirements.txt
 
-# Configure environment
-cp .env.example .env
-# Edit .env with your local values
-
-# Run migrations and seed initial data
 python manage.py migrate
 python manage.py seed_plans
 python manage.py seed_sources
-
-# Start development server
 python manage.py runserver
+```
 
-# Start Celery worker (separate terminal)
-celery -A config worker --beat --loglevel=info --concurrency=2
+### Worker/Celery
+
+```bash
+cd backend
+celery -A config worker --loglevel=info
+```
+
+### Beat
+
+```bash
+cd backend
+celery -A config beat --loglevel=info
 ```
 
 ### Mobile
 
 ```bash
 cd mobile
-
-# Install dependencies
 npm install
-
-# Start Expo development server
 npx expo start --tunnel
+```
 
-# Scan the QR code with Expo Go app on your device
+### Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
 ```
 
 ---
 
-## Environment Variables
+## Variáveis de ambiente
 
-Copy `.env.example` to `.env` and fill in the required values.
+Nunca commitar valores reais. Use apenas `.env` local e variáveis do Railway.
 
-```bash
-# Django core
-SECRET_KEY=          # Minimum 50 characters
+### Backend
+
+```env
+SECRET_KEY=
 DEBUG=False
-ALLOWED_HOSTS=       # Comma-separated hostnames
+ALLOWED_HOSTS=api.tennis.app.br,www.tennis.app.br,healthcheck.railway.app
+DATABASE_URL=
+REDIS_URL=
+FRONTEND_URL=https://www.tennis.app.br
+CORS_ALLOWED_ORIGINS=https://www.tennis.app.br
+CSRF_TRUSTED_ORIGINS=https://www.tennis.app.br,https://api.tennis.app.br
 
-# Database (PostgreSQL required)
-DATABASE_URL=postgresql://user:password@host:5432/dbname
+RESEND_API_KEY=
+DEFAULT_FROM_EMAIL=no-reply@tennis.app.br
+RESEND_FROM_EMAIL=no-reply@tennis.app.br
 
-# Cache and message broker
-REDIS_URL=redis://default:password@host:6379
+CLOUDINARY_URL=
 
-# Email delivery
-RESEND_API_KEY=      # Required in production
-DEFAULT_FROM_EMAIL=no-reply@yourdomain.com
-
-# File storage
-CLOUDINARY_URL=cloudinary://api_key:api_secret@cloud_name
-
-# Push notifications (VAPID keys)
 VAPID_PRIVATE_KEY=
 VAPID_PUBLIC_KEY=
-VAPID_CLAIMS_EMAIL=
+VAPID_CLAIMS_EMAIL=no-reply@tennis.app.br
 
-# Payments
 ASAAS_API_KEY=
-ASAAS_ENVIRONMENT=sandbox   # sandbox | production
+ASAAS_ENVIRONMENT=sandbox
 ASAAS_WEBHOOK_TOKEN=
 
-# Error tracking
 SENTRY_DSN=
 SENTRY_ENVIRONMENT=production
 
-# CORS and trusted origins
-CORS_ALLOWED_ORIGINS=https://yourdomain.com
-CSRF_TRUSTED_ORIGINS=https://yourdomain.com
-FRONTEND_URL=https://yourdomain.com
+IMPORT_API_TOKEN=
+```
+
+### COSAT Mongo
+
+```env
+COSAT_MONGO_ENABLED=true
+COSAT_MONGO_URL=
+COSAT_MONGO_DB=
+COSAT_MONGO_COLLECTION_TOURNAMENTS=
+COSAT_MONGO_COLLECTION_ENTRIES=
+COSAT_MONGO_COLLECTION_RANKINGS=
+COSAT_MONGO_CONNECT_TIMEOUT_MS=5000
+```
+
+### Frontend/mobile
+
+```env
+VITE_API_BASE_URL=https://api.tennis.app.br
+EXPO_PUBLIC_API_URL=https://api.tennis.app.br
 ```
 
 ---
 
-## Running Tests
+## Testes
 
 ```bash
 cd backend
-
-# Run all tests
+python manage.py check
+python manage.py makemigrations --check --dry-run
 python manage.py test --keepdb
+```
 
-# Run specific app
+Testes direcionados:
+
+```bash
+python manage.py test apps.registrations
+python manage.py test apps.ingestion
 python manage.py test apps.billing
 python manage.py test apps.accounts
 python manage.py test apps.eligibility
+```
 
-# Verbose output
-python manage.py test --verbosity=2 --keepdb
+Mobile:
+
+```bash
+cd mobile
+npx tsc --noEmit
+```
+
+Frontend:
+
+```bash
+cd frontend
+npm run build
 ```
 
 ---
 
-## Production Deployment
+## Deploy em produção
 
-Deployed on Railway with 5 services: `backend`, `worker-beat`, `frontend`, `postgres`, `redis`.
+Produção no Railway com serviços separados:
 
-### Deploy
+- backend;
+- worker/beat;
+- frontend;
+- PostgreSQL;
+- Redis;
+- serviços auxiliares, como Mongo COSAT e crawler COSAT.
 
-1. Push to the `master` branch
-2. Railway auto-deploys all connected services
-3. Startup sequence: `migrate → seed_plans → seed_sources → gunicorn`
+Fluxo padrão:
 
-### Scheduled tasks (Celery Beat)
+```text
+push para master
+→ Railway detecta alteração
+→ build
+→ migrate
+→ start backend/worker/frontend
+```
 
-| Task | Schedule | Purpose |
-|---|---|---|
-| Run all active sources | Hourly | Fetch tournaments from enabled connectors |
-| Dispatch deadline alerts | Hourly at :15 | Send D-7/D-2/D-0 notifications |
-| Detect tournament changes | Every 2h at :30 | Detect and broadcast field changes |
-| Cleanup old logs | Daily at 03:00 UTC | Remove audit logs older than 180 days |
+Antes de deploy:
+
+```bash
+git status
+git diff --stat
+python manage.py check
+python manage.py makemigrations --check --dry-run
+```
+
+Após deploy:
+
+```bash
+curl https://api.tennis.app.br/health/
+```
 
 ---
 
-## Mobile Builds
+## Build mobile
 
 ```bash
 cd mobile
 
-# Android APK (internal distribution)
+# Android APK para teste
 eas build --profile preview --platform android
 
-# iOS (requires Apple Developer account)
-eas build --profile preview --platform ios
+# Android produção
+eas build --profile production --platform android
 
-# Production builds
-eas build --profile production --platform all
+# iOS produção
+eas build --profile production --platform ios
 ```
 
-| Profile | Android | iOS | API |
-|---|---|---|---|
-| `development` | Dev client | Simulator | localhost:8000 |
-| `preview` | APK | Simulator | Production API |
-| `production` | App Bundle | Archive | Production API |
+---
+
+## Segurança
+
+### Regras obrigatórias
+
+- Nunca commitar `.env`.
+- Nunca commitar exports do n8n contendo tokens.
+- Nunca colocar `IMPORT_API_TOKEN` no frontend/mobile.
+- Nunca colocar chaves Railway, Resend, Cloudinary, Asaas, Sentry, Redis, Postgres ou Mongo em arquivos versionados.
+- Toda chave exposta deve ser rotacionada.
+- Usar `git add` seletivo.
+- Conferir `git status` antes de todo commit.
+- Manter `ALLOWED_HOSTS`, CORS e CSRF restritos.
+- Não usar SQLite em produção.
+- Não deixar `DEBUG=True` em produção.
+- Não executar importação real sem `dry_run` e `quality_gate`.
+
+### Arquivos locais ignorados
+
+O `.gitignore` deve cobrir:
+
+- `.env*`;
+- `.venv/`;
+- `node_modules/`;
+- exports n8n;
+- arquivos temporários;
+- caches;
+- logs;
+- snapshots locais.
 
 ---
 
-## Adding a Data Source Connector
+## Contribuição e fluxo de trabalho
 
-1. Create `backend/apps/ingestion/connectors/mysource.py`
-2. Implement `BaseConnector.extract()` yielding normalized dicts
-3. Decorate with `@register_connector` and set a unique `key`
-4. Import in `connectors/__init__.py`
-5. Add a `DataSource` record via `seed_sources.py` or the admin panel
+### Antes de alterar código
+
+Ler:
+
+```text
+CLAUDE.md
+AI_CONTEXT.md
+```
+
+### Fluxo recomendado
+
+```text
+1. Criar/editar código.
+2. Rodar testes/checks.
+3. Revisar diff.
+4. Fazer git add seletivo.
+5. Commit.
+6. Push.
+7. Validar Railway.
+8. Validar /health/.
+9. Validar endpoint afetado.
+```
+
+### Commits sugeridos
+
+```bash
+git add <arquivos específicos>
+git commit -m "feat: add FBT source detection and parser"
+git push origin master
+```
+
+Evitar:
+
+```bash
+git add .
+```
+
+salvo quando o diff inteiro tiver sido auditado.
 
 ---
 
-## License
+## Licença
 
-Private — all rights reserved.
+Projeto privado. Todos os direitos reservados.

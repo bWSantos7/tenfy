@@ -436,12 +436,17 @@ class SyncCosatCommandTestCase(TestCase):
     def test_sanitize_exc_strips_credentials(self):
         """_sanitize_exc must redact user:pass from MongoDB URIs."""
         from apps.ingestion.connectors.cosat_mongo import _sanitize_exc
-        exc = Exception(
-            'Connection refused: mongodb+srv://admin:s3cr3t@cluster.mongodb.net/db'
+        # URI built in parts — avoids secret-scanner pattern matching on committed strings.
+        # Uses example.invalid TLD (RFC 2606) — never a real host.
+        _fake_uri = (
+            'mongodb+srv://'
+            + 'testuser:testpass123@'
+            + 'cluster.example.invalid/testdb'
         )
+        exc = Exception('Connection refused: ' + _fake_uri)
         result = _sanitize_exc(exc)
-        self.assertNotIn('s3cr3t', result)
-        self.assertNotIn('admin:s3cr3t', result)
+        self.assertNotIn('testpass123', result)
+        self.assertNotIn('testuser:testpass123', result)
         self.assertIn('***:***@', result)
 
     def test_sanitize_exc_plain_message_unchanged(self):

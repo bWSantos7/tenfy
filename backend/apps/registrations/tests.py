@@ -801,6 +801,9 @@ class CategoryRejectionTestCase(TestCase):
 class DedupDeterministicTestCase(TestCase):
     """Two athletes without external_id in same category must not overwrite each other."""
 
+    def setUp(self):
+        self.client = APIClient()
+
     def test_two_athletes_no_external_id_get_distinct_keys(self):
         from apps.registrations.parsers import _row_to_entry
         row1 = {'nome': 'Joao Silva', 'categoria': 'Sub-14 M'}

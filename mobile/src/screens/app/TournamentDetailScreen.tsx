@@ -16,7 +16,7 @@ import { getEdition, evaluateEdition, editionHistory } from '../../services/tour
 import { listProfiles, listWatchlist, toggleWatchlist } from '../../services/data';
 import { myRegistrations, registerForEdition, withdrawRegistration } from '../../services/registrations';
 import { pickBestProfile } from '../../utils/profile';
-import { fmtBRL, fmtDate, fmtDateRange, formatChangeEventDetails, formatChangeEventTitle, translateReason, STATUS_LABELS, SURFACE_LABELS } from '../../utils/format';
+import { fmtBRL, fmtDate, fmtDateMaybeTime, fmtDateRange, formatChangeEventDetails, formatChangeEventTitle, translateReason, STATUS_LABELS, SURFACE_LABELS } from '../../utils/format';
 import { extractApiError } from '../../services/api';
 
 type Props = NativeStackScreenProps<MainStackParamList, 'TournamentDetail'>;
@@ -210,16 +210,18 @@ export function TournamentDetailScreen({ route, navigation }: Props) {
             <Ionicons name="calendar-outline" size={14} color={colors.textMuted} />
             <AppText variant="caption">Período do torneio: {fmtDateRange(detail.start_date, detail.end_date)}</AppText>
           </View>
-          {(detail.entry_open_at || detail.entry_close_at) ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Ionicons name="create-outline" size={14} color={colors.textMuted} />
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Ionicons name="create-outline" size={14} color={colors.textMuted} />
+            {(detail.entry_open_at || detail.entry_close_at) ? (
               <AppText variant="caption">Inscrições: {fmtDateRange(detail.entry_open_at, detail.entry_close_at)}</AppText>
-            </View>
-          ) : null}
+            ) : (
+              <AppText variant="caption" style={{ color: colors.textMuted, fontStyle: 'italic' }}>Inscrição não informada</AppText>
+            )}
+          </View>
           {detail.entry_close_at && (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Ionicons name="time-outline" size={14} color={colors.textMuted} />
-              <AppText variant="caption">Prazo final de inscrição: {fmtDate(detail.entry_close_at, "dd/MM/yyyy 'às' HH:mm")}</AppText>
+              <AppText variant="caption">Prazo final de inscrição: {fmtDateMaybeTime(detail.entry_close_at)}</AppText>
             </View>
           )}
           {(detail.venue_city || detail.venue_state) && (

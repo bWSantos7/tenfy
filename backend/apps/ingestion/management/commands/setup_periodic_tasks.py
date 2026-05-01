@@ -33,6 +33,12 @@ TASKS = [
         'cron': {'minute': '0', 'hour': '3', 'day_of_week': '*', 'day_of_month': '*', 'month_of_year': '*'},
         'description': 'Clean up old audit logs daily at 03:00',
     },
+    {
+        'name': 'sync-cosat-every-6h',
+        'task': 'apps.ingestion.tasks.sync_cosat_from_mongo_task',
+        'cron': {'minute': '30', 'hour': '*/6', 'day_of_week': '*', 'day_of_month': '*', 'month_of_year': '*'},
+        'description': 'Sync COSAT tournaments from MongoDB every 6 hours (00:30, 06:30, 12:30, 18:30 UTC)',
+    },
 ]
 
 

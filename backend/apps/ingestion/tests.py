@@ -905,3 +905,263 @@ class SyncCosatCommandTestCase(TestCase):
         conn = CosatMongoConnector()
         result = conn.is_available()
         self.assertFalse(result)
+
+
+# ── Inscription date parsing ──────────────────────────────────────────────────
+
+class ParseInscriptionDateTestCase(TestCase):
+    """Tests for _parse_inscription_date and _parse_inscription_dates helpers (TAREFA 1)."""
+
+    def test_iso_date(self):
+        from apps.ingestion.connectors.cosat_mongo import _parse_inscription_date
+        from datetime import date
+        self.assertEqual(_parse_inscription_date('2026-04-27'), date(2026, 4, 27))
+
+    def test_iso_datetime_string(self):
+        from apps.ingestion.connectors.cosat_mongo import _parse_inscription_date
+        from datetime import date
+        self.assertEqual(_parse_inscription_date('2026-05-02T00:00:00Z'), date(2026, 5, 2))
+
+    def test_br_format(self):
+        from apps.ingestion.connectors.cosat_mongo import _parse_inscription_date
+        from datetime import date
+        self.assertEqual(_parse_inscription_date('27/04/2026'), date(2026, 4, 27))
+
+    def test_spanish_textual_with_year_hint(self):
+        from apps.ingestion.connectors.cosat_mongo import _parse_inscription_date
+        from datetime import date
+        self.assertEqual(_parse_inscription_date('sáb. 2 de may.', year_hint=2026), date(2026, 5, 2))
+
+    def test_spanish_textual_explicit_year(self):
+        from apps.ingestion.connectors.cosat_mongo import _parse_inscription_date
+        from datetime import date
+        self.assertEqual(_parse_inscription_date('27 de abr. 2026'), date(2026, 4, 27))
+
+    def test_prefixed_text_stripped(self):
+        from apps.ingestion.connectors.cosat_mongo import _parse_inscription_date
+        from datetime import date
+        result = _parse_inscription_date('Entries close: sáb. 2 de may.', year_hint=2026)
+        self.assertEqual(result, date(2026, 5, 2))
+
+    def test_withdrawal_deadline_prefix_stripped(self):
+        from apps.ingestion.connectors.cosat_mongo import _parse_inscription_date
+        from datetime import date
+        result = _parse_inscription_date('Withdrawal deadline: 2026-04-20', year_hint=2026)
+        self.assertEqual(result, date(2026, 4, 20))
+
+    def test_null_returns_none(self):
+        from apps.ingestion.connectors.cosat_mongo import _parse_inscription_date
+        self.assertIsNone(_parse_inscription_date(None))
+
+    def test_empty_string_returns_none(self):
+        from apps.ingestion.connectors.cosat_mongo import _parse_inscription_date
+        self.assertIsNone(_parse_inscription_date(''))
+
+    def test_not_informed_text_returns_none(self):
+        from apps.ingestion.connectors.cosat_mongo import _parse_inscription_date
+        self.assertIsNone(_parse_inscription_date('Inscrição não informada'))
+
+    def test_parse_inscription_dates_both_from_pt_fields(self):
+        from apps.ingestion.connectors.cosat_mongo import _parse_inscription_dates
+        from datetime import date
+        doc = {'Inscrição_Inicio': '2026-04-01', 'Inscrição_Fim': '2026-04-25'}
+        open_d, close_d = _parse_inscription_dates(doc)
+        self.assertEqual(open_d, date(2026, 4, 1))
+        self.assertEqual(close_d, date(2026, 4, 25))
+
+    def test_parse_inscription_dates_close_only(self):
+        from apps.ingestion.connectors.cosat_mongo import _parse_inscription_dates
+        from datetime import date
+        doc = {'Entries close': '2026-04-25'}
+        open_d, close_d = _parse_inscription_dates(doc)
+        self.assertIsNone(open_d)
+        self.assertEqual(close_d, date(2026, 4, 25))
+
+    def test_parse_inscription_dates_entry_close_at_field(self):
+        from apps.ingestion.connectors.cosat_mongo import _parse_inscription_dates
+        from datetime import date
+        doc = {'entry_close_at': '2026-05-10', 'entry_open_at': '2026-04-10'}
+        open_d, close_d = _parse_inscription_dates(doc)
+        self.assertEqual(open_d, date(2026, 4, 10))
+        self.assertEqual(close_d, date(2026, 5, 10))
+
+    def test_parse_inscription_dates_empty_doc_returns_none(self):
+        from apps.ingestion.connectors.cosat_mongo import _parse_inscription_dates
+        open_d, close_d = _parse_inscription_dates({})
+        self.assertIsNone(open_d)
+        self.assertIsNone(close_d)
+
+    def test_normalize_tournament_includes_entry_dates_from_inscription_fields(self):
+        from apps.ingestion.connectors.cosat_mongo import _normalize_tournament
+        doc = {
+            'cosatId': 'test-insc-001',
+            'name': 'Test Inscription Tournament',
+            'url': 'https://cosat.tournamentsoftware.com/tournament/test-insc-001',
+            'dateRange': '10 - 15 Nov 2026',
+            'Inscrição_Inicio': '2026-10-01',
+            'Inscrição_Fim': '2026-10-31',
+        }
+        result = _normalize_tournament(doc)
+        self.assertIsNotNone(result)
+        self.assertEqual(result['entry_open_at'], '2026-10-01')
+        self.assertEqual(result['entry_close_at'], '2026-10-31')
+
+    def test_normalize_tournament_no_inscription_fields_yields_none(self):
+        from apps.ingestion.connectors.cosat_mongo import _normalize_tournament
+        doc = {
+            'cosatId': 'test-noinsc-001',
+            'name': 'Test No Inscription',
+            'url': 'https://cosat.tournamentsoftware.com/tournament/test-noinsc-001',
+            'dateRange': '10 - 15 Nov 2026',
+        }
+        result = _normalize_tournament(doc)
+        self.assertIsNotNone(result)
+        self.assertIsNone(result['entry_open_at'])
+        self.assertIsNone(result['entry_close_at'])
+
+    def test_inscription_fields_preserved_in_raw(self):
+        from apps.ingestion.connectors.cosat_mongo import _normalize_tournament
+        doc = {
+            'cosatId': 'test-raw-001',
+            'name': 'Test Raw Preserve',
+            'url': 'https://cosat.tournamentsoftware.com/tournament/test-raw-001',
+            'Inscrição_Fim': '2026-10-31',
+        }
+        result = _normalize_tournament(doc)
+        self.assertIn('inscriptionFields', result['_raw'])
+        self.assertIn('Inscrição_Fim', result['_raw']['inscriptionFields'])
+
+
+# ── Celery task: sync_cosat_from_mongo_task ───────────────────────────────────
+
+class SyncCosatTaskTestCase(TestCase):
+    """Tests for the periodic sync_cosat_from_mongo_task Celery task (TAREFA 8)."""
+
+    @override_settings(COSAT_MONGO_ENABLED=False)
+    def test_task_skipped_when_disabled(self):
+        """Task returns skipped:disabled when COSAT_MONGO_ENABLED=False."""
+        from apps.ingestion.tasks import sync_cosat_from_mongo_task
+        result = sync_cosat_from_mongo_task()
+        self.assertEqual(result.get('skipped'), True)
+        self.assertEqual(result.get('reason'), 'disabled')
+
+    @override_settings(COSAT_MONGO_ENABLED=True)
+    def test_task_skipped_when_lock_held(self):
+        """Task skips gracefully if cache lock indicates another instance is running."""
+        from django.core.cache import cache
+        from apps.ingestion.tasks import sync_cosat_from_mongo_task
+        cache.set('sync_cosat:lock', True, 60)
+        try:
+            result = sync_cosat_from_mongo_task()
+            self.assertEqual(result.get('skipped'), True)
+            self.assertEqual(result.get('reason'), 'already_running')
+        finally:
+            cache.delete('sync_cosat:lock')
+
+    @override_settings(COSAT_MONGO_ENABLED=True)
+    def test_task_result_has_no_mongo_uri(self):
+        """Task result dict must never contain a MongoDB connection string."""
+        from apps.ingestion.tasks import sync_cosat_from_mongo_task
+        with patch('django.core.management.call_command') as mock_cmd:
+            mock_cmd.return_value = None
+            result = sync_cosat_from_mongo_task()
+        result_str = str(result)
+        self.assertNotIn('mongodb://', result_str)
+        self.assertNotIn('mongodb+srv://', result_str)
+
+    @override_settings(COSAT_MONGO_ENABLED=True)
+    def test_task_lock_released_after_success(self):
+        """Cache lock is deleted after successful run."""
+        from django.core.cache import cache
+        from apps.ingestion.tasks import sync_cosat_from_mongo_task
+        with patch('django.core.management.call_command') as mock_cmd:
+            mock_cmd.return_value = None
+            sync_cosat_from_mongo_task()
+        self.assertIsNone(cache.get('sync_cosat:lock'))
+
+    @override_settings(COSAT_MONGO_ENABLED=True)
+    def test_task_calls_import_entries_true(self):
+        """Task must pass import_entries=True so players are synced automatically."""
+        from apps.ingestion.tasks import sync_cosat_from_mongo_task
+        with patch('django.core.management.call_command') as mock_cmd:
+            mock_cmd.return_value = None
+            sync_cosat_from_mongo_task()
+        # Find the sync_cosat_from_mongo call among all call_command invocations
+        cosat_calls = [c for c in mock_cmd.call_args_list
+                       if c.args and c.args[0] == 'sync_cosat_from_mongo']
+        self.assertEqual(len(cosat_calls), 1, 'sync_cosat_from_mongo must be called once')
+        kwargs = cosat_calls[0].kwargs
+        self.assertTrue(kwargs.get('import_entries'), 'import_entries must be True')
+        self.assertFalse(kwargs.get('dry_run'), 'dry_run must be False')
+
+
+# ── Withdrawal deadline NOT mapped to entry_close_at ─────────────────────────
+
+class WithdrawalDeadlineTestCase(TestCase):
+    """Withdrawal deadline is NOT an inscription close date (TAREFA A1)."""
+
+    def test_withdrawal_deadline_not_in_inscription_close_fields(self):
+        """Withdrawal deadline field must NOT appear in _INSCRIPTION_CLOSE_FIELDS."""
+        from apps.ingestion.connectors.cosat_mongo import _INSCRIPTION_CLOSE_FIELDS
+        self.assertNotIn('Withdrawal deadline', _INSCRIPTION_CLOSE_FIELDS)
+        self.assertNotIn('withdrawal_deadline', _INSCRIPTION_CLOSE_FIELDS)
+
+    def test_withdrawal_deadline_does_not_set_entry_close_at(self):
+        """_parse_inscription_dates must NOT map withdrawal_deadline to entry_close_at."""
+        from apps.ingestion.connectors.cosat_mongo import _parse_inscription_dates
+        doc = {
+            'Withdrawal deadline': '2026-05-15',
+            'withdrawal_deadline': '2026-05-15',
+        }
+        _, close_d = _parse_inscription_dates(doc)
+        self.assertIsNone(close_d, 'withdrawal_deadline must not populate entry_close_at')
+
+    def test_withdrawal_deadline_preserved_in_raw(self):
+        """Withdrawal deadline IS preserved in _raw.inscriptionFields for audit."""
+        from apps.ingestion.connectors.cosat_mongo import _normalize_tournament
+        doc = {
+            'cosatId': 'test-wd-001',
+            'name': 'Test Withdrawal',
+            'url': 'https://cosat.tournamentsoftware.com/tournament/test-wd-001',
+            'Withdrawal deadline': '2026-05-15',
+        }
+        result = _normalize_tournament(doc)
+        self.assertIsNotNone(result)
+        self.assertIsNone(result['entry_close_at'], 'entry_close_at must remain null')
+        inscription_fields = result['_raw'].get('inscriptionFields', {})
+        self.assertIn('Withdrawal deadline', inscription_fields, 'withdrawal preserved in _raw')
+
+
+# ── FBT seed idempotent ───────────────────────────────────────────────────────
+
+class FbtSeedTestCase(TestCase):
+    """FBT Organization + DataSource seed is idempotent (TAREFA B3)."""
+
+    def test_fbt_seed_creates_organization(self):
+        """seed_sources creates FBT Organization."""
+        from django.core.management import call_command
+        call_command('seed_sources', verbosity=0)
+        from apps.sources.models import Organization
+        self.assertTrue(
+            Organization.objects.filter(short_name='FBT').exists(),
+            'FBT Organization must exist after seed_sources'
+        )
+
+    def test_fbt_seed_creates_datasource(self):
+        """seed_sources creates FBT DataSource with enabled=False."""
+        from django.core.management import call_command
+        call_command('seed_sources', verbosity=0)
+        from apps.sources.models import DataSource
+        ds = DataSource.objects.filter(slug='fbt-public').first()
+        self.assertIsNotNone(ds, 'FBT DataSource must exist after seed_sources')
+        self.assertFalse(ds.enabled, 'FBT DataSource must be disabled (no connector yet)')
+        self.assertEqual(ds.connector_key, 'fbt_public')
+
+    def test_fbt_seed_idempotent(self):
+        """Running seed_sources twice must not duplicate FBT records."""
+        from django.core.management import call_command
+        from apps.sources.models import Organization, DataSource
+        call_command('seed_sources', verbosity=0)
+        call_command('seed_sources', verbosity=0)
+        self.assertEqual(Organization.objects.filter(short_name='FBT').count(), 1)
+        self.assertEqual(DataSource.objects.filter(slug='fbt-public').count(), 1)

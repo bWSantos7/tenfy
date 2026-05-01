@@ -29,6 +29,24 @@ export function fmtDateTime(iso: string | null | undefined) {
   }
 }
 
+/**
+ * Format a datetime ISO string as "dd/MM/yyyy" (date only) when the time
+ * component is midnight (00:00), or as "dd/MM/yyyy 'às' HH:mm" when there
+ * is a real time. Prevents showing "00:00" for date-only sources (e.g. COSAT).
+ */
+export function fmtDateMaybeTime(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  try {
+    const d = parseISO(iso);
+    const hasMeaningfulTime = d.getHours() !== 0 || d.getMinutes() !== 0;
+    return hasMeaningfulTime
+      ? format(d, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })
+      : format(d, 'dd/MM/yyyy', { locale: ptBR });
+  } catch {
+    return '—';
+  }
+}
+
 export function fmtDateRange(start: string | null, end: string | null): string {
   if (!start && !end) return 'A definir';
   if (start && !end) return fmtDate(start);

@@ -27,6 +27,10 @@ app.conf.beat_schedule = {
         'task': 'apps.audit.tasks.cleanup_old_logs',
         'schedule': crontab(hour=3, minute=0),
     },
+    'sync-cosat-every-6h': {
+        'task': 'apps.ingestion.tasks.sync_cosat_from_mongo_task',
+        'schedule': crontab(minute=30, hour='*/6'),  # 00:30, 06:30, 12:30, 18:30 UTC
+    },
 }
 
 

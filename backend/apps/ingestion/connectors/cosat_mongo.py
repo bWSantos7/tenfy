@@ -361,6 +361,7 @@ def _normalize_tournament(doc: dict) -> Optional[dict]:
 
     date_range = (doc.get('dateRange') or '').strip()
     start_date, end_date = _parse_date_range(date_range, year_hint=year_hint)
+    entry_open, entry_close = _parse_inscription_dates(doc, year_hint=year_hint)
 
     # Categories from embedded events array — normalize COSAT codes to human-readable names
     events = doc.get('events') or []
@@ -386,8 +387,8 @@ def _normalize_tournament(doc: dict) -> Optional[dict]:
         'title': name,
         'start_date': start_date.isoformat() if start_date else None,
         'end_date': end_date.isoformat() if end_date else None,
-        'entry_open_at': None,
-        'entry_close_at': None,
+        'entry_open_at': entry_open.isoformat() if entry_open else None,
+        'entry_close_at': entry_close.isoformat() if entry_close else None,
         'status': 'unknown',
         'surface': 'unknown',
         'venue': {
@@ -408,7 +409,14 @@ def _normalize_tournament(doc: dict) -> Optional[dict]:
             'organization': organization,
             'location': location,
             'country': country,
-            'dateRange': date_range,  # preserved for audit
+            'dateRange': date_range,
+            'inscriptionFields': {
+                f: str(doc[f]) for f in (
+                    _INSCRIPTION_OPEN_FIELDS
+                    + _INSCRIPTION_CLOSE_FIELDS
+                    + _WITHDRAWAL_FIELDS  # withdrawal not mapped to entry_close_at, preserved for audit
+                ) if doc.get(f)
+            },
             'categoriesCount': doc.get('categoriesCount'),
             'entriesCount': doc.get('entriesCount'),
             'lastUpdated': (
@@ -754,6 +762,114 @@ def _parse_date_range(date_range: str, year_hint: int = 0):
             return start, end
 
     return None, None
+
+
+# Inscription date fields — tried in priority order (open/start and close/end).
+# Supports all field name conventions from the COSAT crawler schema.
+_INSCRIPTION_OPEN_FIELDS = [
+    'Inscrição_Inicio',
+    'registration_open_at', 'entry_open_at',
+    'registrationOpen', 'registration_open',
+    'Entry open', 'Entries open', 'Registration open',
+]
+_INSCRIPTION_CLOSE_FIELDS = [
+    'Inscrição_Fim',
+    'registration_close_at', 'entry_close_at',
+    'registrationClose', 'registration_close',
+    'Entry close', 'Entries close', 'Registration close',
+]
+
+# Withdrawal deadline is NOT a registration open/close date — it is the deadline
+# for withdrawing from a tournament after registering. Preserved in _raw only.
+_WITHDRAWAL_FIELDS = ['Withdrawal deadline', 'withdrawal_deadline']
+
+
+def _parse_inscription_date(value, year_hint: int = 0):
+    """
+    Parse a single inscription date field value to a date object.
+
+    Supported formats:
+      ISO:        2026-04-27 / 2026-04-27T00:00:00Z
+      BR:         27/04/2026
+      ES/PT year: "27 de abr. 2026" / "sáb. 2 de may. 2026"
+      ES/PT bare: "lun. 27 de abr." / "2 de may." (uses year_hint)
+      Prefixed:   "Entries close: sáb. 2 de may."
+
+    Returns date or None — never invents data.
+    """
+    if not value:
+        return None
+    s = str(value).strip()
+    if not s or s.lower() in ('null', 'none', 'não informado', 'inscrição não informada',
+                               'n/a', '-'):
+        return None
+
+    # Strip label prefixes like "Entries close: " or "Withdrawal deadline: ".
+    # Guard: only strip when string starts with a non-digit.
+    # ISO dates (2026-04-27) and BR dates (27/04/2026) start with digits — do not strip.
+    if ':' in s and not s[0].isdigit():
+        s = s.split(':', 1)[1].strip()
+    if not s:
+        return None
+
+    # ISO: 2026-04-27 or 2026-04-27T...
+    m = re.match(r'^(\d{4})-(\d{2})-(\d{2})', s)
+    if m:
+        try:
+            return datetime(int(m.group(1)), int(m.group(2)), int(m.group(3))).date()
+        except ValueError:
+            pass
+
+    # BR: 27/04/2026
+    m = re.match(r'^(\d{1,2})/(\d{1,2})/(\d{4})', s)
+    if m:
+        try:
+            return datetime(int(m.group(3)), int(m.group(2)), int(m.group(1))).date()
+        except ValueError:
+            pass
+
+    # ES/PT with explicit year: "27 de abr. 2026" / "sáb. 2 de may. 2026"
+    m = re.search(r'(\d{1,2})\s+de\s+(\w+)\.?\s*(\d{4})', s, re.IGNORECASE)
+    if m:
+        month = _MONTH_MAP.get(m.group(2).lower()[:3])
+        if month:
+            try:
+                return datetime(int(m.group(3)), month, int(m.group(1))).date()
+            except ValueError:
+                pass
+
+    # ES/PT without year — use year_hint or current year
+    year = year_hint or datetime.now().year
+    return _parse_spanish_date(s, year)
+
+
+def _parse_inscription_dates(doc: dict, year_hint: int = 0):
+    """
+    Extract (entry_open_at, entry_close_at) from a Mongo tournament document.
+
+    Tries all known field name variants in priority order.
+    Returns (date | None, date | None).
+    Never invents data — returns (None, None) if fields absent or unparseable.
+    When the crawler starts populating Inscrição_Inicio/Inscrição_Fim,
+    the next sync will automatically populate these fields without code changes.
+    """
+    open_date = None
+    for field in _INSCRIPTION_OPEN_FIELDS:
+        val = doc.get(field)
+        if val:
+            open_date = _parse_inscription_date(val, year_hint)
+            if open_date:
+                break
+
+    close_date = None
+    for field in _INSCRIPTION_CLOSE_FIELDS:
+        val = doc.get(field)
+        if val:
+            close_date = _parse_inscription_date(val, year_hint)
+            if close_date:
+                break
+
+    return open_date, close_date
 
 
 def _parse_location(location: str, country: str):

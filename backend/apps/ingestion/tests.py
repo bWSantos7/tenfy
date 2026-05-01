@@ -187,6 +187,110 @@ class CosatMongoNormalizationTestCase(TestCase):
         result = _normalize_ranking(doc)
         self.assertIsNone(result['ranking_position'])
 
+    # ── _extract_category_text / multi-field fallback ─────────────────────────
+
+    def test_extract_category_primary_field_rankingCategory(self):
+        """rankingCategory is tried first and wins when present."""
+        from apps.ingestion.connectors.cosat_mongo import _extract_category_text
+        doc = {
+            'rankingCategory': 'U14 Boys',
+            'category': 'Other',
+            'event': 'Also other',
+        }
+        text, field = _extract_category_text(doc)
+        self.assertEqual(text, 'U14 Boys')
+        self.assertEqual(field, 'rankingCategory')
+
+    def test_extract_category_fallback_to_event(self):
+        """Falls back to eventName/event when rankingCategory absent."""
+        from apps.ingestion.connectors.cosat_mongo import _extract_category_text
+        doc = {
+            'rankingCategory': '',
+            'eventName': '14 Años Masculino Singles',
+        }
+        text, field = _extract_category_text(doc)
+        self.assertEqual(text, '14 Años Masculino Singles')
+        self.assertEqual(field, 'eventName')
+
+    def test_extract_category_fallback_to_draw(self):
+        """Falls back to drawName when higher-priority fields absent."""
+        from apps.ingestion.connectors.cosat_mongo import _extract_category_text
+        doc = {'drawName': 'Sub-16 Feminino'}
+        text, field = _extract_category_text(doc)
+        self.assertEqual(text, 'Sub-16 Feminino')
+        self.assertEqual(field, 'drawName')
+
+    def test_extract_category_fallback_to_discipline(self):
+        from apps.ingestion.connectors.cosat_mongo import _extract_category_text
+        doc = {'discipline': 'Boys U14 Singles'}
+        text, field = _extract_category_text(doc)
+        self.assertEqual(text, 'Boys U14 Singles')
+        self.assertEqual(field, 'discipline')
+
+    def test_extract_category_all_empty_returns_empty(self):
+        """No candidate fields with values → ('', '')."""
+        from apps.ingestion.connectors.cosat_mongo import _extract_category_text
+        doc = {'name': 'Player X', 'tournamentId': 'abc', 'profileId': 'p1'}
+        text, field = _extract_category_text(doc)
+        self.assertEqual(text, '')
+        self.assertEqual(field, '')
+
+    def test_extract_category_uuid_eventId_skipped(self):
+        """UUID-like eventId is not used as category text."""
+        from apps.ingestion.connectors.cosat_mongo import _extract_category_text
+        doc = {'eventId': '966BBD61-1E45-4970-9099-65566407DC4D'}
+        text, field = _extract_category_text(doc)
+        self.assertEqual(text, '')
+
+    def test_normalize_player_category_from_event_field(self):
+        """_normalize_player picks up category from eventName when rankingCategory empty."""
+        from apps.ingestion.connectors.cosat_mongo import _normalize_player
+        doc = {
+            'name': 'Carlos Rodríguez',
+            'tournamentId': 'abc123',
+            'profileId': 'P-001',
+            'rankingCategory': '',
+            'eventName': '14 Años Masculino',
+        }
+        result = _normalize_player(doc)
+        self.assertIsNotNone(result)
+        self.assertEqual(result['category_text'], '14 Años Masculino')
+        self.assertEqual(result['_category_field'], 'eventName')
+
+    def test_normalize_player_no_category_field_returns_empty_category(self):
+        """_normalize_player returns result with empty category_text when no field found."""
+        from apps.ingestion.connectors.cosat_mongo import _normalize_player
+        doc = {'name': 'Player No Cat', 'tournamentId': 'abc'}
+        result = _normalize_player(doc)
+        # Still returns a result — rejection happens at command level
+        self.assertIsNotNone(result)
+        self.assertEqual(result['category_text'], '')
+        self.assertEqual(result['_category_field'], '')
+
+    def test_normalize_player_category_field_reported(self):
+        """_category_field key shows which field provided the category."""
+        from apps.ingestion.connectors.cosat_mongo import _normalize_player
+        doc = {'name': 'X', 'rankingCategory': 'U12 Girls', 'tournamentId': 't1'}
+        result = _normalize_player(doc)
+        self.assertEqual(result['_category_field'], 'rankingCategory')
+
+    # ── player_field_inventory ────────────────────────────────────────────────
+
+    def test_player_field_inventory_redacts_name(self):
+        """player_field_inventory does not leak player name."""
+        from apps.ingestion.connectors.cosat_mongo import player_field_inventory
+        doc = {
+            'name': 'Real Player Name',
+            'dob': '1990-01-01',
+            'rankingCategory': 'U14',
+            'tournamentId': 'abc',
+        }
+        inventory = player_field_inventory(doc)
+        self.assertEqual(inventory['name'], '<redacted>')
+        self.assertEqual(inventory['dob'], '<redacted>')
+        self.assertEqual(inventory['rankingCategory'], 'U14')
+        self.assertEqual(inventory['tournamentId'], 'abc')
+
     # ── Date parsing ──────────────────────────────────────────────────────────
 
     def test_parse_date_range_same_month(self):

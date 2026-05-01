@@ -31,10 +31,13 @@ Rules:
 import logging
 import unicodedata
 import re as _re
+from collections import Counter
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
+
+from apps.ingestion.connectors.cosat_mongo import _PLAYER_CATEGORY_FIELDS
 
 logger = logging.getLogger('apps.ingestion.cosat_mongo')
 
@@ -71,12 +74,25 @@ class Command(BaseCommand):
             '--import-entries', action='store_true', default=False,
             help='Also sync player entries for each tournament',
         )
+        parser.add_argument(
+            '--debug-sample', action='store_true', default=False,
+            help=(
+                'Print raw field inventory of 3 player docs (no personal data). '
+                'Use to discover which fields contain category. '
+                'Implies --dry-run.'
+            ),
+        )
 
     def handle(self, *args, **options):
         dry_run: bool = options['dry_run']
         limit: int = options['limit']
         tournament_id: str = options['tournament_id'].strip()
         import_entries: bool = options['import_entries']
+        debug_sample: bool = options['debug_sample']
+
+        # --debug-sample always implies dry-run
+        if debug_sample:
+            dry_run = True
 
         # Validate limit
         if limit < 0:
@@ -102,7 +118,10 @@ class Command(BaseCommand):
         conn = CosatMongoConnector()
 
         try:
-            self._run(conn, dry_run, limit, tournament_id, import_entries)
+            if debug_sample:
+                self._run_debug_sample(conn, tournament_id)
+            else:
+                self._run(conn, dry_run, limit, tournament_id, import_entries)
         finally:
             conn.close()
 
@@ -194,21 +213,29 @@ class Command(BaseCommand):
                 player_count = 0
                 rejected = 0
                 errors = 0
+                # Track which category field was used (for transparency)
+                category_field_hits: dict[str, int] = {}
 
                 for player in conn.iter_players(tournament_id=tid):
                     player_name = (player.get('player_name') or '').strip()
                     category_text = (player.get('category_text') or '').strip()
+                    category_field = player.get('_category_field', '')
 
-                    # Reject entries without category — never invent "Não informado"
+                    # Reject entries without category — never invent
                     if not category_text:
                         logger.debug(
                             'sync_cosat: skipping player "%s" for tournament %s — '
-                            'no category_text in MongoDB document',
+                            'no category_text found in any candidate field',
                             player_name, tid,
                         )
                         stats['entries_rejected'] += 1
                         rejected += 1
                         continue
+
+                    if category_field:
+                        category_field_hits[category_field] = (
+                            category_field_hits.get(category_field, 0) + 1
+                        )
 
                     if dry_run:
                         stats['entries_skipped'] += 1
@@ -229,15 +256,27 @@ class Command(BaseCommand):
                         stats['entries_error'] += 1
                         errors += 1
 
-                msg = (
-                    f'  [DRY-RUN] [{tid}] edition_id={edition_id}: '
-                    f'would sync {player_count} players'
-                    if dry_run
-                    else f'  [{tid}]: created={player_count} rejected={rejected} errors={errors}'
-                )
+                if dry_run:
+                    self.stdout.write(
+                        f'  [DRY-RUN] [{tid}] edition_id={edition_id}: '
+                        f'would sync {player_count} players, rejected {rejected}'
+                    )
+                else:
+                    self.stdout.write(
+                        f'  [{tid}]: created={player_count} '
+                        f'rejected={rejected} errors={errors}'
+                    )
                 if rejected:
-                    msg += f' ({rejected} rejected — no category)'
-                self.stdout.write(msg)
+                    self.stdout.write(
+                        f'    {rejected} rejected — no category found in any of: '
+                        + ', '.join(_PLAYER_CATEGORY_FIELDS[:6]) + '…'
+                        + ' — run --debug-sample to inspect raw fields'
+                    )
+                if category_field_hits:
+                    self.stdout.write(
+                        f'    category extracted from: '
+                        + ', '.join(f'{f}({n})' for f, n in category_field_hits.items())
+                    )
 
         # ── Report ───────────────────────────────────────────────────────────
         self.stdout.write('\n=== Result ===')
@@ -438,3 +477,87 @@ class Command(BaseCommand):
             source=FederationEntry.SOURCE_COSAT,
             defaults=defaults,
         )
+
+    def _run_debug_sample(self, conn, tournament_id: str):
+        """
+        Print safe field inventory of 3 player docs + tournament events.
+        Does NOT print player names, DOB, or personal data.
+        Used to discover which MongoDB field contains the category.
+        Always dry-run — no DB writes.
+        """
+        from apps.ingestion.connectors.cosat_mongo import player_field_inventory
+
+        if not conn.is_available():
+            self.stdout.write(self.style.ERROR('MongoDB unreachable.'))
+            return
+
+        self.stdout.write(self.style.SUCCESS('\n=== DEBUG SAMPLE (dry-run, no writes) ==='))
+
+        # ── Tournament events (categories) ───────────────────────────────────
+        if tournament_id:
+            self.stdout.write(f'\n--- Tournament raw doc [{tournament_id}] ---')
+            t_doc = conn.sample_tournament_raw(tournament_id)
+            if t_doc:
+                events = t_doc.get('events') or []
+                self.stdout.write(f'  name: {t_doc.get("name", "?")}')
+                self.stdout.write(f'  events ({len(events)}):')
+                for ev in events[:10]:
+                    self.stdout.write(f'    {ev}')
+                self.stdout.write(f'  top-level keys: {sorted(t_doc.keys())}')
+            else:
+                self.stdout.write(f'  Tournament not found in MongoDB.')
+
+        # ── Player field inventory ────────────────────────────────────────────
+        self.stdout.write(f'\n--- Player field inventory (3 samples, no personal data) ---')
+        samples = conn.sample_players_raw(tournament_id=tournament_id, n=5)
+
+        if not samples:
+            self.stdout.write('  No player documents found for this tournament.')
+            self.stdout.write(
+                '  Check tournamentId field in Mongo matches the cosatId exactly.'
+            )
+            return
+
+        self.stdout.write(f'  Found {len(samples)} sample(s):')
+        all_keys: Counter = Counter()
+        all_category_values: dict[str, set] = {}
+
+        for i, doc in enumerate(samples):
+            inventory = player_field_inventory(doc)
+            self.stdout.write(f'\n  Sample [{i+1}]:')
+            for key, val in sorted(inventory.items()):
+                self.stdout.write(f'    {key}: {val}')
+            # Track which category-candidate fields have values
+            for field in _PLAYER_CATEGORY_FIELDS:
+                val = doc.get(field)
+                if val:
+                    all_category_values.setdefault(field, set()).add(str(val)[:60])
+            all_keys.update(inventory.keys())
+
+        # ── Category field analysis ───────────────────────────────────────────
+        self.stdout.write('\n--- Category field analysis ---')
+        self.stdout.write(f'  Checked fields (in priority order): {_PLAYER_CATEGORY_FIELDS}')
+        self.stdout.write('\n  Fields with values in samples:')
+        found_any = False
+        for field in _PLAYER_CATEGORY_FIELDS:
+            if field in all_category_values:
+                vals = list(all_category_values[field])[:3]
+                self.stdout.write(f'    ✓ {field}: {vals}')
+                found_any = True
+        if not found_any:
+            self.stdout.write(
+                '  NONE of the candidate fields have values in these samples.\n'
+                '  The category might be:\n'
+                '    - in the Tournament.events[] and NOT stored on the player doc\n'
+                '    - under a different field name (check "top-level keys" above)\n'
+                '    - absent from the crawler schema\n'
+                '  → Consider enriching the crawler to store event/category on each player.'
+            )
+
+        # ── All unique keys found across samples ─────────────────────────────
+        self.stdout.write('\n--- All keys present in player samples ---')
+        self.stdout.write(f'  {sorted(all_keys.keys())}')
+
+        self.stdout.write(self.style.WARNING(
+            '\nDEBUG SAMPLE complete — no data written.'
+        ))

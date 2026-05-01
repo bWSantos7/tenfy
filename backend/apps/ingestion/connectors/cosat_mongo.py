@@ -278,6 +278,34 @@ class CosatMongoConnector:
         coll = self._collection('COSAT_MONGO_COLLECTION_RANKINGS', 'rankingentries')
         return coll.count_documents({})
 
+    def sample_players_raw(self, tournament_id: str = '', n: int = 3) -> list[dict]:
+        """
+        Return up to n raw player documents from MongoDB (no normalization).
+
+        Used by --debug-sample to discover real field structure.
+        Returns dicts with MongoDB ObjectId stringified to avoid serialization issues.
+        """
+        if not self.is_available():
+            return []
+        coll = self._collection('COSAT_MONGO_COLLECTION_ENTRIES', 'players')
+        query = {'tournamentId': tournament_id} if tournament_id else {}
+        docs = []
+        for doc in coll.find(query).limit(n):
+            # Convert ObjectId to string — safe for printing
+            doc['_id'] = str(doc.get('_id', ''))
+            docs.append(doc)
+        return docs
+
+    def sample_tournament_raw(self, cosat_id: str) -> Optional[dict]:
+        """Return raw tournament document for debug inspection."""
+        if not self.is_available():
+            return None
+        coll = self._collection('COSAT_MONGO_COLLECTION_TOURNAMENTS', 'tournaments')
+        doc = coll.find_one({'cosatId': cosat_id})
+        if doc:
+            doc['_id'] = str(doc.get('_id', ''))
+        return doc
+
 
 # ── Document normalizers (module-level, testable without MongoDB) ─────────────
 
@@ -361,12 +389,90 @@ def _normalize_tournament(doc: dict) -> Optional[dict]:
     }
 
 
+# Priority-ordered list of MongoDB fields that may contain the player's category.
+# Tried in order; first non-empty string wins.
+_PLAYER_CATEGORY_FIELDS = [
+    'rankingCategory',   # crawler schema primary field
+    'category',          # common alternative
+    'categoryName',      # verbose variant
+    'eventName',         # TournamentSoftware event = category
+    'event',             # shorter form
+    'drawName',          # draw name often equals category
+    'draw',              # TournamentSoftware draw type
+    'discipline',        # ITF / TS discipline field
+    'ageCategory',       # age-based classification
+    'group',             # group/level in some systems
+    'division',          # division = category in some
+    'class',             # class field
+    'grade',             # grade used by some federations
+    'eventId',           # last resort: use the ID as category text
+]
+
+
+def _extract_category_text(doc: dict) -> tuple[str, str]:
+    """
+    Try all known category field candidates in priority order.
+    Returns (category_text, field_name) where field_name is the source field.
+    Returns ('', '') if no category found.
+    Never invents or infers a category from tournament name.
+    """
+    for field in _PLAYER_CATEGORY_FIELDS:
+        value = doc.get(field)
+        if value and str(value).strip():
+            text = str(value).strip()
+            # Skip if it looks like a raw UUID/ObjectId — not a meaningful category
+            if _is_id_like(text) and field == 'eventId':
+                continue
+            if len(text) >= 2:
+                return text, field
+    return '', ''
+
+
+def _is_id_like(text: str) -> bool:
+    """True if the text looks like a UUID or hex ID rather than a category name."""
+    import re
+    # UUID pattern: 8-4-4-4-12 hex chars
+    if re.match(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+                text, re.IGNORECASE):
+        return True
+    # Pure hex string > 16 chars
+    if re.match(r'^[0-9a-f]{16,}$', text, re.IGNORECASE):
+        return True
+    return False
+
+
+def player_field_inventory(doc: dict) -> dict:
+    """
+    Return a safe field inventory of a player doc for debug/reporting.
+
+    Redacts name, DOB, country — keeps only structural/category fields.
+    Used by --debug-sample to show what fields are present without
+    leaking personal data.
+    """
+    REDACTED = {'name', 'dob', 'countryCode'}
+    inventory = {}
+    for key, value in doc.items():
+        if key in REDACTED:
+            inventory[key] = '<redacted>'
+        elif key == '_id':
+            inventory[key] = str(value)
+        elif value is None or value == '':
+            inventory[key] = None
+        else:
+            inventory[key] = str(value)[:80]
+    return inventory
+
+
 def _normalize_player(doc: dict) -> Optional[dict]:
     """
     Convert a MongoDB players document to a FederationEntry-compatible dict.
 
     tournament_cosat_id links this entry to the parent tournament for upsert.
     payment_status is always 'unknown' — crawler does not capture payment info.
+
+    category_text is extracted via _extract_category_text() which tries
+    multiple field candidates in priority order. If no category found,
+    returns None — entries without category are always rejected.
     """
     name = (doc.get('name') or '').strip()
     if not name:
@@ -379,7 +485,7 @@ def _normalize_player(doc: dict) -> Optional[dict]:
         or ''
     )
     player_external_id = f'cosat:{raw_ext_id}' if raw_ext_id else ''
-    category_text = (doc.get('rankingCategory') or '').strip()
+    category_text, category_field = _extract_category_text(doc)
 
     last_updated = doc.get('lastUpdated') or doc.get('updatedAt')
 
@@ -388,6 +494,7 @@ def _normalize_player(doc: dict) -> Optional[dict]:
         'tournament_cosat_id': tournament_id,
         'player_external_id': player_external_id,
         'category_text': category_text,
+        '_category_field': category_field,  # which field provided the category (for debug)
         'ranking_position': None,
         'payment_status': 'unknown',
         'removed_or_replaced': False,

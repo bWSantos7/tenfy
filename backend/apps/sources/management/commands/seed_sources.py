@@ -47,6 +47,18 @@ ORGANIZATIONS = [
         'type': Organization.TYPE_PLATFORM,
         'website_url': 'https://letzplay.me',
     },
+    {
+        'name': 'Federacao Baiana de Tenis',
+        'short_name': 'FBT',
+        'type': Organization.TYPE_FEDERATION,
+        'website_url': 'https://fbt.com.br',
+        'state': 'BA',
+        'description': (
+            'Federacao Baiana de Tenis. '
+            'Listas de inscritos acessadas via workflow n8n (importacao assistida). '
+            'Sem conector automatico de calendario — torneios importados manualmente ou via admin.'
+        ),
+    },
 ]
 
 
@@ -96,6 +108,33 @@ DATA_SOURCES = [
             'months_ahead': 5,
         },
     },
+    {
+        'org_short': 'FBT',
+        'source_name': 'FBT - Federacao Baiana de Tenis (importacao assistida)',
+        'slug': 'fbt-public',
+        'source_type': DataSource.SOURCE_TYPE_HTML,
+        'base_url': 'https://fbt.com.br',
+        'connector_key': 'fbt_public',
+        'fetch_schedule_cron': '',
+        'priority': 'P2',
+        'enabled': False,  # no public calendar connector yet
+        'config_json': {
+            'status': 'no_public_calendar',
+            'notes': (
+                'FBT nao expoe calendario publico de torneios via HTML/API estruturada. '
+                'Torneios devem ser cadastrados manualmente via admin ou importados pelo operador. '
+                'Listas de inscritos sao obtidas via workflow n8n FBT (importacao assistida). '
+                'Habilitado automaticamente quando conector de calendario for implementado.'
+            ),
+            'parser_available': True,
+            'parser_note': 'parse_fbt_entries() disponivel em parsers.py para paginas de inscritos.',
+        },
+        'legal_notes': (
+            'Dados publicos de https://fbt.com.br. '
+            'Coleta apenas paginas abertas ao publico. '
+            'Sem scraping de areas protegidas, login ou paywall.'
+        ),
+    },
 ]
 
 
@@ -117,20 +156,20 @@ class Command(BaseCommand):
             if not org:
                 self.stderr.write(f'Org {entry["org_short"]} not found, skipping')
                 continue
-            DataSource.objects.update_or_create(
-                slug=entry['slug'],
-                defaults={
-                    'organization': org,
-                    'source_name': entry['source_name'],
-                    'source_type': entry['source_type'],
-                    'base_url': entry['base_url'],
-                    'connector_key': entry['connector_key'],
-                    'fetch_schedule_cron': entry['fetch_schedule_cron'],
-                    'priority': entry['priority'],
-                    'config_json': entry['config_json'],
-                    'enabled': True,
-                },
-            )
+            defaults: dict = {
+                'organization': org,
+                'source_name': entry['source_name'],
+                'source_type': entry['source_type'],
+                'base_url': entry['base_url'],
+                'connector_key': entry['connector_key'],
+                'fetch_schedule_cron': entry.get('fetch_schedule_cron', ''),
+                'priority': entry['priority'],
+                'config_json': entry['config_json'],
+                'enabled': entry.get('enabled', True),
+            }
+            if entry.get('legal_notes'):
+                defaults['legal_notes'] = entry['legal_notes']
+            DataSource.objects.update_or_create(slug=entry['slug'], defaults=defaults)
 
         self.stdout.write(self.style.SUCCESS(
             f'Organizations: {len(ORGANIZATIONS)} | DataSources: {len(DATA_SOURCES)}'

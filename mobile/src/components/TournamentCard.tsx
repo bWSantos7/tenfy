@@ -117,7 +117,12 @@ export function TournamentCard({
               <Ionicons name="calendar-outline" size={13} color={colors.textMuted} />
               <AppText variant="caption" style={{ color: colors.textSecondary }}>{fmtDateRange(edition.start_date, edition.end_date)}</AppText>
             </View>
-          ) : null}
+          ) : (
+            <View style={styles.infoItem}>
+              <Ionicons name="calendar-outline" size={13} color={colors.textMuted} />
+              <AppText variant="caption" style={{ color: colors.textMuted, fontStyle: 'italic' }}>Data a confirmar</AppText>
+            </View>
+          )}
           {location ? (
             <View style={styles.infoItem}>
               <Ionicons name="location-outline" size={13} color={colors.textMuted} />

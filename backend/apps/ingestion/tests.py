@@ -59,6 +59,36 @@ class YouthClassifierTestCase(TestCase):
         cats = [{'source_text': 'Sub-16 Feminino'}]
         self.assertTrue(_classify_is_youth('CBT', 'Circuit', cats))
 
+    def test_cosat_14_anos_spanish_in_title(self):
+        """'Copa COSAT 14 años' must be classified as youth — Spanish age in title."""
+        from apps.ingestion.persistence import _classify_is_youth
+        self.assertTrue(_classify_is_youth('COSAT', 'Copa COSAT 14 años', []))
+
+    def test_cosat_u14_category(self):
+        """U14 prefix in categories must trigger youth classification."""
+        from apps.ingestion.persistence import _classify_is_youth
+        cats = [{'source_text': 'U14 Boys Singles'}, {'source_text': 'U14 Girls Singles'}]
+        self.assertTrue(_classify_is_youth('COSAT', 'Copa COSAT', cats))
+
+    def test_anos_spanish_in_category(self):
+        """'14 años' in category text (Spanish) triggers youth."""
+        from apps.ingestion.persistence import _classify_is_youth
+        cats = [{'source_text': '14 Años Masculino'}]
+        self.assertTrue(_classify_is_youth('COSAT', 'Open COSAT', cats))
+
+    def test_u18_in_title_is_youth(self):
+        """U18 in title triggers youth classification."""
+        from apps.ingestion.persistence import _classify_is_youth
+        self.assertTrue(_classify_is_youth('ITF', 'ITF U18 South America', []))
+
+    def test_adult_open_still_not_youth_after_fix(self):
+        """Regression: adult open still not youth after classification fix."""
+        from apps.ingestion.persistence import _classify_is_youth
+        self.assertFalse(_classify_is_youth('FPT', 'Aberto FPT Adulto', [
+            {'source_text': 'Open Masculino'},
+            {'source_text': '40+ Masculino'},
+        ]))
+
 
 # ── COSAT MongoDB connector tests ─────────────────────────────────────────────
 

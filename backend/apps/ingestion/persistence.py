@@ -55,18 +55,27 @@ _YOUTH_KEYWORDS = {
 
 def _classify_is_youth(circuit: str, title: str, categories: list) -> bool:
     """Return True if the tournament appears to be for players up to 18 years old."""
+    import re as _re
     combined = (circuit + ' ' + title).lower()
     if any(kw in combined for kw in _YOUTH_KEYWORDS):
+        return True
+    # Age in title: "14 anos" (PT), "14 años" (ES), "U14", "Sub-16"
+    if _re.search(r'\b(8|9|10|11|12|13|14|15|16|17|18)\s*a[ñn]os?\b', combined):
+        return True
+    if _re.search(r'\b[Uu](8|9|10|11|12|13|14|15|16|17|18)\b', combined):
+        return True
+    if _re.search(r'\bsub[- ]?(8|9|10|11|12|13|14|15|16|17|18)\b', combined):
         return True
     for cat in categories:
         cat_text = (cat.get('source_text') or '').lower()
         if any(kw in cat_text for kw in _YOUTH_KEYWORDS):
             return True
-        # Category descriptions with specific age ≤ 18 (e.g. "12 anos", "sub-16")
-        import re
-        if re.search(r'\b(8|9|10|11|12|13|14|15|16|17|18)\s*anos?\b', cat_text):
+        # Category descriptions with specific age ≤ 18 (PT + ES + U-prefix)
+        if _re.search(r'\b(8|9|10|11|12|13|14|15|16|17|18)\s*a[ñn]os?\b', cat_text):
             return True
-        if re.search(r'\bsub[- ](8|9|10|11|12|13|14|15|16|17|18)\b', cat_text):
+        if _re.search(r'\b[Uu](8|9|10|11|12|13|14|15|16|17|18)\b', cat_text):
+            return True
+        if _re.search(r'\bsub[- ]?(8|9|10|11|12|13|14|15|16|17|18)\b', cat_text):
             return True
     return False
 
@@ -240,7 +249,9 @@ class TournamentPersister:
                 ed.fetched_at = timezone.now()
                 ed.raw_content_hash = content_hash
                 ed.raw_payload = data
-                if ed.is_youth is None:
+                # Always update is_youth from classifier unless manual override.
+                # This ensures a corrected classifier fixes existing editions on re-sync.
+                if not ed.is_manual_override:
                     ed.is_youth = is_youth
                 if fingerprint and not ed.dedup_fingerprint:
                     ed.dedup_fingerprint = fingerprint

@@ -43,6 +43,10 @@ class TournamentEditionFilter(filters.FilterSet):
         return queryset.filter(
             Q(title__icontains=value)
             | Q(tournament__canonical_name__icontains=value)
+            | Q(tournament__circuit__icontains=value)
+            | Q(tournament__organization__name__icontains=value)
+            | Q(tournament__organization__short_name__icontains=value)
+            | Q(source_name__icontains=value)
             | Q(venue__name__icontains=value)
             | Q(venue__city__icontains=value)
         )

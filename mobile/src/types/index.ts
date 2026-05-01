@@ -304,6 +304,8 @@ export interface FederationEntry {
   confidence: 'high' | 'medium' | 'low';
   removed_or_replaced: boolean;
   replacement_reason: string;
+  player_country_name: string;
+  player_country_code: string;
   notes: string;
   synced_at: string;
   slot_position: number | null;

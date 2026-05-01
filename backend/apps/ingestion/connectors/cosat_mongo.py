@@ -441,15 +441,67 @@ def _is_id_like(text: str) -> bool:
     return False
 
 
+# Priority-ordered list of country name fields in player documents
+_PLAYER_COUNTRY_NAME_FIELDS = [
+    'countryName',   # verbose form
+    'country',       # most common single-field form
+    'nationality',   # nationality string
+    'nation',        # some COSAT docs use 'nation'
+]
+
+# Priority-ordered list of country code fields
+_PLAYER_COUNTRY_CODE_FIELDS = [
+    'countryCode',   # ISO 3166-1 alpha-3 or alpha-2
+    'iocCode',       # IOC 3-letter code
+    'country',       # sometimes IS the code (e.g. "ARG")
+    'flag',          # sometimes country code stored as flag field
+]
+
+
+def _extract_country(doc: dict) -> tuple[str, str]:
+    """
+    Extract (country_name, country_code) from a player document.
+
+    country_name: full country name (e.g. "Argentina")
+    country_code: ISO/IOC code (e.g. "ARG")
+
+    Returns ('', '') when absent. Never invents data.
+    """
+    # Country name
+    country_name = ''
+    for field in _PLAYER_COUNTRY_NAME_FIELDS:
+        val = (doc.get(field) or '').strip()
+        if val and len(val) > 1 and not val.isdigit():
+            # Treat values that look like codes (≤3 uppercase chars) as codes not names
+            if len(val) <= 3 and val.isupper():
+                continue
+            country_name = val
+            break
+
+    # Country code
+    country_code = ''
+    for field in _PLAYER_COUNTRY_CODE_FIELDS:
+        val = (doc.get(field) or '').strip()
+        if val and 2 <= len(val) <= 3 and val.isalpha():
+            country_code = val.upper()
+            break
+    # Fallback: derive code from name first 3 chars if we have a name but no code
+    # (Not done — never invent a code that's not in the source)
+
+    return country_name, country_code
+
+
 def player_field_inventory(doc: dict) -> dict:
     """
     Return a safe field inventory of a player doc for debug/reporting.
 
-    Redacts name, DOB, country — keeps only structural/category fields.
+    Redacts name and DOB — keeps structural/category/country fields visible
+    since country is published publicly on the COSAT site.
     Used by --debug-sample to show what fields are present without
     leaking personal data.
     """
-    REDACTED = {'name', 'dob', 'countryCode'}
+    # Redact personal data (name, DOB) — country is public (shown on COSAT site)
+    REDACTED = {'name', 'dob'}
     inventory = {}
     for key, value in doc.items():
         if key in REDACTED:
@@ -486,6 +538,7 @@ def _normalize_player(doc: dict) -> Optional[dict]:
     )
     player_external_id = f'cosat:{raw_ext_id}' if raw_ext_id else ''
     category_text, category_field = _extract_category_text(doc)
+    country_name, country_code = _extract_country(doc)
 
     last_updated = doc.get('lastUpdated') or doc.get('updatedAt')
 
@@ -495,6 +548,8 @@ def _normalize_player(doc: dict) -> Optional[dict]:
         'player_external_id': player_external_id,
         'category_text': category_text,
         '_category_field': category_field,  # which field provided the category (for debug)
+        'player_country_name': country_name,
+        'player_country_code': country_code,
         'ranking_position': None,
         'payment_status': 'unknown',
         'removed_or_replaced': False,
@@ -511,6 +566,7 @@ def _normalize_player(doc: dict) -> Optional[dict]:
             'rankingPlayerId': doc.get('rankingPlayerId'),
             'dob': doc.get('dob'),
             'country': doc.get('country'),
+            'countryCode': doc.get('countryCode'),
         },
     }
 

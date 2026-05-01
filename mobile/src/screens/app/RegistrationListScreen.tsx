@@ -254,6 +254,11 @@ function EntryRow({ entry, maxP, colors }: { entry: FederationEntry; maxP: numbe
           <AppText variant="body" style={{ fontWeight: '600', textDecorationLine: isRemoved ? 'line-through' : 'none' }}>
             {entry.player_name}
           </AppText>
+          {entry.player_country_name ? (
+            <AppText variant="caption" style={{ color: colors.textMuted, fontSize: 11, marginTop: 1 }}>
+              {entry.player_country_name}
+            </AppText>
+          ) : null}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
             {entry.ranking_position != null ? (
               <AppText variant="caption" style={{ color: colors.textMuted }}>

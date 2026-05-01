@@ -1600,3 +1600,101 @@ class QualityGateAutoFetchTestCase(TestCase):
         qg = res.data['quality_gate']
         self.assertFalse(qg['can_save'])
         self.assertIn('entries vazio — nenhum inscrito extraído', qg['reasons'])
+
+
+class FederationEntryCountryFieldsTestCase(TestCase):
+    """Test player_country_name and player_country_code on FederationEntry."""
+
+    def setUp(self):
+        from apps.sources.models import Organization, DataSource
+        from apps.tournaments.models import Tournament, TournamentEdition
+
+        org, _ = Organization.objects.get_or_create(
+            name='COSAT_REG_TEST',
+            defaults={'short_name': 'COSAT', 'type': Organization.TYPE_CONFEDERATION},
+        )
+        ds, _ = DataSource.objects.get_or_create(
+            connector_key='cosat_reg_test',
+            defaults={
+                'organization': org, 'source_name': 'COSAT Reg Test',
+                'slug': 'cosat-reg-test',
+                'source_type': DataSource.SOURCE_TYPE_JSON,
+                'base_url': 'https://cosat.tournamentsoftware.com',
+            },
+        )
+        tournament, _ = Tournament.objects.get_or_create(
+            canonical_slug='cosat-country-test-open',
+            defaults={'canonical_name': 'COSAT Country Test Open', 'circuit': 'COSAT', 'organization': org},
+        )
+        self.edition, _ = TournamentEdition.objects.get_or_create(
+            external_id='cosat:country-test-open',
+            defaults={
+                'tournament': tournament, 'data_source': ds,
+                'title': 'COSAT Country Test Open',
+                'season_year': 2025, 'status': 'unknown',
+            },
+        )
+
+    def test_country_fields_save_and_retrieve(self):
+        """player_country_name and player_country_code are saved and returned correctly."""
+        from apps.registrations.models import FederationEntry
+        entry = FederationEntry.objects.create(
+            edition=self.edition,
+            category_text='U14 Boys',
+            player_name='Carlos Test',
+            player_external_id='cosat:ct-001',
+            source='cosat',
+            player_country_name='Argentina',
+            player_country_code='ARG',
+        )
+        retrieved = FederationEntry.objects.get(pk=entry.pk)
+        self.assertEqual(retrieved.player_country_name, 'Argentina')
+        self.assertEqual(retrieved.player_country_code, 'ARG')
+
+    def test_country_fields_default_blank(self):
+        """CBT/FPT entries without country → fields default to empty string."""
+        from apps.registrations.models import FederationEntry
+        entry = FederationEntry.objects.create(
+            edition=self.edition,
+            category_text='U16 Masc',
+            player_name='João CBT',
+            player_external_id='cbt:cbt-001',
+            source='cbt',
+        )
+        retrieved = FederationEntry.objects.get(pk=entry.pk)
+        self.assertEqual(retrieved.player_country_name, '')
+        self.assertEqual(retrieved.player_country_code, '')
+
+    def test_serializer_exposes_country_fields(self):
+        """FederationEntrySerializer includes player_country_name and player_country_code."""
+        from apps.registrations.models import FederationEntry
+        from apps.registrations.serializers import FederationEntrySerializer
+        entry = FederationEntry.objects.create(
+            edition=self.edition,
+            category_text='U14 Girls',
+            player_name='María Test',
+            player_external_id='cosat:ct-002',
+            source='cosat',
+            player_country_name='Chile',
+            player_country_code='CHI',
+        )
+        data = FederationEntrySerializer(entry).data
+        self.assertIn('player_country_name', data)
+        self.assertIn('player_country_code', data)
+        self.assertEqual(data['player_country_name'], 'Chile')
+        self.assertEqual(data['player_country_code'], 'CHI')
+
+    def test_serializer_country_empty_for_non_cosat(self):
+        """Non-COSAT entries have empty country fields in serializer output."""
+        from apps.registrations.models import FederationEntry
+        from apps.registrations.serializers import FederationEntrySerializer
+        entry = FederationEntry.objects.create(
+            edition=self.edition,
+            category_text='U16 Masc',
+            player_name='Pedro FPT',
+            player_external_id='fpt:fpt-001',
+            source='fpt',
+        )
+        data = FederationEntrySerializer(entry).data
+        self.assertEqual(data['player_country_name'], '')
+        self.assertEqual(data['player_country_code'], '')

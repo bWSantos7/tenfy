@@ -221,16 +221,15 @@ class Command(BaseCommand):
                     category_text = (player.get('category_text') or '').strip()
                     category_field = player.get('_category_field', '')
 
-                    # Reject entries without category — never invent
+                    # COSAT fallback: when no category in any field, use "Geral do torneio"
+                    # This is an explicit architectural decision, not invented data.
+                    # The notes field records the warning for audit transparency.
                     if not category_text:
-                        logger.debug(
-                            'sync_cosat: skipping player "%s" for tournament %s — '
-                            'no category_text found in any candidate field',
-                            player_name, tid,
-                        )
-                        stats['entries_rejected'] += 1
-                        rejected += 1
-                        continue
+                        player['category_text'] = 'Geral do torneio'
+                        player['_category_field'] = '_fallback'
+                        player['confidence'] = 'medium'
+                        player['_cosat_category_fallback'] = True
+                        category_text = 'Geral do torneio'
 
                     if category_field:
                         category_field_hits[category_field] = (
@@ -268,9 +267,10 @@ class Command(BaseCommand):
                     )
                 if rejected:
                     self.stdout.write(
-                        f'    {rejected} rejected — no category found in any of: '
-                        + ', '.join(_PLAYER_CATEGORY_FIELDS[:6]) + '…'
-                        + ' — run --debug-sample to inspect raw fields'
+                        f'    {rejected} using "Geral do torneio" fallback '
+                        f'(no category found in any of: '
+                        + ', '.join(_PLAYER_CATEGORY_FIELDS[:6]) + '… '
+                        + '— run --debug-sample to inspect raw fields)'
                     )
                 if category_field_hits:
                     self.stdout.write(
@@ -459,6 +459,14 @@ class Command(BaseCommand):
                 f'cosat:{_slug(player_name)}:{_slug(category_text)}'
             )
 
+        # Build notes: record fallback warning when category was not in source
+        notes = player.get('notes', '')
+        if player.get('_cosat_category_fallback'):
+            notes = (
+                'COSAT não expõe categoria na listagem de players; '
+                'atleta importado em "Geral do torneio".'
+            )
+
         defaults = {
             'player_name': player_name,
             'ranking_position': player.get('ranking_position'),
@@ -467,6 +475,9 @@ class Command(BaseCommand):
             'replacement_reason': player.get('replacement_reason', ''),
             'source_url': player.get('source_url', ''),
             'confidence': player.get('confidence', 'medium'),
+            'player_country_name': player.get('player_country_name', ''),
+            'player_country_code': player.get('player_country_code', ''),
+            'notes': notes,
             'raw_data': player.get('_raw', {}),
         }
 

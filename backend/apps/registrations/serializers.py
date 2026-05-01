@@ -244,6 +244,7 @@ class FederationEntrySerializer(serializers.ModelSerializer):
             'ranking_position', 'payment_status', 'payment_status_label',
             'source', 'source_label', 'source_url', 'confidence',
             'removed_or_replaced', 'replacement_reason',
+            'player_country_name', 'player_country_code',
             'notes', 'synced_at',
             'slot_position', 'in_draw', 'status', 'status_label',
         )
@@ -287,4 +288,5 @@ class FederationEntryWriteSerializer(serializers.ModelSerializer):
             'edition', 'category_text', 'player_name', 'player_external_id',
             'ranking_position', 'payment_status', 'source', 'source_url',
             'confidence', 'removed_or_replaced', 'replacement_reason', 'notes',
+            'player_country_name', 'player_country_code',
         )

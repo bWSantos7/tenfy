@@ -213,6 +213,18 @@ class FederationEntry(TimestampedModel):
         help_text='Grau de confiança nos dados desta entrada',
     )
     notes = models.CharField(max_length=300, blank=True)
+    player_country_name = models.CharField(
+        max_length=100,
+        blank=True,
+        default='',
+        help_text='País/nacionalidade do atleta conforme publicado pela fonte (ex: Argentina)',
+    )
+    player_country_code = models.CharField(
+        max_length=10,
+        blank=True,
+        default='',
+        help_text='Código ISO do país (ex: ARG, BR) conforme publicado pela fonte',
+    )
     raw_data = models.JSONField(default=dict, blank=True)
     synced_at = models.DateTimeField(auto_now=True)
 

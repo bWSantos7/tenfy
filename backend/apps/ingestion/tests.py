@@ -291,6 +291,65 @@ class CosatMongoNormalizationTestCase(TestCase):
         self.assertEqual(inventory['rankingCategory'], 'U14')
         self.assertEqual(inventory['tournamentId'], 'abc')
 
+    # ── _extract_country ──────────────────────────────────────────────────────
+
+    def test_extract_country_from_countryName_and_countryCode(self):
+        from apps.ingestion.connectors.cosat_mongo import _extract_country
+        doc = {'countryName': 'Argentina', 'countryCode': 'ARG'}
+        name, code = _extract_country(doc)
+        self.assertEqual(name, 'Argentina')
+        self.assertEqual(code, 'ARG')
+
+    def test_extract_country_fallback_to_country_field(self):
+        from apps.ingestion.connectors.cosat_mongo import _extract_country
+        doc = {'country': 'Brasil'}
+        name, code = _extract_country(doc)
+        self.assertEqual(name, 'Brasil')
+
+    def test_extract_country_code_only(self):
+        from apps.ingestion.connectors.cosat_mongo import _extract_country
+        doc = {'countryCode': 'CHI'}
+        name, code = _extract_country(doc)
+        self.assertEqual(code, 'CHI')
+
+    def test_extract_country_absent_returns_empty(self):
+        from apps.ingestion.connectors.cosat_mongo import _extract_country
+        doc = {'name': 'Player X', 'tournamentId': 't1'}
+        name, code = _extract_country(doc)
+        self.assertEqual(name, '')
+        self.assertEqual(code, '')
+
+    def test_extract_country_code_field_treated_as_code_not_name(self):
+        """2-3 uppercase chars in country field is treated as code, not full name."""
+        from apps.ingestion.connectors.cosat_mongo import _extract_country
+        doc = {'country': 'ARG'}
+        name, code = _extract_country(doc)
+        # 'ARG' should be captured as code, not name
+        self.assertEqual(code, 'ARG')
+
+    def test_normalize_player_includes_country(self):
+        from apps.ingestion.connectors.cosat_mongo import _normalize_player
+        doc = {
+            'name': 'Pablo García',
+            'tournamentId': 'abc',
+            'profileId': 'P-999',
+            'rankingCategory': 'U16 Boys',
+            'countryName': 'Argentina',
+            'countryCode': 'ARG',
+        }
+        result = _normalize_player(doc)
+        self.assertIsNotNone(result)
+        self.assertEqual(result['player_country_name'], 'Argentina')
+        self.assertEqual(result['player_country_code'], 'ARG')
+
+    def test_normalize_player_no_country_returns_empty_strings(self):
+        from apps.ingestion.connectors.cosat_mongo import _normalize_player
+        doc = {'name': 'Player X', 'tournamentId': 'abc', 'rankingCategory': 'U14'}
+        result = _normalize_player(doc)
+        self.assertIsNotNone(result)
+        self.assertEqual(result['player_country_name'], '')
+        self.assertEqual(result['player_country_code'], '')
+
     # ── Date parsing ──────────────────────────────────────────────────────────
 
     def test_parse_date_range_same_month(self):
@@ -515,13 +574,44 @@ class SyncCosatCommandTestCase(TestCase):
         self.assertIn('category_text', str(ctx.exception).lower())
 
     @override_settings(COSAT_MONGO_ENABLED=True)
-    def test_command_rejects_player_without_category_not_saved(self):
-        """Command skips (not saves) players with no category_text."""
+    def test_player_without_category_uses_geral_do_torneio_fallback(self):
+        """COSAT player with no category → saved as 'Geral do torneio' with warning in notes."""
         from django.core.management import call_command
         from apps.registrations.models import FederationEntry
+        from apps.sources.models import Organization, DataSource
+        from apps.tournaments.models import Tournament, TournamentEdition
 
-        before = FederationEntry.objects.count()
-        player_no_cat = dict(self.SAMPLE_PLAYER, category_text='')
+        # Create minimal DB structure for the test
+        org, _ = Organization.objects.get_or_create(
+            name='COSAT_TEST_ORG',
+            defaults={'short_name': 'COSAT', 'type': Organization.TYPE_CONFEDERATION},
+        )
+        ds, _ = DataSource.objects.get_or_create(
+            connector_key='cosat_mongo_test',
+            defaults={
+                'organization': org,
+                'source_name': 'COSAT Test',
+                'slug': 'cosat-mongo-test',
+                'source_type': DataSource.SOURCE_TYPE_JSON,
+                'base_url': 'https://cosat.tournamentsoftware.com',
+            },
+        )
+        tournament, _ = Tournament.objects.get_or_create(
+            canonical_slug='cosat-test001-open',
+            defaults={'canonical_name': 'COSAT Test Open', 'circuit': 'COSAT', 'organization': org},
+        )
+        edition, _ = TournamentEdition.objects.get_or_create(
+            external_id='cosat:test001',
+            defaults={
+                'tournament': tournament,
+                'data_source': ds,
+                'title': 'COSAT Test Open',
+                'season_year': 2025,
+                'status': 'unknown',
+            },
+        )
+
+        player_no_cat = dict(self.SAMPLE_PLAYER, category_text='', player_external_id='cosat:fallback-test-001')
 
         with patch('apps.ingestion.connectors.cosat_mongo.CosatMongoConnector.is_available',
                    return_value=True), \
@@ -533,7 +623,77 @@ class SyncCosatCommandTestCase(TestCase):
                 'sync_cosat_from_mongo', '--no-dry-run', '--import-entries',
                 '--tournament-id', 'test001', verbosity=0,
             )
-        self.assertEqual(FederationEntry.objects.count(), before)
+
+        entry = FederationEntry.objects.filter(
+            edition=edition,
+            player_external_id='cosat:fallback-test-001',
+        ).first()
+        self.assertIsNotNone(entry, 'Entry should be saved with fallback category')
+        self.assertEqual(entry.category_text, 'Geral do torneio')
+        self.assertIn('COSAT', entry.notes)
+        self.assertIn('Geral do torneio', entry.notes)
+
+    def test_player_with_country_saved_to_federation_entry(self):
+        """COSAT player with country → _upsert_entry saves player_country_name/code."""
+        from apps.registrations.models import FederationEntry
+        from apps.sources.models import Organization, DataSource
+        from apps.tournaments.models import Tournament, TournamentEdition
+        from apps.ingestion.management.commands.sync_cosat_from_mongo import Command
+
+        # Create minimal DB fixtures
+        org, _ = Organization.objects.get_or_create(
+            name='COSAT_UPSERT_TEST',
+            defaults={'short_name': 'COSAT', 'type': Organization.TYPE_CONFEDERATION},
+        )
+        ds, _ = DataSource.objects.get_or_create(
+            connector_key='cosat_upsert_test',
+            defaults={
+                'organization': org, 'source_name': 'COSAT Upsert Test',
+                'slug': 'cosat-upsert-test',
+                'source_type': DataSource.SOURCE_TYPE_JSON,
+                'base_url': 'https://cosat.tournamentsoftware.com',
+            },
+        )
+        tournament, _ = Tournament.objects.get_or_create(
+            canonical_slug='cosat-upsert-test-open',
+            defaults={'canonical_name': 'COSAT Upsert Test Open', 'circuit': 'COSAT', 'organization': org},
+        )
+        edition, _ = TournamentEdition.objects.get_or_create(
+            external_id='cosat:upsert-test',
+            defaults={
+                'tournament': tournament, 'data_source': ds,
+                'title': 'COSAT Upsert Test', 'season_year': 2025, 'status': 'unknown',
+            },
+        )
+
+        # Call _upsert_entry directly — no MongoDB connection needed
+        cmd = Command()
+        cmd.stdout = type('S', (), {'write': lambda s, x: None})()
+        cmd.style = type('St', (), {'ERROR': lambda s, x: x, 'WARNING': lambda s, x: x})()
+
+        player_with_country = {
+            'player_name': 'Pablo García',
+            'player_external_id': 'cosat:country-direct-001',
+            'category_text': 'U14 Girls Singles',
+            'player_country_name': 'Argentina',
+            'player_country_code': 'ARG',
+            'ranking_position': None,
+            'payment_status': 'unknown',
+            'removed_or_replaced': False,
+            'replacement_reason': '',
+            'source_url': '',
+            'confidence': 'medium',
+            '_raw': {},
+        }
+        cmd._upsert_entry(player_with_country, edition.id)
+
+        entry = FederationEntry.objects.filter(
+            edition=edition,
+            player_external_id='cosat:country-direct-001',
+        ).first()
+        self.assertIsNotNone(entry, 'Entry should be saved')
+        self.assertEqual(entry.player_country_name, 'Argentina')
+        self.assertEqual(entry.player_country_code, 'ARG')
 
     # ── Secrets: URI not in logs ──────────────────────────────────────────────
 

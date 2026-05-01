@@ -339,7 +339,7 @@ def _trunc(value: str, max_len: int, label: str = '') -> str:
     if len(v) <= max_len:
         return v
     logger.warning(
-        'CosatMongo: field "%s" truncated %d→%d chars: %r…',
+        'CosatMongo: field "%s" truncated %d->%d chars: %r...',
         label, len(v), max_len, v[:60],
     )
     return v[:max_len]

@@ -189,9 +189,21 @@ class Command(BaseCommand):
                 else:
                     stats['tournaments_updated'] += 1
             except Exception as exc:
-                logger.error('sync_cosat: tournament %s failed: %s', cosat_id, exc)
+                raw = t_data.get('_raw', {})
+                venue = t_data.get('venue') or {}
+                city_val = venue.get('city', '')
+                org_val = raw.get('organization', '')
+                logger.error(
+                    'sync_cosat: tournament %s (%s) failed: %s | '
+                    'venue.city=%d chars, venue.name=%d chars',
+                    cosat_id, title[:60], str(exc)[:300],
+                    len(city_val), len(org_val),
+                )
                 self.stdout.write(
-                    self.style.ERROR(f'  ERROR [{cosat_id}]: {exc}')
+                    self.style.ERROR(
+                        f'  ERROR [{cosat_id}] {title[:60]}: {str(exc)[:200]}'
+                        f' [city={len(city_val)}ch org={len(org_val)}ch]'
+                    )
                 )
                 stats['tournaments_error'] += 1
 

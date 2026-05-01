@@ -536,6 +536,68 @@ class CosatMongoNormalizationTestCase(TestCase):
         self.assertEqual(city, 'Bogotá')
         self.assertEqual(state, 'CO')
 
+    def test_trunc_short_value_unchanged(self):
+        from apps.ingestion.connectors.cosat_mongo import _trunc
+        self.assertEqual(_trunc('Buenos Aires', 120, 'city'), 'Buenos Aires')
+
+    def test_trunc_long_value_cut_to_max(self):
+        from apps.ingestion.connectors.cosat_mongo import _trunc
+        long_city = 'A' * 150
+        result = _trunc(long_city, 120, 'venue.city')
+        self.assertEqual(len(result), 120)
+
+    def test_trunc_normalizes_whitespace(self):
+        from apps.ingestion.connectors.cosat_mongo import _trunc
+        result = _trunc('City   Name   Extra', 120, 'city')
+        self.assertEqual(result, 'City Name Extra')
+
+    def test_normalize_tournament_long_city_truncated(self):
+        """Tournament with location >120 chars must not raise — city truncated."""
+        from apps.ingestion.connectors.cosat_mongo import _normalize_tournament
+        long_location = 'X' * 130  # no comma → whole string becomes city
+        doc = {
+            'cosatId': 'test-long-city',
+            'name': 'Long City Test',
+            'url': 'https://cosat.tournamentsoftware.com/tournament/test-long-city',
+            'location': long_location,
+            'country': 'BR',
+        }
+        result = _normalize_tournament(doc)
+        self.assertIsNotNone(result)
+        city = (result.get('venue') or {}).get('city', '')
+        self.assertLessEqual(len(city), 120, 'city must be ≤120 chars')
+
+    def test_normalize_tournament_long_organization_truncated(self):
+        """Tournament with organization name >200 chars must not raise — truncated."""
+        from apps.ingestion.connectors.cosat_mongo import _normalize_tournament
+        long_org = 'O' * 250
+        doc = {
+            'cosatId': 'test-long-org',
+            'name': 'Long Org Test',
+            'url': 'https://cosat.tournamentsoftware.com/tournament/test-long-org',
+            'organization': long_org,
+            'location': 'Bogotá, CO',
+        }
+        result = _normalize_tournament(doc)
+        self.assertIsNotNone(result)
+        venue_name = (result.get('venue') or {}).get('name', '')
+        self.assertLessEqual(len(venue_name), 200, 'venue.name must be ≤200 chars')
+
+    def test_normalize_tournament_long_location_preserved_in_raw(self):
+        """Original location (>120 chars) must be preserved in _raw even when truncated."""
+        from apps.ingestion.connectors.cosat_mongo import _normalize_tournament
+        long_location = 'L' * 130
+        doc = {
+            'cosatId': 'test-raw-location',
+            'name': 'Raw Location Test',
+            'url': 'https://cosat.tournamentsoftware.com/tournament/test-raw-location',
+            'location': long_location,
+        }
+        result = _normalize_tournament(doc)
+        self.assertIsNotNone(result)
+        self.assertEqual(result['_raw']['location'], long_location,
+                         'Original full location must be in _raw')
+
 
 class CosatMongoConnectorOfflineTestCase(TestCase):
     """Connector handles MongoDB being offline without crashing."""

@@ -325,6 +325,26 @@ class CosatMongoConnector:
 
 # ── Document normalizers (module-level, testable without MongoDB) ─────────────
 
+def _trunc(value: str, max_len: int, label: str = '') -> str:
+    """
+    Normalize whitespace and truncate to max_len.
+
+    Used to guard CharField values against DB varchar overflow before saving.
+    Logs a WARNING when truncation occurs so the raw value is traceable in logs.
+    Callers must preserve the original value in _raw for audit.
+    """
+    if not value:
+        return value
+    v = ' '.join(value.split())  # collapse whitespace
+    if len(v) <= max_len:
+        return v
+    logger.warning(
+        'CosatMongo: field "%s" truncated %d→%d chars: %r…',
+        label, len(v), max_len, v[:60],
+    )
+    return v[:max_len]
+
+
 def _normalize_tournament(doc: dict) -> Optional[dict]:
     """
     Convert a MongoDB tournaments document to the standard connector dict schema.
@@ -346,6 +366,11 @@ def _normalize_tournament(doc: dict) -> Optional[dict]:
     country = (doc.get('country') or 'BR').strip()
 
     city, state = _parse_location(location, country)
+
+    # Guard DB varchar limits — originals preserved in _raw below.
+    # Venue.city max_length=120, Venue.name max_length=200
+    city = _trunc(city, 120, f'cosat:{cosat_id}/venue.city')
+    organization = _trunc(organization, 200, f'cosat:{cosat_id}/venue.name')
 
     last_updated = doc.get('lastUpdated') or doc.get('updatedAt') or doc.get('createdAt')
 

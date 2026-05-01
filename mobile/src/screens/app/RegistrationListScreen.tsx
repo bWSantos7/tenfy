@@ -17,6 +17,8 @@ const STATUS_CONFIG: Record<string, { color: string; icon: string; label: string
   confirmed:       { color: '#39ff14', icon: 'checkmark-circle', label: 'Confirmado na chave' },
   waiting_list:    { color: '#f59e0b', icon: 'time',             label: 'Lista de espera' },
   pending_payment: { color: '#3b82f6', icon: 'card-outline',     label: 'Aguardando pagamento' },
+  // COSAT and international sources: payment not tracked — show as "Inscrito"
+  registered:      { color: '#6b7280', icon: 'person-add-outline', label: 'Inscrito' },
   removed: {
     color: '#ef4444',
     icon: 'close-circle',
@@ -180,6 +182,8 @@ function CategorySection({
   const { summary } = cat;
   const totalSlots = summary.total_slots ?? cat.max_participants;
   const drawFull = totalSlots != null && summary.filled_slots >= totalSlots;
+  // Detect COSAT source from first entry — payment info not available for COSAT
+  const isCosatSource = cat.entries[0]?.source === 'cosat';
 
   return (
     <Card style={{ padding: 0, overflow: 'hidden' }}>
@@ -200,18 +204,33 @@ function CategorySection({
         <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textMuted} />
       </Pressable>
 
-      {/* Summary pills */}
+      {/* Summary pills — COSAT: show only total (payment not tracked by source) */}
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 14, paddingBottom: 12 }}>
-        {[
-          { label: `${summary.total} inscrito${summary.total !== 1 ? 's' : ''}`, color: colors.textMuted },
-          { label: `${summary.in_draw} na chave`, color: '#39ff14' },
-          { label: `${summary.paid} pago${summary.paid !== 1 ? 's' : ''}`, color: '#3b82f6' },
-          { label: `${summary.pending} pendente${summary.pending !== 1 ? 's' : ''}`, color: '#f59e0b' },
-        ].map((pill) => (
-          <View key={pill.label} style={{ backgroundColor: `${pill.color}18`, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, borderWidth: 1, borderColor: `${pill.color}40` }}>
-            <AppText variant="caption" style={{ color: pill.color, fontWeight: '600', fontSize: 11 }}>{pill.label}</AppText>
-          </View>
-        ))}
+        {isCosatSource ? (
+          <>
+            <View style={{ backgroundColor: `${colors.textMuted}18`, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, borderWidth: 1, borderColor: `${colors.textMuted}40` }}>
+              <AppText variant="caption" style={{ color: colors.textMuted, fontWeight: '600', fontSize: 11 }}>
+                {summary.total} inscrito{summary.total !== 1 ? 's' : ''}
+              </AppText>
+            </View>
+            <View style={{ backgroundColor: `${colors.textMuted}10`, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, borderWidth: 1, borderColor: `${colors.textMuted}25` }}>
+              <AppText variant="caption" style={{ color: colors.textMuted, fontStyle: 'italic', fontSize: 11 }}>
+                Pagamento não informado pela fonte
+              </AppText>
+            </View>
+          </>
+        ) : (
+          [
+            { label: `${summary.total} inscrito${summary.total !== 1 ? 's' : ''}`, color: colors.textMuted },
+            { label: `${summary.in_draw} na chave`, color: '#39ff14' },
+            { label: `${summary.paid} pago${summary.paid !== 1 ? 's' : ''}`, color: '#3b82f6' },
+            { label: `${summary.pending} pendente${summary.pending !== 1 ? 's' : ''}`, color: '#f59e0b' },
+          ].map((pill) => (
+            <View key={pill.label} style={{ backgroundColor: `${pill.color}18`, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, borderWidth: 1, borderColor: `${pill.color}40` }}>
+              <AppText variant="caption" style={{ color: pill.color, fontWeight: '600', fontSize: 11 }}>{pill.label}</AppText>
+            </View>
+          ))
+        )}
       </View>
 
       {/* Entry list */}
@@ -231,6 +250,8 @@ function EntryRow({ entry, maxP, colors }: { entry: FederationEntry; maxP: numbe
   const payColor = PAYMENT_COLORS[entry.payment_status] ?? '#6b7280';
   const confCfg = CONFIDENCE_CONFIG[entry.confidence] ?? CONFIDENCE_CONFIG.medium;
   const isRemoved = entry.status === 'removed';
+  // COSAT: payment is not tracked — hide payment badge to avoid misleading "Não informado"
+  const showPaymentBadge = entry.source !== 'cosat' && entry.status !== 'registered';
 
   return (
     <View style={{
@@ -291,11 +312,13 @@ function EntryRow({ entry, maxP, colors }: { entry: FederationEntry; maxP: numbe
               {sc.label}
             </AppText>
           </View>
-          <View style={{ backgroundColor: `${payColor}20`, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 }}>
-            <AppText variant="caption" style={{ color: payColor, fontWeight: '600', fontSize: 10 }}>
-              {entry.payment_status_label}
-            </AppText>
-          </View>
+          {showPaymentBadge && (
+            <View style={{ backgroundColor: `${payColor}20`, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 }}>
+              <AppText variant="caption" style={{ color: payColor, fontWeight: '600', fontSize: 10 }}>
+                {entry.payment_status_label}
+              </AppText>
+            </View>
+          )}
           {/* Confidence indicator */}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
             <Ionicons name={confCfg.icon as any} size={10} color={confCfg.color} />

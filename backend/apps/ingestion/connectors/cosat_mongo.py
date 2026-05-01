@@ -57,10 +57,26 @@ def _sanitize_exc(exc: Exception) -> str:
 
 
 # Month abbreviation map (EN + ES/PT abbreviations from COSAT)
+# Spanish months added: ene, abr, may, jun, jul, ago, sep, oct, nov, dic
 _MONTH_MAP = {
     'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
     'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12,
     'ene': 1, 'abr': 4, 'ago': 8, 'set': 9, 'out': 10, 'dez': 12,
+    'dic': 12,  # Spanish December
+}
+
+# COSAT event code → Portuguese description
+# Used to normalize BS/GS/BD/GD codes to human-readable category names.
+_COSAT_EVENT_CODES = {
+    'BS': 'Masculino Simples',   # Boys Singles
+    'GS': 'Feminino Simples',    # Girls Singles
+    'BD': 'Masculino Duplas',    # Boys Doubles
+    'GD': 'Feminino Duplas',     # Girls Doubles
+    'XD': 'Duplas Mistas',       # Mixed Doubles
+    'MS': 'Masculino Simples',   # alternate notation
+    'WS': 'Feminino Simples',
+    'MD': 'Masculino Duplas',
+    'WD': 'Feminino Duplas',
 }
 
 
@@ -331,17 +347,31 @@ def _normalize_tournament(doc: dict) -> Optional[dict]:
 
     city, state = _parse_location(location, country)
 
-    date_range = (doc.get('dateRange') or '').strip()
-    start_date, end_date = _parse_date_range(date_range)
+    last_updated = doc.get('lastUpdated') or doc.get('updatedAt') or doc.get('createdAt')
 
-    # Categories from embedded events array
+    # Extract year hint from lastUpdated/createdAt for Spanish dateRange parsing
+    year_hint = 0
+    if isinstance(last_updated, datetime):
+        year_hint = last_updated.year
+    elif isinstance(last_updated, str) and len(last_updated) >= 4:
+        try:
+            year_hint = int(last_updated[:4])
+        except (ValueError, TypeError):
+            pass
+
+    date_range = (doc.get('dateRange') or '').strip()
+    start_date, end_date = _parse_date_range(date_range, year_hint=year_hint)
+
+    # Categories from embedded events array — normalize COSAT codes to human-readable names
     events = doc.get('events') or []
     categories = [
-        {'source_text': str(e.get('name', '')).strip(), 'price_brl': None, 'notes': ''}
+        {
+            'source_text': _normalize_cosat_event_name(str(e.get('name', '')).strip()),
+            'price_brl': None,
+            'notes': f'COSAT event code: {e.get("name", "")}' if e.get('name') else '',
+        }
         for e in events if e.get('name')
     ]
-
-    last_updated = doc.get('lastUpdated') or doc.get('updatedAt')
 
     from .base import BaseConnector
     slug = BaseConnector.slugify(f'cosat-{cosat_id}-{name}')
@@ -378,6 +408,7 @@ def _normalize_tournament(doc: dict) -> Optional[dict]:
             'organization': organization,
             'location': location,
             'country': country,
+            'dateRange': date_range,  # preserved for audit
             'categoriesCount': doc.get('categoriesCount'),
             'entriesCount': doc.get('entriesCount'),
             'lastUpdated': (
@@ -624,14 +655,67 @@ def _normalize_ranking(doc: dict) -> Optional[dict]:
 
 # ── Date / location helpers ───────────────────────────────────────────────────
 
-def _parse_date_range(date_range: str):
+def _normalize_cosat_event_name(name: str) -> str:
+    """
+    Normalize COSAT event code to Portuguese display name.
+
+    Examples:
+      'BS 14' → 'Sub-14 Masculino Simples'
+      'GS 14' → 'Sub-14 Feminino Simples'
+      'BD 16' → 'Sub-16 Masculino Duplas'
+      'GD 12' → 'Sub-12 Feminino Duplas'
+
+    Returns the original name unchanged when the pattern is not recognized,
+    so unknown codes are preserved without data loss.
+    """
+    if not name:
+        return name
+    m = re.match(r'^([A-Za-z]{2})\s*(\d{1,2})$', name.strip())
+    if not m:
+        return name
+    code = m.group(1).upper()
+    age = m.group(2)
+    event_type = _COSAT_EVENT_CODES.get(code)
+    if not event_type:
+        return name
+    return f'Sub-{age} {event_type}'
+
+
+def _parse_spanish_date(text: str, year: int):
+    """
+    Extract a date from a Spanish-format text fragment.
+
+    Handles: "lun. 27 de abr.", "sáb. 2 de may.", "27 de abr."
+    Returns datetime.date or None.
+    """
+    m = re.search(r'(\d{1,2})\s+de\s+(\w+)', text, re.IGNORECASE)
+    if not m:
+        return None
+    day = int(m.group(1))
+    month_str = m.group(2).lower()[:3]
+    month = _MONTH_MAP.get(month_str)
+    if not month or not year:
+        return None
+    try:
+        return datetime(year, month, day).date()
+    except ValueError:
+        return None
+
+
+def _parse_date_range(date_range: str, year_hint: int = 0):
     """
     Parse COSAT dateRange strings into (start_date, end_date).
 
-    Known crawler formats:
-      "10 - 15 Nov 2025"           → same month both ends
-      "10 Nov - 15 Nov 2025"       → explicit month both ends
-      "30 Nov - 5 Dec 2025"        → cross-month
+    Supported formats:
+      "10 - 15 Nov 2025"        → (2025-11-10, 2025-11-15)
+      "10 Nov - 15 Nov 2025"    → (2025-11-10, 2025-11-15)
+      "30 Nov - 5 Dec 2025"     → (2025-11-30, 2025-12-05)
+      "Inicio del torneo lun. 27 de abr. | Final del torneo sáb. 2 de may."
+                                 → uses year_hint (2026-04-27, 2026-05-02)
+
+    year_hint: preferred year for formats without explicit year (e.g. Spanish).
+               Falls back to current year when 0.
+
     Returns (None, None) when format is not recognised.
     """
     if not date_range:
@@ -639,7 +723,7 @@ def _parse_date_range(date_range: str):
 
     s = date_range.strip()
 
-    # "DD - DD Mon YYYY"  or  "DD Mon - DD Mon YYYY"
+    # Format 1: "DD - DD Mon YYYY"  or  "DD Mon - DD Mon YYYY"
     m1 = re.match(
         r'(\d{1,2})\s*(?:(\w+)\s*)?-\s*(\d{1,2})\s+(\w+)\s+(\d{4})',
         s, re.IGNORECASE,
@@ -655,6 +739,19 @@ def _parse_date_range(date_range: str):
                 return start, end
             except ValueError:
                 pass
+
+    # Format 2: Spanish — "Inicio del torneo X. DD de MMM. | Final del torneo X. DD de MMM."
+    # The year comes from year_hint (lastUpdated/createdAt of the Mongo document).
+    if '|' in s:
+        parts = s.split('|', 1)
+        year = year_hint or datetime.now().year
+        start = _parse_spanish_date(parts[0], year)
+        end = _parse_spanish_date(parts[1], year)
+        if start and end:
+            # Sanity: if end < start, end spans into the next year
+            if end < start:
+                end = _parse_spanish_date(parts[1], year + 1) or end
+            return start, end
 
     return None, None
 

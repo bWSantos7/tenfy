@@ -1698,3 +1698,102 @@ class FederationEntryCountryFieldsTestCase(TestCase):
         data = FederationEntrySerializer(entry).data
         self.assertEqual(data['player_country_name'], '')
         self.assertEqual(data['player_country_code'], '')
+
+
+class CosatPaymentStatusTestCase(TestCase):
+    """COSAT source with unknown payment → status='registered', not 'pending_payment'."""
+
+    def setUp(self):
+        from apps.sources.models import Organization, DataSource
+        from apps.tournaments.models import Tournament, TournamentEdition
+
+        org, _ = Organization.objects.get_or_create(
+            name='COSAT_PAY_TEST',
+            defaults={'short_name': 'COSAT', 'type': Organization.TYPE_CONFEDERATION},
+        )
+        ds, _ = DataSource.objects.get_or_create(
+            connector_key='cosat_pay_test',
+            defaults={
+                'organization': org, 'source_name': 'COSAT Pay Test',
+                'slug': 'cosat-pay-test',
+                'source_type': DataSource.SOURCE_TYPE_JSON,
+                'base_url': 'https://cosat.tournamentsoftware.com',
+            },
+        )
+        tournament, _ = Tournament.objects.get_or_create(
+            canonical_slug='cosat-pay-test-open',
+            defaults={
+                'canonical_name': 'Copa COSAT Pay Test', 'circuit': 'COSAT',
+                'organization': org,
+            },
+        )
+        self.edition, _ = TournamentEdition.objects.get_or_create(
+            external_id='cosat:pay-test',
+            defaults={
+                'tournament': tournament, 'data_source': ds,
+                'title': 'Copa COSAT Pay Test', 'season_year': 2026, 'status': 'unknown',
+            },
+        )
+
+    def _make_entry(self, source='cosat', payment='unknown', ext_id='cosat:p-001'):
+        from apps.registrations.models import FederationEntry
+        return FederationEntry.objects.create(
+            edition=self.edition,
+            category_text='Geral do torneio',
+            player_name='Test Player',
+            player_external_id=ext_id,
+            source=source,
+            payment_status=payment,
+        )
+
+    def test_cosat_unknown_payment_returns_registered_status(self):
+        """COSAT entry with payment_status=unknown → status='registered'."""
+        from apps.registrations.serializers import FederationEntrySerializer
+        entry = self._make_entry(source='cosat', payment='unknown')
+        data = FederationEntrySerializer(entry).data
+        self.assertEqual(data['status'], 'registered')
+        self.assertEqual(data['status_label'], 'Inscrito')
+
+    def test_cosat_unknown_payment_label_is_nao_informado(self):
+        """payment_status_label remains 'Não informado' for unknown."""
+        from apps.registrations.serializers import FederationEntrySerializer
+        entry = self._make_entry(source='cosat', payment='unknown')
+        data = FederationEntrySerializer(entry).data
+        self.assertEqual(data['payment_status_label'], 'Não informado')
+
+    def test_cbt_unknown_payment_remains_pending_payment(self):
+        """CBT entry with payment_status=unknown → status='pending_payment' (not changed)."""
+        from apps.registrations.serializers import FederationEntrySerializer
+        entry = self._make_entry(source='cbt', payment='unknown', ext_id='cbt:p-002')
+        data = FederationEntrySerializer(entry).data
+        self.assertEqual(data['status'], 'pending_payment')
+
+    def test_cbt_pending_payment_remains_pending_payment(self):
+        """CBT entry with payment_status=pending → status='pending_payment'."""
+        from apps.registrations.serializers import FederationEntrySerializer
+        entry = self._make_entry(source='cbt', payment='pending', ext_id='cbt:p-003')
+        data = FederationEntrySerializer(entry).data
+        self.assertEqual(data['status'], 'pending_payment')
+
+    def test_cosat_removed_overrides_registered(self):
+        """removed_or_replaced=True always takes priority over registered."""
+        from apps.registrations.models import FederationEntry
+        from apps.registrations.serializers import FederationEntrySerializer
+        entry = FederationEntry.objects.create(
+            edition=self.edition,
+            category_text='Geral do torneio',
+            player_name='Removed Player',
+            player_external_id='cosat:removed-001',
+            source='cosat',
+            payment_status='unknown',
+            removed_or_replaced=True,
+        )
+        data = FederationEntrySerializer(entry).data
+        self.assertEqual(data['status'], 'removed')
+
+    def test_cosat_paid_returns_confirmed(self):
+        """If COSAT somehow has payment_status=paid → confirmed (not registered)."""
+        from apps.registrations.serializers import FederationEntrySerializer
+        entry = self._make_entry(source='cosat', payment='paid', ext_id='cosat:p-paid-001')
+        data = FederationEntrySerializer(entry).data
+        self.assertEqual(data['status'], 'confirmed')

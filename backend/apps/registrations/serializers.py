@@ -198,6 +198,8 @@ FED_STATUS_LABELS = {
     'waiting_list':    'Lista de espera',
     'pending_payment': 'Aguardando pagamento',
     'removed':         'Removido — critério de ranking',
+    # COSAT and other international sources that don't expose payment info
+    'registered':      'Inscrito',
 }
 
 SOURCE_LABELS = {
@@ -265,6 +267,12 @@ class FederationEntrySerializer(serializers.ModelSerializer):
         return (max_p is None) or (slot <= max_p)
 
     def get_status(self, obj):
+        if obj.removed_or_replaced:
+            return 'removed'
+        # COSAT (and other international sources) don't track payment.
+        # unknown payment on COSAT = registered but payment N/A, not pending.
+        if obj.source == FederationEntry.SOURCE_COSAT and obj.payment_status == FederationEntry.PAYMENT_UNKNOWN:
+            return 'registered'
         slot = getattr(obj, 'slot_position', None)
         return compute_fed_status(
             obj.payment_status, slot, self._max_p(obj),

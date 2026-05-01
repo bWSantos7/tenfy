@@ -402,6 +402,128 @@ class CosatMongoNormalizationTestCase(TestCase):
         self.assertIsNone(start)
         self.assertIsNone(end)
 
+    def test_parse_date_range_spanish_format_copa_cosat(self):
+        """
+        'Inicio del torneo lun. 27 de abr. | Final del torneo sáb. 2 de may.'
+        with year_hint=2026 → 2026-04-27, 2026-05-02
+        """
+        from apps.ingestion.connectors.cosat_mongo import _parse_date_range
+        from datetime import date
+        start, end = _parse_date_range(
+            'Inicio del torneo lun. 27 de abr. | Final del torneo sáb. 2 de may.',
+            year_hint=2026,
+        )
+        self.assertEqual(start, date(2026, 4, 27))
+        self.assertEqual(end, date(2026, 5, 2))
+
+    def test_parse_date_range_spanish_same_month(self):
+        from apps.ingestion.connectors.cosat_mongo import _parse_date_range
+        from datetime import date
+        start, end = _parse_date_range(
+            'Inicio del torneo lun. 10 de nov. | Final del torneo dom. 15 de nov.',
+            year_hint=2025,
+        )
+        self.assertEqual(start, date(2025, 11, 10))
+        self.assertEqual(end, date(2025, 11, 15))
+
+    def test_parse_date_range_spanish_cross_year(self):
+        """End date in December, start in November — should resolve correctly."""
+        from apps.ingestion.connectors.cosat_mongo import _parse_date_range
+        from datetime import date
+        start, end = _parse_date_range(
+            'Inicio del torneo lun. 28 de nov. | Final del torneo sáb. 3 de dic.',
+            year_hint=2025,
+        )
+        self.assertEqual(start, date(2025, 11, 28))
+        self.assertEqual(end, date(2025, 12, 3))
+
+    def test_parse_date_range_english_still_works_after_fix(self):
+        """Regression: existing English format still parses correctly."""
+        from apps.ingestion.connectors.cosat_mongo import _parse_date_range
+        from datetime import date
+        start, end = _parse_date_range('28 Nov - 3 Dec 2025')
+        self.assertEqual(start, date(2025, 11, 28))
+        self.assertEqual(end, date(2025, 12, 3))
+
+    # ── _normalize_cosat_event_name ───────────────────────────────────────────
+
+    def test_normalize_bs14(self):
+        from apps.ingestion.connectors.cosat_mongo import _normalize_cosat_event_name
+        self.assertEqual(_normalize_cosat_event_name('BS 14'), 'Sub-14 Masculino Simples')
+
+    def test_normalize_gs14(self):
+        from apps.ingestion.connectors.cosat_mongo import _normalize_cosat_event_name
+        self.assertEqual(_normalize_cosat_event_name('GS 14'), 'Sub-14 Feminino Simples')
+
+    def test_normalize_bd14(self):
+        from apps.ingestion.connectors.cosat_mongo import _normalize_cosat_event_name
+        self.assertEqual(_normalize_cosat_event_name('BD 14'), 'Sub-14 Masculino Duplas')
+
+    def test_normalize_gd16(self):
+        from apps.ingestion.connectors.cosat_mongo import _normalize_cosat_event_name
+        self.assertEqual(_normalize_cosat_event_name('GD 16'), 'Sub-16 Feminino Duplas')
+
+    def test_normalize_unknown_code_returns_original(self):
+        from apps.ingestion.connectors.cosat_mongo import _normalize_cosat_event_name
+        self.assertEqual(_normalize_cosat_event_name('ZZ 14'), 'ZZ 14')
+
+    def test_normalize_non_cosat_format_returns_original(self):
+        from apps.ingestion.connectors.cosat_mongo import _normalize_cosat_event_name
+        self.assertEqual(_normalize_cosat_event_name('14 Anos Masculino'), '14 Anos Masculino')
+
+    def test_normalize_empty_returns_empty(self):
+        from apps.ingestion.connectors.cosat_mongo import _normalize_cosat_event_name
+        self.assertEqual(_normalize_cosat_event_name(''), '')
+
+    def test_normalize_tournament_categories_use_normalized_names(self):
+        """_normalize_tournament applies _normalize_cosat_event_name to events."""
+        from apps.ingestion.connectors.cosat_mongo import _normalize_tournament
+        doc = {
+            'cosatId': 'TEST-001',
+            'name': 'Copa COSAT 14 años',
+            'events': [
+                {'eventId': '1', 'name': 'BS 14'},
+                {'eventId': '2', 'name': 'GS 14'},
+            ],
+        }
+        result = _normalize_tournament(doc)
+        self.assertIsNotNone(result)
+        cat_texts = [c['source_text'] for c in result['categories']]
+        self.assertIn('Sub-14 Masculino Simples', cat_texts)
+        self.assertIn('Sub-14 Feminino Simples', cat_texts)
+
+    def test_normalize_tournament_daterange_parsed(self):
+        """_normalize_tournament uses year from lastUpdated for Spanish dateRange."""
+        from datetime import date
+        from apps.ingestion.connectors.cosat_mongo import _normalize_tournament
+        from datetime import datetime as dt
+        doc = {
+            'cosatId': 'TEST-002',
+            'name': 'Copa COSAT',
+            'dateRange': 'Inicio del torneo lun. 27 de abr. | Final del torneo sáb. 2 de may.',
+            'lastUpdated': dt(2026, 5, 1),
+        }
+        result = _normalize_tournament(doc)
+        self.assertIsNotNone(result)
+        self.assertEqual(result['start_date'], '2026-04-27')
+        self.assertEqual(result['end_date'], '2026-05-02')
+
+    def test_normalize_tournament_daterange_preserved_in_raw(self):
+        """Original dateRange string preserved in _raw for audit."""
+        from apps.ingestion.connectors.cosat_mongo import _normalize_tournament
+        from datetime import datetime as dt
+        doc = {
+            'cosatId': 'TEST-003',
+            'name': 'Copa COSAT',
+            'dateRange': 'Inicio del torneo lun. 27 de abr. | Final del torneo sáb. 2 de may.',
+            'lastUpdated': dt(2026, 5, 1),
+        }
+        result = _normalize_tournament(doc)
+        self.assertEqual(
+            result['_raw']['dateRange'],
+            'Inicio del torneo lun. 27 de abr. | Final del torneo sáb. 2 de may.',
+        )
+
     def test_parse_location_city_and_code(self):
         from apps.ingestion.connectors.cosat_mongo import _parse_location
         city, state = _parse_location('Buenos Aires, AR', 'AR')

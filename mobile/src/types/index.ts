@@ -310,7 +310,7 @@ export interface FederationEntry {
   synced_at: string;
   slot_position: number | null;
   in_draw: boolean | null;
-  status: 'confirmed' | 'waiting_list' | 'pending_payment' | 'removed';
+  status: 'confirmed' | 'waiting_list' | 'pending_payment' | 'removed' | 'registered';
   status_label: string;
 }
 

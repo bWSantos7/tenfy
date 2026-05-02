@@ -28,6 +28,7 @@ export function Screen({
       style={{ flex: 1, backgroundColor: colors.bgBase }}
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
       showsVerticalScrollIndicator={false}
       refreshControl={
         onRefresh ? (
@@ -45,7 +46,17 @@ export function Screen({
   ) : (
     <View style={[styles.content, { flex: 1, backgroundColor: colors.bgBase }]}>{children}</View>
   );
-  return <SafeAreaView style={{ flex: 1, backgroundColor: colors.bgBase }}>{content}</SafeAreaView>;
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.bgBase }}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+      >
+        {content}
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
 }
 
 // ─── Card ─────────────────────────────────────────────────────────────────────

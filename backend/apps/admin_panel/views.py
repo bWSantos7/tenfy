@@ -251,6 +251,7 @@ class EditionPatchSerializer(serializers.ModelSerializer):
             'id', 'title', 'status', 'start_date', 'end_date',
             'entry_open_at', 'entry_close_at', 'official_source_url',
             'base_price_brl', 'data_confidence', 'is_manual_override', 'is_youth',
+            'is_published',
         )
         read_only_fields = ('id',)
 
@@ -300,9 +301,10 @@ class EditionCreateSerializer(serializers.ModelSerializer):
                 defaults={'name': f'{city} - {state}' if city and state else (city or state)},
             )
 
+        # Note: `circuit` is part of the Tournament model (already set above
+        # via Tournament.objects.get_or_create defaults), not TournamentEdition.
         edition = TournamentEdition.objects.create(
             tournament=tournament,
-            circuit=circuit,
             venue=venue,
             source_name='manual',
             data_confidence=TournamentEdition.CONFIDENCE_HIGH,

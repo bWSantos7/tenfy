@@ -31,7 +31,23 @@ if len(_raw_secret) < 50:
         'Generate a strong key with: python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"'
     )
 SECRET_KEY = _raw_secret
-DEBUG = config('DEBUG', default=False, cast=bool)
+def _parse_debug() -> bool:
+    """Strict DEBUG parser. Accepts True/False/1/0/yes/no/on/off (case-insensitive).
+    Anything else (e.g. 'release', 'production') raises ImproperlyConfigured —
+    silent coercion of unknown strings would be a security hazard."""
+    raw = config('DEBUG', default='False')
+    val = str(raw).strip().lower()
+    if val in {'true', '1', 'yes', 'on'}:
+        return True
+    if val in {'false', '0', 'no', 'off', ''}:
+        return False
+    raise ImproperlyConfigured(
+        f"DEBUG has invalid value {raw!r}. "
+        f"Use one of: True, False, 1, 0, yes, no, on, off."
+    )
+
+
+DEBUG = _parse_debug()
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=Csv())
 # Railway internal healthcheck always uses this hostname regardless of the public domain
 if 'healthcheck.railway.app' not in ALLOWED_HOSTS:

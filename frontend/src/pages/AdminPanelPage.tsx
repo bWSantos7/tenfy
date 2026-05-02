@@ -60,7 +60,7 @@ interface AdminStats {
   totals: { users: number; active_users: number; new_users_period: number };
 }
 
-type Tab = 'dashboard' | 'stats' | 'users';
+type Tab = 'dashboard' | 'stats' | 'users' | 'sources' | 'connectors' | 'editions';
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
@@ -74,12 +74,19 @@ export const AdminPanelPage: React.FC = () => {
         <p className="text-sm text-text-muted">Curadoria, ingestão, usuários e monitoramento</p>
       </div>
 
-      <div className="flex gap-1 border-b border-border">
-        {([['dashboard', 'Dashboard'], ['stats', 'Estatísticas'], ['users', 'Usuários']] as [Tab, string][]).map(([key, label]) => (
+      <div className="flex gap-1 border-b border-border overflow-x-auto">
+        {([
+          ['dashboard',  'Dashboard'],
+          ['stats',      'Estatísticas'],
+          ['users',      'Usuários'],
+          ['sources',    'Fontes'],
+          ['connectors', 'Conectores'],
+          ['editions',   'Torneios'],
+        ] as [Tab, string][]).map(([key, label]) => (
           <button
             key={key}
             onClick={() => setTab(key)}
-            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
+            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap ${
               tab === key
                 ? 'border-accent-neon text-accent-neon'
                 : 'border-transparent text-text-muted hover:text-text-primary'
@@ -90,9 +97,12 @@ export const AdminPanelPage: React.FC = () => {
         ))}
       </div>
 
-      {tab === 'dashboard' && <DashboardTab />}
-      {tab === 'stats' && <StatsTab />}
-      {tab === 'users' && <UsersTab />}
+      {tab === 'dashboard'  && <DashboardTab />}
+      {tab === 'stats'      && <StatsTab />}
+      {tab === 'users'      && <UsersTab />}
+      {tab === 'sources'    && <SourcesTab />}
+      {tab === 'connectors' && <ConnectorsTab />}
+      {tab === 'editions'   && <EditionsAdminTab />}
     </div>
   );
 };
@@ -584,11 +594,14 @@ const ConfirmModal: React.FC<{
 
 // ─── Shared components ────────────────────────────────────────────────────────
 
-const Badge: React.FC<{ color: 'neon' | 'blue' | 'red'; children: React.ReactNode }> = ({ color, children }) => {
+const Badge: React.FC<{ color: 'neon' | 'blue' | 'red' | 'green' | 'gray' | 'amber'; children: React.ReactNode }> = ({ color, children }) => {
   const cls = {
-    neon: 'bg-accent-neon/10 text-accent-neon border-accent-neon/30',
-    blue: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
-    red: 'bg-red-500/10 text-red-400 border-red-500/30',
+    neon:  'bg-accent-neon/10 text-accent-neon border-accent-neon/30',
+    blue:  'bg-blue-500/10 text-blue-400 border-blue-500/30',
+    red:   'bg-red-500/10 text-red-400 border-red-500/30',
+    green: 'bg-green-500/10 text-green-400 border-green-500/30',
+    gray:  'bg-gray-500/10 text-gray-400 border-gray-500/30',
+    amber: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
   }[color];
   return <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${cls}`}>{children}</span>;
 };
@@ -625,3 +638,341 @@ const QueueSection: React.FC<{
     )}
   </section>
 );
+
+// ─── Sources tab ──────────────────────────────────────────────────────────────
+
+interface DataSourceRow {
+  id: number;
+  organization: number;
+  org_name: string;
+  source_name: string;
+  slug: string;
+  connector_key: string;
+  source_type: string;
+  base_url: string;
+  fetch_schedule_cron: string;
+  priority: string;
+  enabled: boolean;
+  legal_notes: string;
+}
+
+const SourcesTab: React.FC = () => {
+  const [sources, setSources] = useState<DataSourceRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState<DataSourceRow | null>(null);
+
+  async function load() {
+    setLoading(true);
+    try {
+      const res = await api.get<DataSourceRow[]>('/api/admin-panel/sources/');
+      setSources(res.data);
+    } catch (err) {
+      toast.error(extractApiError(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+  useEffect(() => { load(); }, []);
+
+  async function toggleEnabled(s: DataSourceRow) {
+    try {
+      const res = await api.patch<DataSourceRow>(`/api/admin-panel/sources/${s.id}/`, { enabled: !s.enabled });
+      setSources((prev) => prev.map((r) => (r.id === s.id ? res.data : r)));
+      toast.success(`Fonte ${res.data.enabled ? 'ativada' : 'desativada'}`);
+    } catch (err) {
+      toast.error(extractApiError(err));
+    }
+  }
+
+  async function saveEdit(form: Partial<DataSourceRow>) {
+    if (!editing) return;
+    try {
+      const res = await api.patch<DataSourceRow>(`/api/admin-panel/sources/${editing.id}/`, form);
+      setSources((prev) => prev.map((r) => (r.id === editing.id ? res.data : r)));
+      setEditing(null);
+      toast.success('Fonte atualizada');
+    } catch (err) {
+      toast.error(extractApiError(err));
+    }
+  }
+
+  if (loading) return <div className="py-16 flex justify-center"><Loader2 className="w-8 h-8 text-accent-neon animate-spin" /></div>;
+
+  return (
+    <div className="space-y-3">
+      <h2 className="text-sm font-semibold text-text-secondary">Fontes de dados ({sources.length})</h2>
+      {sources.map((s) => (
+        <div key={s.id} className="card !p-3 space-y-2">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <div className="text-sm font-semibold">{s.source_name}</div>
+              <div className="text-xs text-text-muted">{s.org_name} · {s.connector_key} · {s.priority}</div>
+              <div className="text-[11px] text-text-muted mt-0.5">cron: {s.fetch_schedule_cron || '—'}</div>
+            </div>
+            <div className="flex gap-1">
+              <button
+                onClick={() => toggleEnabled(s)}
+                className={`text-xs px-2 py-1 rounded border ${s.enabled ? 'border-accent-neon text-accent-neon' : 'border-border-subtle text-text-muted'}`}
+                title={s.enabled ? 'Desativar' : 'Ativar'}
+              >
+                {s.enabled ? <Shield className="w-3 h-3 inline" /> : <ShieldOff className="w-3 h-3 inline" />}
+                <span className="ml-1">{s.enabled ? 'ativa' : 'inativa'}</span>
+              </button>
+              <button
+                onClick={() => setEditing(s)}
+                className="text-xs px-2 py-1 rounded border border-border-subtle text-text-muted hover:text-text-primary"
+              >
+                Editar
+              </button>
+            </div>
+          </div>
+          {s.legal_notes && <div className="text-[11px] text-text-muted italic">{s.legal_notes}</div>}
+        </div>
+      ))}
+
+      {editing && (
+        <SourceEditModal
+          source={editing}
+          onSave={saveEdit}
+          onCancel={() => setEditing(null)}
+        />
+      )}
+    </div>
+  );
+};
+
+const SourceEditModal: React.FC<{
+  source: DataSourceRow;
+  onSave: (form: Partial<DataSourceRow>) => void;
+  onCancel: () => void;
+}> = ({ source, onSave, onCancel }) => {
+  const [cron, setCron] = useState(source.fetch_schedule_cron || '');
+  const [priority, setPriority] = useState(source.priority || '');
+  const [baseUrl, setBaseUrl] = useState(source.base_url || '');
+  const [legalNotes, setLegalNotes] = useState(source.legal_notes || '');
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={onCancel}>
+      <div className="bg-bg-card rounded-xl p-4 max-w-md w-full space-y-3" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-between items-center">
+          <h3 className="font-semibold">Editar fonte: {source.source_name}</h3>
+          <button onClick={onCancel}><X className="w-4 h-4" /></button>
+        </div>
+        <div className="space-y-2">
+          <div>
+            <label className="text-xs text-text-secondary">Cron</label>
+            <input className="input-base" value={cron} onChange={(e) => setCron(e.target.value)} placeholder="0 */6 * * *" />
+          </div>
+          <div>
+            <label className="text-xs text-text-secondary">Prioridade</label>
+            <select className="input-base" value={priority} onChange={(e) => setPriority(e.target.value)}>
+              <option value="P0">P0</option>
+              <option value="P1">P1</option>
+              <option value="P2">P2</option>
+              <option value="P3">P3</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-text-secondary">Base URL</label>
+            <input className="input-base" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
+          </div>
+          <div>
+            <label className="text-xs text-text-secondary">Notas legais</label>
+            <textarea className="input-base" rows={2} value={legalNotes} onChange={(e) => setLegalNotes(e.target.value)} />
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 pt-2">
+          <button className="btn-secondary !py-2 !px-3 text-sm" onClick={onCancel}>Cancelar</button>
+          <button
+            className="btn-primary !py-2 !px-3 text-sm"
+            onClick={() => onSave({
+              fetch_schedule_cron: cron,
+              priority,
+              base_url: baseUrl,
+              legal_notes: legalNotes,
+            })}
+          >Salvar</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── Connectors tab ───────────────────────────────────────────────────────────
+
+interface ConnectorRow {
+  connector_key: string;
+  enabled: boolean;
+  source_name: string;
+  organization: string;
+  last_run_at: string | null;
+  last_run_status: string | null;
+  is_blocked: boolean;
+  consecutive_failures: number;
+  action: string;
+}
+
+const ConnectorsTab: React.FC = () => {
+  const [rows, setRows] = useState<ConnectorRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [logs, setLogs] = useState<any[]>([]);
+
+  async function load() {
+    setLoading(true);
+    try {
+      const [c, l] = await Promise.all([
+        api.get<ConnectorRow[]>('/api/admin-panel/connector-status/'),
+        api.get<any[]>('/api/admin-panel/execution-logs/?limit=20'),
+      ]);
+      setRows(c.data);
+      setLogs(l.data);
+    } catch (err) {
+      toast.error(extractApiError(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+  useEffect(() => { load(); }, []);
+
+  if (loading) return <div className="py-16 flex justify-center"><Loader2 className="w-8 h-8 text-accent-neon animate-spin" /></div>;
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-sm font-semibold text-text-secondary">Conectores ({rows.length})</h2>
+          <button onClick={load} className="btn-secondary !py-1.5 !px-2"><RefreshCcw className="w-3 h-3" /></button>
+        </div>
+        <div className="space-y-2">
+          {rows.map((r) => (
+            <div key={r.connector_key} className="card !p-3 flex items-start justify-between gap-2">
+              <div>
+                <div className="text-sm font-semibold">{r.connector_key} · {r.organization}</div>
+                <div className="text-xs text-text-muted">{r.source_name}</div>
+                <div className="text-[11px] text-text-muted mt-0.5">
+                  Último: {r.last_run_at ? new Date(r.last_run_at).toLocaleString('pt-BR') : '—'} ({r.last_run_status || '—'})
+                </div>
+              </div>
+              <div className="flex flex-col items-end gap-1">
+                <Badge color={r.enabled ? 'green' : 'gray'}>{r.enabled ? 'ativa' : 'inativa'}</Badge>
+                {r.is_blocked && <Badge color="red">bloqueado</Badge>}
+                {r.consecutive_failures > 0 && (
+                  <span className="text-[10px] text-status-closing">{r.consecutive_failures} falhas seguidas</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <h2 className="text-sm font-semibold text-text-secondary mb-2">Últimas execuções</h2>
+        <div className="space-y-1.5">
+          {logs.length === 0 && <div className="card text-center py-6 text-sm text-text-muted">Sem execuções recentes.</div>}
+          {logs.map((l: any) => (
+            <div key={l.id} className="card !p-2 text-xs flex items-center justify-between">
+              <div>
+                <span className="font-semibold">{l.service}</span>
+                <span className="text-text-muted ml-2">{l.organization}</span>
+                <span className="text-text-muted ml-2">{l.started_at ? new Date(l.started_at).toLocaleString('pt-BR') : ''}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge color={l.status === 'success' ? 'green' : l.status === 'partial' ? 'amber' : 'red'}>{l.status}</Badge>
+                <span className="text-text-muted">{l.editions_created}+ / {l.editions_updated}~</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── Editions admin tab ───────────────────────────────────────────────────────
+
+interface AdminEdition {
+  id: number;
+  title: string;
+  start_date: string | null;
+  end_date: string | null;
+  status: string;
+  data_confidence: string;
+  is_manual_override: boolean;
+  is_youth: boolean | null;
+  is_published?: boolean;
+  official_source_url: string;
+}
+
+const EditionsAdminTab: React.FC = () => {
+  const [items, setItems] = useState<AdminEdition[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+
+  async function load(q = '') {
+    setLoading(true);
+    try {
+      const res = await api.get<{ results: AdminEdition[] } | AdminEdition[]>(
+        '/api/tournaments/editions/',
+        { params: { youth_only: 'false', ...(q ? { q } : {}), page_size: 30 } },
+      );
+      const data = (res.data as any).results ?? res.data;
+      setItems(data);
+    } catch (err) {
+      toast.error(extractApiError(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+  useEffect(() => { load(); }, []);
+
+  async function togglePublished(e: AdminEdition) {
+    try {
+      const res = await api.patch<AdminEdition>(`/api/admin-panel/editions/${e.id}/`, { is_published: !e.is_published });
+      setItems((prev) => prev.map((it) => (it.id === e.id ? { ...it, is_published: res.data.is_published } : it)));
+      toast.success(res.data.is_published ? 'Publicado' : 'Oculto');
+    } catch (err) {
+      toast.error(extractApiError(err));
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
+        <input
+          className="input-base pl-9"
+          placeholder="Buscar torneio…"
+          value={search}
+          onChange={(e) => { setSearch(e.target.value); }}
+          onKeyDown={(e) => e.key === 'Enter' && load(search.trim())}
+        />
+      </div>
+      {loading ? (
+        <div className="py-10 flex justify-center"><Loader2 className="w-6 h-6 text-accent-neon animate-spin" /></div>
+      ) : items.length === 0 ? (
+        <div className="card text-center py-6 text-sm text-text-muted">Nenhum torneio.</div>
+      ) : (
+        <div className="space-y-2">
+          {items.map((e) => (
+            <div key={e.id} className="card !p-3 flex items-start justify-between gap-2">
+              <div>
+                <div className="text-sm font-semibold">{e.title}</div>
+                <div className="text-xs text-text-muted">{e.start_date || 'sem data'} · {e.status} · confiança {e.data_confidence}</div>
+              </div>
+              <div className="flex items-center gap-2">
+                {e.is_published === false && <Badge color="amber">oculto</Badge>}
+                {e.is_manual_override && <Badge color="blue">override</Badge>}
+                <button
+                  onClick={() => togglePublished(e)}
+                  className="text-xs px-2 py-1 rounded border border-border-subtle hover:text-text-primary"
+                >
+                  {e.is_published === false ? 'Publicar' : 'Ocultar'}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};

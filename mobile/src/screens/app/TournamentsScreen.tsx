@@ -59,13 +59,14 @@ export function TournamentsScreen({ route }: Props) {
   const [circuitFilter, setCircuitFilter] = useState('');
   const [federations, setFederations] = useState<Organization[]>([]);
   const [federationFilter, setFederationFilter] = useState<number | undefined>(route.params?.organization);
+  const [categoryFilter, setCategoryFilter] = useState('');
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [calMonth, setCalMonth] = useState(() => new Date());
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [compareMode, setCompareMode] = useState(false);
   const [compareIds, setCompareIds] = useState<number[]>([]);
 
-  async function loadList(q = query, status = statusFilter, circuit = circuitFilter, organization = federationFilter, page = 1) {
+  async function loadList(q = query, status = statusFilter, circuit = circuitFilter, organization = federationFilter, category = categoryFilter, page = 1) {
     if (page === 1) setLoading(true);
     else setLoadingMore(true);
     try {
@@ -76,6 +77,7 @@ export function TournamentsScreen({ route }: Props) {
         status: status || undefined,
         circuit: circuit || undefined,
         organization,
+        category: category || undefined,
       });
       const results = data.results || [];
       setItems((prev) => page === 1 ? results : [...prev, ...results]);
@@ -128,7 +130,7 @@ export function TournamentsScreen({ route }: Props) {
   useEffect(() => {
     if (route.params?.circuit) {
       setCircuitFilter(route.params.circuit);
-      loadList(query, statusFilter, route.params.circuit, federationFilter);
+      loadList(query, statusFilter, route.params.circuit, federationFilter, categoryFilter);
     }
     if (route.params?.organization) {
       setFederationFilter(route.params.organization);
@@ -138,25 +140,34 @@ export function TournamentsScreen({ route }: Props) {
   function onQueryChange(v: string) {
     setQuery(v);
     if (searchTimer.current) clearTimeout(searchTimer.current);
-    searchTimer.current = setTimeout(() => loadList(v, statusFilter, circuitFilter, federationFilter), 500);
+    searchTimer.current = setTimeout(() => loadList(v, statusFilter, circuitFilter, federationFilter, categoryFilter), 500);
   }
 
   function onStatusFilter(key: string) {
     const next = statusFilter === key ? '' : key;
     setStatusFilter(next);
-    loadList(query, next, circuitFilter, federationFilter);
+    loadList(query, next, circuitFilter, federationFilter, categoryFilter);
   }
 
   function onCircuitFilter(key: string) {
     const next = circuitFilter === key ? '' : key;
     setCircuitFilter(next);
-    loadList(query, statusFilter, next, federationFilter);
+    loadList(query, statusFilter, next, federationFilter, categoryFilter);
   }
 
   function onFederationFilter(id: number | undefined) {
     const next = federationFilter === id ? undefined : id;
     setFederationFilter(next);
-    loadList(query, statusFilter, circuitFilter, next);
+    loadList(query, statusFilter, circuitFilter, next, categoryFilter);
+  }
+
+  function onCategoryFilter(value: string) {
+    setCategoryFilter(value);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(
+      () => loadList(query, statusFilter, circuitFilter, federationFilter, value),
+      500,
+    );
   }
 
   function toggleCompareMode() { setCompareMode((v) => !v); setCompareIds([]); }
@@ -177,7 +188,7 @@ export function TournamentsScreen({ route }: Props) {
 
   function handleEndReached() {
     if (nextPage && !loadingMore && viewMode === 'list') {
-      loadList(query, statusFilter, circuitFilter, federationFilter, nextPage);
+      loadList(query, statusFilter, circuitFilter, federationFilter, categoryFilter, nextPage);
     }
   }
 
@@ -208,6 +219,11 @@ export function TournamentsScreen({ route }: Props) {
   const ListHeader = (
     <View>
       <Input value={query} onChangeText={onQueryChange} placeholder="Buscar por nome, cidade, circuito..." />
+      <Input
+        value={categoryFilter}
+        onChangeText={onCategoryFilter}
+        placeholder="Categoria (ex.: 16M, GA, Sub-12)"
+      />
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
         <View style={{ flexDirection: 'row', gap: 6, paddingRight: 8 }}>
           {STATUS_FILTERS.map((f) => {

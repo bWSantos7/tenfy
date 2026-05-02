@@ -13,11 +13,15 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { MainStackParamList } from '../../navigation/types';
 import {
+  addFamilyMember,
   cancelSubscription,
   fetchPayments,
   fetchSubscription,
+  FamilyMember,
+  listFamilyMembers,
   Payment,
   reactivateSubscription,
+  removeFamilyMember,
   Subscription,
 } from '../../services/billing';
 
@@ -225,6 +229,11 @@ export function SubscriptionScreen() {
         </TouchableOpacity>
       )}
 
+      {/* Família — gestão de dependentes */}
+      {sub.plan_slug === 'familia' && (
+        <FamilySection />
+      )}
+
       {/* Payment history */}
       {payments.length > 0 && (
         <>
@@ -296,4 +305,138 @@ const styles = StyleSheet.create({
   paymentAmount: { fontSize: 14, fontWeight: '700' },
   amountPaid:    { color: '#10B981' },
   amountOther:   { color: '#6B7280' },
+});
+
+// ── Família — gestão de dependentes ─────────────────────────────────────────
+
+function FamilySection() {
+  const [members, setMembers] = useState<FamilyMember[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [email, setEmail] = useState('');
+  const [adding, setAdding] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await listFamilyMembers();
+      setMembers(data);
+    } catch (err: any) {
+      Alert.alert('Família', err?.response?.data?.detail ?? 'Erro ao carregar dependentes');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => { load(); }, [load]);
+
+  async function handleAdd() {
+    if (!email.trim()) return;
+    setAdding(true);
+    try {
+      await addFamilyMember({ email: email.trim() });
+      setEmail('');
+      await load();
+    } catch (err: any) {
+      Alert.alert('Família', err?.response?.data?.detail ?? 'Não foi possível adicionar.');
+    } finally {
+      setAdding(false);
+    }
+  }
+
+  function handleRemove(m: FamilyMember) {
+    Alert.alert(
+      'Remover dependente',
+      `Remover ${m.member_email} da assinatura?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Remover', style: 'destructive', onPress: async () => {
+            try {
+              await removeFamilyMember(m.id);
+              await load();
+            } catch (err: any) {
+              Alert.alert('Família', err?.response?.data?.detail ?? 'Erro ao remover.');
+            }
+          },
+        },
+      ],
+    );
+  }
+
+  return (
+    <View style={familyStyles.container}>
+      <Text style={familyStyles.title}>Plano Família — dependentes</Text>
+      <Text style={familyStyles.subtitle}>
+        Convide pessoas com cadastro no app. O titular é responsável pelo pagamento.
+      </Text>
+
+      <Text style={familyStyles.label}>E-mail do dependente</Text>
+      <TextInputRow value={email} onChangeText={setEmail} placeholder="email@exemplo.com" />
+
+      <TouchableOpacity
+        style={[familyStyles.addBtn, adding && { opacity: 0.6 }]}
+        onPress={handleAdd}
+        disabled={adding || !email.trim()}
+      >
+        {adding ? <ActivityIndicator color="#FFF" /> : <Text style={familyStyles.addBtnText}>Adicionar</Text>}
+      </TouchableOpacity>
+
+      {loading ? (
+        <ActivityIndicator style={{ marginTop: 12 }} />
+      ) : members.length === 0 ? (
+        <Text style={familyStyles.empty}>Nenhum dependente adicionado.</Text>
+      ) : (
+        members.map((m) => (
+          <View key={m.id} style={familyStyles.row}>
+            <View style={{ flex: 1 }}>
+              <Text style={familyStyles.memberEmail}>{m.member_email}</Text>
+              <Text style={familyStyles.memberStatus}>
+                {m.status === 'active' ? 'Ativo' : m.status === 'pending' ? 'Aguardando aceite' : 'Removido'}
+              </Text>
+            </View>
+            <TouchableOpacity onPress={() => handleRemove(m)} style={familyStyles.removeBtn}>
+              <Text style={familyStyles.removeBtnText}>Remover</Text>
+            </TouchableOpacity>
+          </View>
+        ))
+      )}
+    </View>
+  );
+}
+
+// Tiny TextInput wrapper to avoid changing the surrounding style file too much.
+function TextInputRow({ value, onChangeText, placeholder }: { value: string; onChangeText: (s: string) => void; placeholder?: string }) {
+  // Lazy import to keep top of file lean.
+  const { TextInput } = require('react-native');
+  return (
+    <TextInput
+      value={value}
+      onChangeText={onChangeText}
+      placeholder={placeholder}
+      autoCapitalize="none"
+      autoCorrect={false}
+      keyboardType="email-address"
+      style={familyStyles.realInput}
+    />
+  );
+}
+
+const familyStyles = StyleSheet.create({
+  container: { marginTop: 16, padding: 12, borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, backgroundColor: '#FFFFFF' },
+  title:     { fontSize: 16, fontWeight: '700', color: '#111827' },
+  subtitle:  { fontSize: 12, color: '#6B7280', marginTop: 4, marginBottom: 12 },
+  addRow:    { display: 'none' },
+  inputWrap: { flex: 1 },
+  label:     { fontSize: 12, color: '#6B7280', marginBottom: 4 },
+  inputBox:  { display: 'none' },
+  input:     { display: 'none' },
+  realInput: { borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, color: '#111827', marginBottom: 8 },
+  addBtn:    { backgroundColor: '#10B981', borderRadius: 8, paddingVertical: 10, alignItems: 'center', marginBottom: 12 },
+  addBtnText:{ color: '#FFF', fontWeight: '700' },
+  empty:     { color: '#6B7280', fontSize: 13, textAlign: 'center', paddingVertical: 8 },
+  row:       { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderTopWidth: 1, borderTopColor: '#F3F4F6' },
+  memberEmail: { fontSize: 14, color: '#111827', fontWeight: '500' },
+  memberStatus:{ fontSize: 12, color: '#6B7280', marginTop: 2 },
+  removeBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: '#EF4444' },
+  removeBtnText: { color: '#EF4444', fontSize: 12, fontWeight: '600' },
 });

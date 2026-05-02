@@ -1,7 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Search, Filter, Loader2, X, MapPin } from 'lucide-react';
 import { TournamentEditionList } from '../types';
-import { listEditions, TournamentFilters } from '../services/tournaments';
+import {
+  listEditions,
+  listOrganizations,
+  TournamentFilters,
+  OrganizationOption,
+} from '../services/tournaments';
 import { listProfiles } from '../services/data';
 import { TournamentCard } from '../components/TournamentCard';
 import { pickBestProfile } from '../utils/profile';
@@ -32,16 +37,22 @@ export const TournamentsPage: React.FC = () => {
   const [q, setQ] = useState('');
   const [nearMe, setNearMe] = useState(false);
   const [primaryProfileId, setPrimaryProfileId] = useState<number | null>(null);
+  const [organizations, setOrganizations] = useState<OrganizationOption[]>([]);
 
   useEffect(() => {
     listProfiles().then((profiles) => {
       const primary = pickBestProfile(Array.isArray(profiles) ? profiles : (profiles as any).results ?? []);
       if (primary) setPrimaryProfileId(primary.id);
     }).catch(() => {});
+    listOrganizations().then(setOrganizations).catch(() => setOrganizations([]));
   }, []);
 
   const hasAnyFilter = useMemo(
-    () => !!(filters.status || filters.state || filters.q || filters.modality || filters.surface),
+    () => !!(
+      filters.status || filters.state || filters.q || filters.modality
+      || filters.surface || filters.from_date || filters.to_date
+      || filters.organization || filters.category
+    ),
     [filters],
   );
 
@@ -173,6 +184,50 @@ export const TournamentsPage: React.FC = () => {
                 <option value="grass">Grama</option>
                 <option value="sand">Areia</option>
               </select>
+            </div>
+            <div>
+              <label className="text-xs text-text-secondary mb-1 block">Data inicial</label>
+              <input
+                type="date"
+                className="input-base"
+                value={filters.from_date || ''}
+                onChange={(e) => { setPage(1); setFilters((f) => ({ ...f, from_date: e.target.value || undefined })); }}
+              />
+            </div>
+            <div>
+              <label className="text-xs text-text-secondary mb-1 block">Data final</label>
+              <input
+                type="date"
+                className="input-base"
+                value={filters.to_date || ''}
+                onChange={(e) => { setPage(1); setFilters((f) => ({ ...f, to_date: e.target.value || undefined })); }}
+              />
+            </div>
+            <div>
+              <label className="text-xs text-text-secondary mb-1 block">Entidade / fonte</label>
+              <select
+                className="input-base"
+                value={filters.organization ?? ''}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setPage(1);
+                  setFilters((f) => ({ ...f, organization: v ? Number(v) : undefined }));
+                }}
+              >
+                <option value="">Todas</option>
+                {organizations.map((o) => (
+                  <option key={o.id} value={o.id}>{o.short_name || o.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="col-span-2">
+              <label className="text-xs text-text-secondary mb-1 block">Categoria</label>
+              <input
+                className="input-base"
+                placeholder="Ex.: 16M, GA, Gold M1, Sub-12"
+                value={filters.category || ''}
+                onChange={(e) => { setPage(1); setFilters((f) => ({ ...f, category: e.target.value || undefined })); }}
+              />
             </div>
           </div>
           {hasAnyFilter && (

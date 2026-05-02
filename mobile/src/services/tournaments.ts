@@ -11,6 +11,7 @@ import {
 export interface TournamentFilters {
   q?: string;
   state?: string;
+  city?: string;
   from_date?: string;
   to_date?: string;
   status?: string;
@@ -19,6 +20,9 @@ export interface TournamentFilters {
   surface?: string;
   organization?: number;
   organization_slug?: string;
+  category?: string;
+  category_id?: number;
+  category_code?: string;
   near_profile?: number;
   page?: number;
   page_size?: number;

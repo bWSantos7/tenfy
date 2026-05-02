@@ -47,6 +47,12 @@ REASON_NO_RULE = 'no_rule_available'
 REASON_NOT_NORMALIZED = 'category_not_normalized'
 REASON_MATCH = 'matches_profile'
 
+# Ranking check states (informational — do not flip the main eligibility status).
+RANKING_NOT_APPLICABLE = 'not_applicable'   # Categoria sem max_participants
+RANKING_UNKNOWN = 'unknown'                 # Sem dados suficientes para confirmar
+RANKING_WITHIN_CUTOFF = 'within_cutoff'     # Ranking do perfil dentro do corte estimado
+RANKING_BEYOND_CUTOFF = 'beyond_cutoff'     # Ranking do perfil acima do corte estimado
+
 
 @dataclass
 class EligibilityResult:
@@ -55,6 +61,9 @@ class EligibilityResult:
     rule_version_id: Optional[int] = None
     category_code: Optional[str] = None
     category_label: Optional[str] = None
+    # Ranking metadata — informational only. Spec: "Não inventar elegibilidade".
+    ranking_check: str = RANKING_NOT_APPLICABLE
+    ranking_note: str = ''
 
     def to_dict(self):
         return {
@@ -63,6 +72,8 @@ class EligibilityResult:
             'rule_version_id': self.rule_version_id,
             'category_code': self.category_code,
             'category_label': self.category_label,
+            'ranking_check': self.ranking_check,
+            'ranking_note': self.ranking_note,
         }
 
 
@@ -85,17 +96,23 @@ class EligibilityEngine:
         """Evaluate a single TournamentCategory against the player."""
         norm: Optional[PlayerCategory] = tc.normalized_category
         if norm is None:
-            return EligibilityResult(
+            base = EligibilityResult(
                 status=STATUS_UNKNOWN,
                 reasons=[REASON_NOT_NORMALIZED],
                 category_code=tc.source_category_text,
                 category_label=tc.source_category_text,
             )
+        else:
+            base = self.evaluate_player_category(
+                norm,
+                source_text=tc.source_category_text,
+            )
 
-        return self.evaluate_player_category(
-            norm,
-            source_text=tc.source_category_text,
-        )
+        # Ranking metadata (informational, never flips main status to compatible).
+        rank_check, rank_note = self._check_ranking(tc)
+        base.ranking_check = rank_check
+        base.ranking_note = rank_note
+        return base
 
     def evaluate_player_category(
         self, cat: PlayerCategory, source_text: Optional[str] = None
@@ -208,6 +225,67 @@ class EligibilityEngine:
             return STATUS_COMPATIBLE
         reasons.append(REASON_NO_RULE)
         return STATUS_UNKNOWN
+
+    def _profile_ranking(self) -> Optional[int]:
+        """Read the player's known ranking from PlayerProfile.external_ids.
+        Looked-up keys (first match wins): cbt_ranking, fpt_ranking, ranking, ranking_position.
+        Must be a positive integer; anything else is treated as unknown."""
+        ext = getattr(self.profile, 'external_ids', None) or {}
+        if not isinstance(ext, dict):
+            return None
+        for key in ('cbt_ranking', 'fpt_ranking', 'ranking_position', 'ranking'):
+            val = ext.get(key)
+            if val is None:
+                continue
+            try:
+                rank = int(val)
+                if rank > 0:
+                    return rank
+            except (TypeError, ValueError):
+                continue
+        return None
+
+    def _check_ranking(self, tc: TournamentCategory) -> tuple:
+        """
+        Conservative ranking check. Returns (status, note).
+
+        Rule: only flag 'within_cutoff' / 'beyond_cutoff' when the data is solid:
+          - category has max_participants set
+          - profile has a known ranking value
+          - at least max_participants FederationEntry rows with ranking_position
+        Otherwise: 'unknown' (with explanatory note) or 'not_applicable'.
+
+        We never use this to mark the main status compatible/incompatible — only
+        as informational metadata. Per spec: "Não inventar elegibilidade."
+        """
+        max_p = tc.max_participants
+        if not max_p:
+            return RANKING_NOT_APPLICABLE, ''
+
+        profile_rank = self._profile_ranking()
+        if profile_rank is None:
+            return RANKING_UNKNOWN, 'Ranking do perfil não informado.'
+
+        from apps.registrations.models import FederationEntry
+        entries = (
+            FederationEntry.objects
+            .filter(
+                edition_id=tc.edition_id,
+                category_text__iexact=tc.source_category_text,
+                ranking_position__isnull=False,
+                removed_or_replaced=False,
+            )
+            .order_by('ranking_position')
+            .values_list('ranking_position', flat=True)[:max_p]
+        )
+        ranking_list = list(entries)
+        if len(ranking_list) < max_p:
+            return RANKING_UNKNOWN, 'Lista de inscritos incompleta — corte de ranking não estimado.'
+
+        cutoff = ranking_list[-1]
+        if profile_rank <= cutoff:
+            return RANKING_WITHIN_CUTOFF, f'Ranking dentro do corte estimado ({cutoff}).'
+        return RANKING_BEYOND_CUTOFF, f'Ranking acima do corte estimado ({cutoff}). Vaga incerta — confirme inscrição oficial.'
 
     def _check_seniors(self, cat: PlayerCategory, reasons: list) -> str:
         """Seniors: player age must be >= category min_age (descending allowed)."""

@@ -38,10 +38,12 @@ _VALID_TRANSITIONS: dict[str, set] = {
 }
 
 from apps.audit.models import AuditLog
-from .models import Feature, Payment, Plan, Subscription, WebhookEvent
+from .models import FamilyMembership, Feature, Payment, Plan, Subscription, WebhookEvent
 from .serializers import (
     CancelSubscriptionSerializer,
     CheckoutSerializer,
+    FamilyMemberAddSerializer,
+    FamilyMembershipSerializer,
     PaymentSerializer,
     PlanSerializer,
     SubscriptionSerializer,
@@ -555,3 +557,139 @@ def _log_action(user, action: str, detail: str):
         )
     except Exception:
         pass
+
+
+# ── Família — gestão de dependentes ────────────────────────────────────────────
+
+def _get_familia_subscription_for(user):
+    """Return the user's Família subscription or None.
+    Only the responsible payer (Subscription.user) manages the family."""
+    try:
+        sub = user.subscription
+    except Subscription.DoesNotExist:
+        return None
+    if sub.plan.slug != Plan.SLUG_FAMILIA:
+        return None
+    return sub
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([permissions.IsAuthenticated])
+def family_members(request):
+    """
+    GET  → list all (non-removed) members under the requesting user's Família subscription.
+    POST → add a new dependent by email or user_id.
+           Validates plan=Família, max_members limit (titular conta), no duplicates.
+    """
+    sub = _get_familia_subscription_for(request.user)
+    if sub is None:
+        return Response(
+            {'detail': 'Apenas o titular de uma assinatura Família pode gerenciar dependentes.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    if request.method == 'GET':
+        qs = sub.family_members.exclude(status=FamilyMembership.STATUS_REMOVED).order_by('-created_at')
+        return Response(FamilyMembershipSerializer(qs, many=True).data)
+
+    # POST — add member
+    ser = FamilyMemberAddSerializer(data=request.data)
+    ser.is_valid(raise_exception=True)
+    d = ser.validated_data
+
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+    target = None
+    if d.get('user_id'):
+        target = User.objects.filter(pk=d['user_id']).first()
+    elif d.get('email'):
+        target = User.objects.filter(email__iexact=d['email']).first()
+
+    if target is None:
+        return Response(
+            {'detail': 'Usuário não encontrado. Peça que ele cadastre antes de adicionar à família.'},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    if target.pk == request.user.pk:
+        return Response(
+            {'detail': 'O titular não precisa ser adicionado como dependente.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Limit: max_members = titular + active/pending dependents.
+    # Allowed dependents = max_members - 1.
+    active_count = sub.family_members.filter(
+        status__in=[FamilyMembership.STATUS_PENDING, FamilyMembership.STATUS_ACTIVE]
+    ).count()
+    if active_count >= sub.plan.max_members - 1:
+        return Response(
+            {'detail': f'Limite de {sub.plan.max_members} membros atingido (titular + dependentes).'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Idempotent: revive a removed entry instead of creating a duplicate
+    membership, created = FamilyMembership.objects.get_or_create(
+        subscription=sub, member_user=target,
+        defaults={'status': FamilyMembership.STATUS_PENDING},
+    )
+    if not created:
+        if membership.status == FamilyMembership.STATUS_REMOVED:
+            membership.status = FamilyMembership.STATUS_PENDING
+            membership.save(update_fields=['status', 'updated_at'])
+        else:
+            return Response(
+                {'detail': 'Esse usuário já é dependente nessa assinatura.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    _log_action(request.user, 'billing.family.add', f'member_id={target.id}')
+    return Response(
+        FamilyMembershipSerializer(membership).data,
+        status=status.HTTP_201_CREATED,
+    )
+
+
+@api_view(['POST', 'DELETE'])
+@permission_classes([permissions.IsAuthenticated])
+def family_member_detail(request, pk):
+    """
+    POST   → accept/activate a pending membership (callable by the dependent).
+    DELETE → remove a dependent (callable only by the titular).
+    """
+    try:
+        membership = FamilyMembership.objects.select_related('subscription__user', 'member_user').get(pk=pk)
+    except FamilyMembership.DoesNotExist:
+        return Response({'detail': 'Membro não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+
+    titular = membership.subscription.user
+    dependent = membership.member_user
+
+    if request.method == 'POST':
+        # Only the dependent themselves can accept
+        if request.user.pk != dependent.pk:
+            return Response(
+                {'detail': 'Apenas o dependente pode aceitar o convite.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if membership.status != FamilyMembership.STATUS_PENDING:
+            return Response(
+                {'detail': 'Convite não está pendente.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        membership.status = FamilyMembership.STATUS_ACTIVE
+        membership.accepted_at = timezone.now()
+        membership.save(update_fields=['status', 'accepted_at', 'updated_at'])
+        _log_action(request.user, 'billing.family.accept', f'membership_id={membership.pk}')
+        return Response(FamilyMembershipSerializer(membership).data)
+
+    # DELETE — only titular can remove
+    if request.user.pk != titular.pk:
+        return Response(
+            {'detail': 'Apenas o titular pode remover dependentes.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    membership.status = FamilyMembership.STATUS_REMOVED
+    membership.save(update_fields=['status', 'updated_at'])
+    _log_action(request.user, 'billing.family.remove', f'membership_id={membership.pk}')
+    return Response(status=status.HTTP_204_NO_CONTENT)

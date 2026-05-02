@@ -153,6 +153,13 @@ class TournamentEdition(TimestampedModel):
         help_text='Short hash for cross-source dedup (title+date+city). Empty = not computed.',
     )
 
+    # Publication state — admin can hide editions from public listing
+    # without deleting them (preserves provenance).
+    is_published = models.BooleanField(
+        default=True, db_index=True,
+        help_text='False = oculto da listagem pública (admin pode editar e republicar).',
+    )
+
     class Meta:
         ordering = ['-start_date', '-entry_close_at']
         indexes = [

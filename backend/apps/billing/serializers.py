@@ -89,3 +89,14 @@ class FamilyMembershipSerializer(serializers.ModelSerializer):
 
 class CancelSubscriptionSerializer(serializers.Serializer):
     immediate = serializers.BooleanField(default=False, help_text='True = cancela agora; False = cancela no fim do período')
+
+
+class FamilyMemberAddSerializer(serializers.Serializer):
+    """Add a dependent to a Família subscription by email or user_id."""
+    email   = serializers.EmailField(required=False, allow_blank=True)
+    user_id = serializers.IntegerField(required=False)
+
+    def validate(self, attrs):
+        if not attrs.get('email') and not attrs.get('user_id'):
+            raise serializers.ValidationError('Informe email ou user_id.')
+        return attrs

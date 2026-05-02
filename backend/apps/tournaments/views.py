@@ -56,6 +56,10 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
         youth_param = self.request.query_params.get('youth_only', 'true').lower()
         if youth_param != 'false':
             qs = qs.filter(Q(is_youth=True) | Q(is_youth__isnull=True))
+
+        # Hide editions explicitly unpublished by admin from the public listing.
+        # Admin endpoints (TournamentEditionAdminViewSet) bypass this.
+        qs = qs.filter(is_published=True)
         return qs
 
     def get_serializer_class(self):

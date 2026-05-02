@@ -11,4 +11,6 @@ urlpatterns = [
     path('features/',                    views.my_features,              name='billing_my_features'),
     path('webhooks/asaas/',              views.asaas_webhook,            name='billing_asaas_webhook'),
     path('asaas-customer-id/',           views.asaas_customer_id,        name='billing_asaas_customer_id'),
+    path('family/members/',              views.family_members,           name='billing_family_members'),
+    path('family/members/<int:pk>/',     views.family_member_detail,     name='billing_family_member_detail'),
 ]

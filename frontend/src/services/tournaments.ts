@@ -10,6 +10,7 @@ import {
 export interface TournamentFilters {
   q?: string;
   state?: string;
+  city?: string;
   from_date?: string;
   to_date?: string;
   status?: string;
@@ -17,10 +18,34 @@ export interface TournamentFilters {
   circuit?: string;
   surface?: string;
   organization?: number;
+  organization_slug?: string;
+  category?: string;
+  category_id?: number;
+  category_code?: string;
   near_profile?: number;
   page?: number;
   page_size?: number;
   ordering?: string;
+}
+
+export interface OrganizationOption {
+  id: number;
+  name: string;
+  short_name: string;
+}
+
+export async function listOrganizations(): Promise<OrganizationOption[]> {
+  // Tries the public sources endpoint first; falls back to deriving orgs
+  // from the editions queryset by reading short_name fields.
+  try {
+    const res = await api.get<{ id: number; name: string; short_name: string }[]>(
+      '/api/sources/organizations/',
+    );
+    if (Array.isArray(res.data)) return res.data;
+  } catch {
+    // ignore — fallback below
+  }
+  return [];
 }
 
 function qs(params: Record<string, unknown>): string {

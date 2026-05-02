@@ -274,3 +274,134 @@ class FamilyMembershipTestCase(TestCase):
 
     def test_familia_plan_max_members(self):
         self.assertEqual(self.familia.max_members, 5)
+
+
+class FamilyMemberEndpointsTestCase(TestCase):
+    """Tests for /api/billing/family/members/ endpoints."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.individual, self.familia, _ = make_plans()
+        self.titular = make_user(email='titular@example.com')
+        self.dependent1 = make_user(email='dep1@example.com')
+        self.dependent2 = make_user(email='dep2@example.com')
+        self.sub = Subscription.objects.create(
+            user=self.titular, plan=self.familia,
+            status=Subscription.STATUS_ACTIVE,
+        )
+
+    def test_list_requires_familia_subscription(self):
+        # User with Individual plan cannot list family members
+        other = make_user(email='ind@example.com')
+        Subscription.objects.create(user=other, plan=self.individual, status=Subscription.STATUS_ACTIVE)
+        self.client.force_authenticate(user=other)
+        res = self.client.get('/api/billing/family/members/')
+        self.assertEqual(res.status_code, 403)
+
+    def test_list_returns_only_non_removed(self):
+        FamilyMembership.objects.create(subscription=self.sub, member_user=self.dependent1)
+        FamilyMembership.objects.create(
+            subscription=self.sub, member_user=self.dependent2,
+            status=FamilyMembership.STATUS_REMOVED,
+        )
+        self.client.force_authenticate(user=self.titular)
+        res = self.client.get('/api/billing/family/members/')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(res.data), 1)
+        self.assertEqual(res.data[0]['member_email'], 'dep1@example.com')
+
+    def test_add_member_by_email(self):
+        self.client.force_authenticate(user=self.titular)
+        res = self.client.post(
+            '/api/billing/family/members/',
+            {'email': 'dep1@example.com'},
+            format='json',
+        )
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(res.data['member_email'], 'dep1@example.com')
+        self.assertEqual(res.data['status'], 'pending')
+
+    def test_add_member_unknown_user_returns_404(self):
+        self.client.force_authenticate(user=self.titular)
+        res = self.client.post(
+            '/api/billing/family/members/',
+            {'email': 'nobody@example.com'},
+            format='json',
+        )
+        self.assertEqual(res.status_code, 404)
+
+    def test_add_member_titular_self_rejected(self):
+        self.client.force_authenticate(user=self.titular)
+        res = self.client.post(
+            '/api/billing/family/members/',
+            {'email': self.titular.email},
+            format='json',
+        )
+        self.assertEqual(res.status_code, 400)
+
+    def test_add_member_duplicate_rejected(self):
+        FamilyMembership.objects.create(subscription=self.sub, member_user=self.dependent1)
+        self.client.force_authenticate(user=self.titular)
+        res = self.client.post(
+            '/api/billing/family/members/',
+            {'email': 'dep1@example.com'},
+            format='json',
+        )
+        self.assertEqual(res.status_code, 400)
+
+    def test_add_member_revives_removed_entry(self):
+        FamilyMembership.objects.create(
+            subscription=self.sub, member_user=self.dependent1,
+            status=FamilyMembership.STATUS_REMOVED,
+        )
+        self.client.force_authenticate(user=self.titular)
+        res = self.client.post(
+            '/api/billing/family/members/',
+            {'email': 'dep1@example.com'},
+            format='json',
+        )
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(res.data['status'], 'pending')
+
+    def test_max_members_limit_enforced(self):
+        # Família max=5 → titular + 4 dependents max
+        for i in range(4):
+            user = make_user(email=f'd{i}@example.com')
+            FamilyMembership.objects.create(subscription=self.sub, member_user=user)
+        # 5th dependent (would be 6th total) → should fail
+        extra = make_user(email='dextra@example.com')
+        self.client.force_authenticate(user=self.titular)
+        res = self.client.post(
+            '/api/billing/family/members/',
+            {'user_id': extra.id},
+            format='json',
+        )
+        self.assertEqual(res.status_code, 400)
+        self.assertIn('Limite', res.data['detail'])
+
+    def test_dependent_can_accept_invite(self):
+        m = FamilyMembership.objects.create(subscription=self.sub, member_user=self.dependent1)
+        self.client.force_authenticate(user=self.dependent1)
+        res = self.client.post(f'/api/billing/family/members/{m.pk}/')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data['status'], 'active')
+
+    def test_titular_cannot_accept_for_dependent(self):
+        m = FamilyMembership.objects.create(subscription=self.sub, member_user=self.dependent1)
+        self.client.force_authenticate(user=self.titular)
+        res = self.client.post(f'/api/billing/family/members/{m.pk}/')
+        self.assertEqual(res.status_code, 403)
+
+    def test_titular_can_remove_dependent(self):
+        m = FamilyMembership.objects.create(subscription=self.sub, member_user=self.dependent1)
+        self.client.force_authenticate(user=self.titular)
+        res = self.client.delete(f'/api/billing/family/members/{m.pk}/')
+        self.assertEqual(res.status_code, 204)
+        m.refresh_from_db()
+        self.assertEqual(m.status, FamilyMembership.STATUS_REMOVED)
+
+    def test_dependent_cannot_remove_self(self):
+        m = FamilyMembership.objects.create(subscription=self.sub, member_user=self.dependent1)
+        self.client.force_authenticate(user=self.dependent1)
+        res = self.client.delete(f'/api/billing/family/members/{m.pk}/')
+        self.assertEqual(res.status_code, 403)

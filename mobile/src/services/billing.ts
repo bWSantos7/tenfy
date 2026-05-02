@@ -53,3 +53,33 @@ export async function fetchMyFeatures(): Promise<FeatureAccess> {
   const res = await api.get('/api/billing/features/');
   return res.data;
 }
+
+// ── Família ──────────────────────────────────────────────────────────────────
+
+export interface FamilyMember {
+  id: number;
+  member_email: string;
+  member_name: string;
+  status: 'pending' | 'active' | 'removed';
+  accepted_at: string | null;
+  created_at: string;
+}
+
+export async function listFamilyMembers(): Promise<FamilyMember[]> {
+  const res = await api.get('/api/billing/family/members/');
+  return res.data;
+}
+
+export async function addFamilyMember(payload: { email?: string; user_id?: number }): Promise<FamilyMember> {
+  const res = await api.post('/api/billing/family/members/', payload);
+  return res.data;
+}
+
+export async function removeFamilyMember(id: number): Promise<void> {
+  await api.delete(`/api/billing/family/members/${id}/`);
+}
+
+export async function acceptFamilyInvite(id: number): Promise<FamilyMember> {
+  const res = await api.post(`/api/billing/family/members/${id}/`);
+  return res.data;
+}

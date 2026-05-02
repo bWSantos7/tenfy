@@ -29,13 +29,38 @@ class TournamentEditionFilter(filters.FilterSet):
     q = filters.CharFilter(method='filter_search')
     near_profile = filters.NumberFilter(method='filter_near_profile')
 
+    # Category filters (RF-009/RF-010): match by raw source text, normalized FK,
+    # or normalized category code (e.g. "GA", "16M", "Gold M1").
+    category = filters.CharFilter(method='filter_category')
+    category_id = filters.NumberFilter(field_name='categories__normalized_category_id')
+    category_code = filters.CharFilter(
+        field_name='categories__normalized_category__code', lookup_expr='iexact'
+    )
+
     class Meta:
         model = TournamentEdition
         fields = [
             'from_date', 'to_date', 'state', 'city', 'organization',
             'organization_slug', 'modality', 'circuit', 'surface',
             'status', 'q', 'near_profile',
+            'category', 'category_id', 'category_code',
         ]
+
+    @property
+    def qs(self):
+        # Always apply distinct() because category filters traverse a 1→N relation
+        # and would otherwise duplicate editions with multiple matching categories.
+        return super().qs.distinct()
+
+    def filter_category(self, queryset, name, value):
+        """Match by raw source text OR normalized category code."""
+        if not value:
+            return queryset
+        return queryset.filter(
+            Q(categories__source_category_text__icontains=value)
+            | Q(categories__normalized_category__code__iexact=value)
+            | Q(categories__normalized_category__label_ptbr__icontains=value)
+        )
 
     def filter_search(self, queryset, name, value):
         if not value:

@@ -453,7 +453,7 @@ def _parse_tenisintegrado_table(html: str, category_text: str,
             'category_text': category_text,
             'player_external_id': ext_id,
             'ranking_position': ranking_position,
-            'ranking_source': 'CBT',
+            'ranking_source': source.upper(),
             'payment_status': payment_status,
             'removed_or_replaced': False,
             'replacement_reason': '',
@@ -680,11 +680,17 @@ def parse_fbt_entries(html_or_text: str, source_url: str = '') -> dict:
     """
     FBT entry parser.
 
-    Uses the same generic table/CSV extraction strategy as FPT:
-    admin/n8n provides HTML/text with name/category columns; no auto-fetch.
+    FBT/BA uses TenisIntegrado for many tournament pages. Prefer the same
+    category-by-category auto-fetch used by CBT when a TenisIntegrado URL is
+    available; otherwise fall back to generic HTML/CSV extraction.
     """
     source = 'fbt'
     ranking_source = 'FBT'
+
+    is_tenisintegrado = 'tenisintegrado' in (source_url or '').lower()
+
+    if is_tenisintegrado and not (html_or_text or '').strip():
+        return fetch_tenisintegrado_entries(source_url, source=source)
 
     if not (html_or_text or '').strip():
         return {
@@ -699,6 +705,13 @@ def parse_fbt_entries(html_or_text: str, source_url: str = '') -> dict:
         }
 
     entries = _parse_generic(html_or_text, source, source_url, ranking_source)
+
+    # n8n often fetches /torneio_painel_insc/index/{id} before calling this
+    # endpoint. That first page usually contains only the category selector; the
+    # real entries require POSTing each id_categoria. If generic parsing found
+    # nothing, delegate to the TenisIntegrado auto-fetcher.
+    if not entries and is_tenisintegrado:
+        return fetch_tenisintegrado_entries(source_url, source=source)
 
     if not entries:
         return {
@@ -794,7 +807,7 @@ PARSER_LIMITATIONS = {
 # Sources that can fetch their own data from source_url without html_or_text input.
 # Used by quality_gate in parse-entries: empty html_or_text is valid for these sources
 # when source_url is provided and the parser returned entries successfully.
-SOURCES_AUTO_FETCH = {'cbt', 'fct'}
+SOURCES_AUTO_FETCH = {'cbt', 'fct', 'fbt'}
 
 
 def get_parser(source: str):

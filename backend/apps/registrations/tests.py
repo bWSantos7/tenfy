@@ -1454,6 +1454,54 @@ class TenisIntegradoParserTestCase(TestCase):
         self.assertEqual(result['confidence'], 'high')
         self.assertEqual(len(result['entries']), 1)
 
+    def test_fbt_uses_auto_mode_when_url_and_no_html(self):
+        """FBT/BA TenisIntegrado pages should use the category POST auto-fetcher."""
+        from unittest.mock import patch as _patch
+        from apps.registrations.parsers import parse_fbt_entries
+        mock_result = {
+            'entries': [{'player_name': 'Ana Bahia', 'category_text': '14 Anos Feminino',
+                         'player_external_id': 'tenisintegrado:123', 'ranking_position': 2,
+                         'ranking_source': 'FBT', 'payment_status': 'paid',
+                         'removed_or_replaced': False, 'replacement_reason': '',
+                         'source_url': '', 'confidence': 'high'}],
+            'parser_warning': False, 'warning_message': '', 'confidence': 'high', 'source': 'fbt',
+        }
+        with _patch(
+            'apps.registrations.parsers.fetch_tenisintegrado_entries',
+            return_value=mock_result,
+        ) as mock_fetch:
+            result = parse_fbt_entries(
+                '', source_url='https://www.tenisintegrado.com.br/torneio_painel_insc/index/9080'
+            )
+        mock_fetch.assert_called_once()
+        self.assertEqual(result['source'], 'fbt')
+        self.assertEqual(result['entries'][0]['ranking_source'], 'FBT')
+
+    def test_fbt_falls_back_to_auto_mode_when_selector_html_has_no_entries(self):
+        """n8n may fetch the selector page first; parser must still POST categories."""
+        from unittest.mock import patch as _patch
+        from apps.registrations.parsers import parse_fbt_entries
+        selector_html = '<select name="id_categoria"><option value="10">14 Anos Feminino</option></select>'
+        mock_result = {
+            'entries': [{'player_name': 'Bia Bahia', 'category_text': '14 Anos Feminino',
+                         'player_external_id': 'tenisintegrado:124', 'ranking_position': None,
+                         'ranking_source': 'FBT', 'payment_status': 'pending',
+                         'removed_or_replaced': False, 'replacement_reason': '',
+                         'source_url': '', 'confidence': 'high'}],
+            'parser_warning': False, 'warning_message': '', 'confidence': 'high', 'source': 'fbt',
+        }
+        with _patch(
+            'apps.registrations.parsers.fetch_tenisintegrado_entries',
+            return_value=mock_result,
+        ) as mock_fetch:
+            result = parse_fbt_entries(
+                selector_html,
+                source_url='https://www.tenisintegrado.com.br/torneio_painel_insc/index/9080',
+            )
+        mock_fetch.assert_called_once()
+        self.assertFalse(result['parser_warning'])
+        self.assertEqual(len(result['entries']), 1)
+
     def test_fetch_no_url_returns_warning(self):
         """parse_cbt_entries returns warning when no html and no tenisintegrado URL."""
         from apps.registrations.parsers import parse_cbt_entries
@@ -1573,6 +1621,20 @@ class QualityGateAutoFetchTestCase(TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertFalse(res.data.get('supports_auto_fetch'))
         self.assertFalse(res.data.get('auto_fetch_used'))
+
+    def test_fbt_supports_auto_fetch_true(self):
+        """FBT/BA TenisIntegrado flow can auto-fetch entries by category."""
+        with patch('apps.registrations.parsers.fetch_tenisintegrado_entries',
+                   return_value=self._mock_cbt_result(2)):
+            res = self.client.post('/api/integrations/parse-entries/', {
+                'source': 'fbt',
+                'source_url': 'https://www.tenisintegrado.com.br/torneio_painel_insc/index/9080',
+                'html_or_text': '',
+            }, format='json')
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.data.get('supports_auto_fetch'))
+        self.assertTrue(res.data.get('auto_fetch_used'))
+        self.assertTrue(res.data['quality_gate']['can_save'])
 
     def test_cbt_with_html_provided_does_not_use_auto_fetch(self):
         """If html_or_text is provided, auto_fetch_used=False even for CBT."""

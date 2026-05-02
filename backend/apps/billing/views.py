@@ -70,8 +70,8 @@ def plans_list(request):
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def subscription_detail(request):
-    """Return the authenticated user's subscription. Creates a free plan sub if none exists."""
-    sub = _get_or_create_free_subscription(request.user)
+    """Return the authenticated user's subscription. Creates pending Individual sub if none exists."""
+    sub = _get_or_create_individual_subscription(request.user)
     return Response(SubscriptionSerializer(sub).data)
 
 
@@ -95,43 +95,18 @@ def subscription_checkout(request):
         return Response({'detail': 'Plano não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
 
     with transaction.atomic():
-        initial_plan = plan
-        initial_status = Subscription.STATUS_PENDING
-        if plan.slug != Plan.SLUG_FREE:
-            initial_plan = Plan.objects.filter(slug=Plan.SLUG_FREE).first() or plan
-            initial_status = (
-                Subscription.STATUS_ACTIVE
-                if initial_plan.slug == Plan.SLUG_FREE
-                else Subscription.STATUS_PENDING
-            )
+        # All plans require payment via Asaas — start as pending until webhook confirms
         sub, created = Subscription.objects.get_or_create(
             user=request.user,
             defaults={
-                'plan': initial_plan,
+                'plan': plan,
                 'billing_period': d['billing_period'],
-                'status': initial_status,
+                'status': Subscription.STATUS_PENDING,
                 'start_date': date.today(),
             },
         )
 
-        # Free plan — activate immediately, no payment needed
-        if plan.slug == Plan.SLUG_FREE:
-            sub.plan = plan
-            sub.billing_period = d['billing_period']
-            sub.status = Subscription.STATUS_ACTIVE
-            sub.start_date = date.today()
-            sub.next_due_date = None
-            sub.pending_plan = None
-            sub.pending_billing_period = ''
-            sub.cancel_at_period_end = False
-            sub.save(update_fields=[
-                'plan', 'billing_period', 'status', 'start_date', 'next_due_date',
-                'pending_plan', 'pending_billing_period', 'cancel_at_period_end', 'updated_at',
-            ])
-            _log_action(request.user, 'billing.subscribe_free', f'Subscribed to Free plan')
-            return Response(SubscriptionSerializer(sub).data)
-
-        # Paid plan — attempt Asaas integration
+        # Track pending plan; activated via PAYMENT_CONFIRMED webhook
         sub.pending_plan = plan
         sub.pending_billing_period = d['billing_period']
         sub.cancel_at_period_end = False
@@ -427,7 +402,8 @@ def _handle_payment_overdue(payload: dict):
     p = payload.get('payment', {})
     asaas_sub_id = p.get('subscription', '')
     sub = _find_subscription_by_asaas(asaas_sub_id) if asaas_sub_id else None
-    if sub and sub.pending_plan_id:
+    if sub and sub.pending_plan_id and sub.status == Subscription.STATUS_PENDING:
+        # Payment failed for a brand-new pending sub — clear the pending upgrade, do not mark unpaid.
         sub.pending_plan = None
         sub.pending_billing_period = ''
         sub.save(update_fields=['pending_plan', 'pending_billing_period', 'updated_at'])
@@ -548,22 +524,22 @@ def asaas_customer_id(request):
         return Response({'customer_id': None, 'detail': 'Service unavailable'}, status=503)
 
 
-def _get_or_create_free_subscription(user):
+def _get_or_create_individual_subscription(user):
     try:
         return user.subscription
     except Subscription.DoesNotExist:
         from .models import Plan
         try:
-            free = Plan.objects.get(slug=Plan.SLUG_FREE)
+            individual = Plan.objects.get(slug=Plan.SLUG_INDIVIDUAL)
         except Plan.DoesNotExist:
-            free = Plan.objects.filter(is_active=True).order_by('price_monthly').first()
-            if not free:
+            individual = Plan.objects.filter(is_active=True).order_by('price_monthly').first()
+            if not individual:
                 raise
 
         return Subscription.objects.create(
             user=user,
-            plan=free,
-            status=Subscription.STATUS_ACTIVE,
+            plan=individual,
+            status=Subscription.STATUS_PENDING,
             start_date=date.today(),
         )
 

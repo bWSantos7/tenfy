@@ -29,8 +29,7 @@ class ResendEmailBackend(BaseEmailBackend):
 
         # Use RESEND_FROM_EMAIL when set; otherwise fall back to DEFAULT_FROM_EMAIL.
         # IMPORTANT: must be a verified sender/domain in the Resend dashboard.
-        # For testing without a verified domain use: onboarding@resend.dev
-        resend_from = getattr(settings, 'RESEND_FROM_EMAIL', None) or getattr(settings, 'DEFAULT_FROM_EMAIL', 'onboarding@resend.dev')
+        resend_from = getattr(settings, 'RESEND_FROM_EMAIL', None) or getattr(settings, 'DEFAULT_FROM_EMAIL', 'no-reply@tennis.app.br')
 
         sent = 0
         for message in email_messages:

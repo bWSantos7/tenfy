@@ -99,21 +99,6 @@ export function PlansScreen() {
   }, []);
 
   async function handleSelect(plan: Plan) {
-    // Free plan → activate immediately, no checkout needed
-    if (plan.slug === 'free') {
-      setLoading(true);
-      try {
-        await checkout({ plan_slug: 'free', billing_period: billingPeriod, payment_method: 'pix' });
-        Alert.alert('Pronto!', 'Você está no plano gratuito.', [
-          { text: 'OK', onPress: () => navigation.navigate('Subscription') },
-        ]);
-      } catch {
-        Alert.alert('Erro', 'Não foi possível ativar o plano gratuito.');
-      } finally {
-        setLoading(false);
-      }
-      return;
-    }
     navigation.navigate('Checkout', { plan, billingPeriod });
   }
 
@@ -125,7 +110,7 @@ export function PlansScreen() {
     );
   }
 
-  const currentSlug = subscription?.plan_slug ?? 'free';
+  const currentSlug = subscription?.plan_slug ?? 'individual';
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>

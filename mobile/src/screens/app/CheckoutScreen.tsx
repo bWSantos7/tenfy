@@ -77,21 +77,6 @@ export function CheckoutScreen() {
   }
 
   async function handleConfirm() {
-    if (plan.slug === 'free') {
-      setLoading(true);
-      try {
-        await checkout({ plan_slug: 'free', billing_period: billingPeriod, payment_method: 'pix' });
-        Alert.alert('Sucesso', 'Plano Free ativado!', [
-          { text: 'OK', onPress: () => navigation.navigate('Subscription') },
-        ]);
-      } catch {
-        Alert.alert('Erro', 'Não foi possível ativar o plano.');
-      } finally {
-        setLoading(false);
-      }
-      return;
-    }
-
     if (method === 'credit_card' || method === 'debit_card') {
       const err = validateCard();
       if (err) { Alert.alert('Dados incompletos', err); return; }
@@ -139,7 +124,7 @@ export function CheckoutScreen() {
       }
 
       const payload: CheckoutPayload = {
-        plan_slug:      plan.slug as 'pro' | 'elite',
+        plan_slug:      plan.slug as 'individual' | 'familia',
         billing_period: billingPeriod,
         payment_method: method,
         // Only the token is sent — card number/CVV stay on the device
@@ -222,7 +207,7 @@ export function CheckoutScreen() {
         </View>
 
         {/* Payment method */}
-        {plan.slug !== 'free' && (
+        {(
           <>
             <Text style={{ fontSize: 15, fontWeight: '600', color: colors.textSecondary, marginBottom: 10, marginTop: 8 }}>
               Forma de pagamento
@@ -258,7 +243,7 @@ export function CheckoutScreen() {
         )}
 
         {/* Card form */}
-        {(method === 'credit_card' || method === 'debit_card') && plan.slug !== 'free' && (
+        {(method === 'credit_card' || method === 'debit_card') && (
           <View style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: 16, marginTop: 8, marginBottom: 8, borderWidth: 1, borderColor: colors.borderSubtle }}>
             <Text style={{ fontSize: 15, fontWeight: '600', color: colors.textSecondary, marginBottom: 10 }}>Dados do cartão</Text>
             <TextInput style={inp} placeholder="Nome no cartão" placeholderTextColor={colors.textMuted} value={cardName} onChangeText={setCardName} autoCapitalize="characters" />
@@ -284,7 +269,7 @@ export function CheckoutScreen() {
         >
           {loading
             ? <ActivityIndicator color="#FFF" />
-            : <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 16 }}>{plan.slug === 'free' ? 'Usar plano gratuito' : 'Confirmar assinatura'}</Text>
+            : <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 16 }}>Confirmar assinatura</Text>
           }
         </TouchableOpacity>
 

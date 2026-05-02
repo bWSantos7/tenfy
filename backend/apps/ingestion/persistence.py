@@ -26,6 +26,14 @@ from .models import IngestionRun
 
 logger = logging.getLogger('apps.ingestion.persist')
 
+
+def _trunc(value: str, max_len: int, label: str = '') -> str:
+    if value and len(value) > max_len:
+        logger.warning('Truncating %s from %d to %d chars', label or 'field', len(value), max_len)
+        return value[:max_len]
+    return value or ''
+
+
 MATERIAL_FIELDS = {
     'start_date', 'end_date', 'entry_open_at', 'entry_close_at',
     'status', 'surface', 'base_price_brl', 'title',
@@ -101,10 +109,10 @@ class TournamentPersister:
         v = data.get('venue') or {}
         if v.get('city') or v.get('state') or v.get('name'):
             venue, _ = Venue.objects.get_or_create(
-                name=v.get('name') or '—',
-                city=v.get('city', ''),
+                name=_trunc(v.get('name') or '—', 200, 'Venue.name'),
+                city=_trunc(v.get('city', ''), 120, 'Venue.city'),
                 state=(v.get('state') or '').upper()[:2],
-                defaults={'address': v.get('address', '')},
+                defaults={'address': (v.get('address') or '')[:300]},
             )
 
         hash_payload = {
@@ -119,7 +127,7 @@ class TournamentPersister:
             json.dumps(hash_payload, sort_keys=True, default=str)
         )
 
-        external_id = data.get('external_id', '')
+        external_id = _trunc(data.get('external_id', ''), 120, 'external_id')
         season_year = int(data.get('season_year') or timezone.now().year)
         ed = TournamentEdition.objects.filter(
             tournament=tournament,
@@ -175,7 +183,7 @@ class TournamentPersister:
                 tournament=tournament,
                 season_year=season_year,
                 external_id=external_id,
-                title=data.get('title') or data.get('canonical_name'),
+                title=_trunc(data.get('title') or data.get('canonical_name') or '', 300, 'title'),
                 start_date=self._parse_date(data.get('start_date')),
                 end_date=self._parse_date(data.get('end_date')),
                 entry_open_at=self._parse_dt(data.get('entry_open_at')),
@@ -186,7 +194,7 @@ class TournamentPersister:
                 base_price_brl=data.get('base_price_brl'),
                 data_source=self.data_source,
                 official_source_url=data.get('official_source_url', ''),
-                source_name=self.data_source.source_name,
+                source_name=_trunc(self.data_source.source_name, 120, 'source_name'),
                 fetched_at=timezone.now(),
                 raw_content_hash=content_hash,
                 raw_payload=data,
@@ -232,7 +240,7 @@ class TournamentPersister:
                     if k in MATERIAL_FIELDS
                 }
 
-                ed.title = after['title'] or ed.title
+                ed.title = _trunc(after['title'] or ed.title, 300, 'title')
                 ed.start_date = self._parse_date(after['start_date']) or ed.start_date
                 ed.end_date = self._parse_date(after['end_date']) or ed.end_date
                 ed.entry_open_at = self._parse_dt(after['entry_open_at']) or ed.entry_open_at

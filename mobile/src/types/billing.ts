@@ -7,13 +7,14 @@ export interface PlanFeature {
 export interface Plan {
   id: number;
   name: string;
-  slug: 'free' | 'pro' | 'elite';
+  slug: 'individual' | 'familia';
   price_monthly: string;
   price_yearly: string;
   description: string;
   highlight_label: string;
   display_order: number;
   is_active: boolean;
+  max_members: number;
   features: PlanFeature[];
 }
 
@@ -21,7 +22,7 @@ export interface Subscription {
   id: number;
   plan: number;
   plan_name: string;
-  plan_slug: 'free' | 'pro' | 'elite';
+  plan_slug: 'individual' | 'familia';
   billing_period: 'monthly' | 'yearly';
   status: 'active' | 'pending' | 'canceled' | 'expired' | 'unpaid' | 'trial';
   is_active: boolean;
@@ -63,7 +64,7 @@ export interface FeatureAccess {
 export type BillingPaymentMethod = 'pix' | 'credit_card' | 'boleto' | 'debit_card';
 
 export interface CheckoutPayload {
-  plan_slug: 'free' | 'pro' | 'elite';
+  plan_slug: 'individual' | 'familia';
   billing_period: 'monthly' | 'yearly';
   payment_method: BillingPaymentMethod;
   card_token?: string;
@@ -74,6 +75,15 @@ export interface CheckoutPayload {
   card_ccv?: string;
   card_cpf?: string;
   card_postal_code?: string;
+}
+
+export interface FamilyMembership {
+  id: number;
+  member_email: string;
+  member_name: string;
+  status: 'pending' | 'active' | 'removed';
+  accepted_at: string | null;
+  created_at: string;
 }
 
 export interface PixPaymentData {

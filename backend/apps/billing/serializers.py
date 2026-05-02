@@ -1,6 +1,6 @@
 from decimal import Decimal
 from rest_framework import serializers
-from .models import Feature, Payment, Plan, PlanFeature, Subscription, WebhookEvent
+from .models import FamilyMembership, Feature, Payment, Plan, PlanFeature, Subscription, WebhookEvent
 
 
 class FeatureSerializer(serializers.ModelSerializer):
@@ -26,7 +26,7 @@ class PlanSerializer(serializers.ModelSerializer):
         fields = (
             'id', 'name', 'slug', 'price_monthly', 'price_yearly',
             'description', 'highlight_label', 'display_order', 'is_active',
-            'features',
+            'max_members', 'features',
         )
 
 
@@ -67,7 +67,7 @@ class PaymentSerializer(serializers.ModelSerializer):
 
 
 class CheckoutSerializer(serializers.Serializer):
-    plan_slug      = serializers.ChoiceField(choices=['free', 'pro', 'elite'])
+    plan_slug      = serializers.ChoiceField(choices=['individual', 'familia'])
     billing_period = serializers.ChoiceField(choices=['monthly', 'yearly'], default='monthly')
     payment_method = serializers.ChoiceField(
         choices=['credit_card', 'pix', 'debit_card'], default='pix'
@@ -75,6 +75,16 @@ class CheckoutSerializer(serializers.Serializer):
     # PCI-DSS: backend only accepts a tokenized card reference, NEVER raw card data.
     # Client-side tokenization is performed directly with Asaas from the mobile device.
     card_token = serializers.CharField(required=False, allow_blank=True, default='')
+
+
+class FamilyMembershipSerializer(serializers.ModelSerializer):
+    member_email = serializers.EmailField(source='member_user.email', read_only=True)
+    member_name  = serializers.CharField(source='member_user.full_name', read_only=True)
+
+    class Meta:
+        model = FamilyMembership
+        fields = ('id', 'member_email', 'member_name', 'status', 'accepted_at', 'created_at')
+        read_only_fields = fields
 
 
 class CancelSubscriptionSerializer(serializers.Serializer):

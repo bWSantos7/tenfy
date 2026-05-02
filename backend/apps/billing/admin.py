@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Feature, Payment, Plan, PlanFeature, Subscription, WebhookEvent
+from .models import FamilyMembership, Feature, Payment, Plan, PlanFeature, Subscription, WebhookEvent
 
 
 class PlanFeatureInline(admin.TabularInline):
@@ -11,7 +11,7 @@ class PlanFeatureInline(admin.TabularInline):
 
 @admin.register(Plan)
 class PlanAdmin(admin.ModelAdmin):
-    list_display  = ('name', 'slug', 'price_monthly', 'price_yearly', 'display_order', 'is_active')
+    list_display  = ('name', 'slug', 'price_monthly', 'price_yearly', 'max_members', 'display_order', 'is_active')
     list_editable = ('display_order', 'is_active')
     search_fields = ('name', 'slug')
     prepopulated_fields = {'slug': ('name',)}
@@ -62,3 +62,15 @@ class WebhookEventAdmin(admin.ModelAdmin):
     list_filter   = ('event_type', 'processed')
     search_fields = ('asaas_id', 'event_type')
     readonly_fields = ('event_type', 'asaas_id', 'payload', 'processed', 'error', 'created_at', 'updated_at')
+
+
+@admin.register(FamilyMembership)
+class FamilyMembershipAdmin(admin.ModelAdmin):
+    list_display   = ('responsible_email', 'member_user', 'status', 'accepted_at', 'created_at')
+    list_filter    = ('status',)
+    search_fields  = ('subscription__user__email', 'member_user__email')
+    readonly_fields = ('created_at', 'updated_at', 'accepted_at')
+
+    def responsible_email(self, obj):
+        return obj.subscription.user.email
+    responsible_email.short_description = 'Responsável'

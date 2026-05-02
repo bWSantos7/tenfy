@@ -2,11 +2,12 @@
 Billing & Subscriptions SaaS module.
 
 Models:
-  Plan          — available subscription tiers (Free, Pro, Elite)
-  Feature       — individual feature flags (tournament_creation, etc.)
-  PlanFeature   — M2M: which features each plan includes (with optional limit)
-  Subscription  — user ↔ plan binding, tracks status and Asaas IDs
-  Payment       — individual payment/charge records
+  Plan             — subscription tiers (Individual, Família)
+  Feature          — individual feature flags (tournament_creation, etc.)
+  PlanFeature      — M2M: which features each plan includes (with optional limit)
+  Subscription     — user ↔ plan binding, tracks status and Asaas IDs
+  FamilyMembership — dependents linked to a Família subscription
+  Payment          — individual payment/charge records
 """
 from django.conf import settings
 from django.db import models
@@ -18,9 +19,8 @@ from apps.core.models import TimestampedModel
 # ── Plans ──────────────────────────────────────────────────────────────────────
 
 class Plan(TimestampedModel):
-    SLUG_FREE  = 'free'
-    SLUG_PRO   = 'pro'
-    SLUG_ELITE = 'elite'
+    SLUG_INDIVIDUAL = 'individual'
+    SLUG_FAMILIA    = 'familia'
 
     BILLING_MONTHLY = 'monthly'
     BILLING_YEARLY  = 'yearly'
@@ -37,6 +37,10 @@ class Plan(TimestampedModel):
     highlight_label = models.CharField(max_length=40, blank=True, help_text='e.g. "Mais popular"')
     display_order   = models.PositiveSmallIntegerField(default=0)
     is_active       = models.BooleanField(default=True)
+    max_members     = models.PositiveSmallIntegerField(
+        default=1,
+        help_text='Total de membros permitidos (titular + dependentes). Individual=1, Família=5+.',
+    )
 
     class Meta:
         ordering = ['display_order']
@@ -230,3 +234,39 @@ class WebhookEvent(TimestampedModel):
 
     def __str__(self):
         return f'WebhookEvent {self.event_type} ({self.asaas_id})'
+
+
+# ── Família membership ─────────────────────────────────────────────────────────
+
+class FamilyMembership(TimestampedModel):
+    """
+    Links a dependent/member user to a Família subscription.
+
+    The responsible payer is Subscription.user.
+    Each FamilyMembership represents one dependent seat under that subscription.
+    The plan's max_members limits how many active memberships a subscription can have.
+    """
+    STATUS_PENDING = 'pending'
+    STATUS_ACTIVE  = 'active'
+    STATUS_REMOVED = 'removed'
+    STATUS_CHOICES = [
+        (STATUS_PENDING, 'Pendente'),
+        (STATUS_ACTIVE,  'Ativo'),
+        (STATUS_REMOVED, 'Removido'),
+    ]
+
+    subscription = models.ForeignKey(
+        Subscription, on_delete=models.CASCADE, related_name='family_members'
+    )
+    member_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='family_memberships'
+    )
+    status      = models.CharField(max_length=10, choices=STATUS_CHOICES, default=STATUS_PENDING)
+    accepted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        unique_together = ('subscription', 'member_user')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.subscription.user.email} → {self.member_user.email} [{self.status}]'

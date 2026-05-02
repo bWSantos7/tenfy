@@ -25,7 +25,7 @@ from .models import Feature, Subscription
 logger = logging.getLogger('apps.billing')
 
 _FEATURE_CACHE_TTL = 300   # 5 minutes — short enough to reflect plan changes quickly
-_FREE_PLAN_CACHE_TTL = 3600  # free plan features rarely change
+_PLAN_FEATURE_CACHE_TTL = 3600  # plan features rarely change
 
 
 def _user_features_cache_key(user_id: int) -> str:
@@ -52,7 +52,7 @@ def _get_plan_feature_codes(plan) -> set:
     if cached is not None:
         return cached
     codes = set(plan.plan_features.values_list('feature__code', flat=True))
-    cache.set(cache_key, codes, _FREE_PLAN_CACHE_TTL)
+    cache.set(cache_key, codes, _PLAN_FEATURE_CACHE_TTL)
     return codes
 
 
@@ -70,8 +70,8 @@ def _get_user_active_feature_codes(user) -> set:
     if sub is None or not sub.is_active:
         from .models import Plan
         try:
-            free_plan = Plan.objects.prefetch_related('plan_features__feature').get(slug=Plan.SLUG_FREE)
-            codes = _get_plan_feature_codes(free_plan)
+            individual_plan = Plan.objects.prefetch_related('plan_features__feature').get(slug=Plan.SLUG_INDIVIDUAL)
+            codes = _get_plan_feature_codes(individual_plan)
         except Plan.DoesNotExist:
             codes = set()
     else:
@@ -100,8 +100,8 @@ def user_feature_limit(user, feature_code: str):
     if sub is None or not sub.is_active:
         from .models import Plan
         try:
-            free_plan = Plan.objects.get(slug=Plan.SLUG_FREE)
-            pf = free_plan.plan_features.filter(feature__code=feature_code).first()
+            individual_plan = Plan.objects.get(slug=Plan.SLUG_INDIVIDUAL)
+            pf = individual_plan.plan_features.filter(feature__code=feature_code).first()
             return pf.limit if pf else 0
         except Plan.DoesNotExist:
             return 0
@@ -124,7 +124,7 @@ def requires_feature(feature_code: str):
                 )
             if not user_has_feature(request.user, feature_code):
                 sub = get_user_subscription(request.user)
-                current_plan = sub.plan.name if sub else 'Free'
+                current_plan = sub.plan.name if sub else 'Individual'
                 return Response(
                     {
                         'detail': f'Recurso "{feature_code}" não está disponível no plano {current_plan}.',

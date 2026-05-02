@@ -284,11 +284,11 @@ else:
         'Set it in Railway Variables. Without it, OTP/password reset emails will never reach users.'
     )
 
-DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='no-reply@tournamenthub.app')
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='no-reply@tennis.app.br')
 
 # Resend-specific from address.
-# If domain is not verified in Resend, set this to: onboarding@resend.dev
-# Once tournamenthub.app domain is verified in Resend dashboard, set to: no-reply@tournamenthub.app
+# Must be a verified sender or domain in the Resend dashboard.
+# While domain is not verified use: onboarding@resend.dev (set via Railway env var)
 RESEND_FROM_EMAIL = config('RESEND_FROM_EMAIL', default=DEFAULT_FROM_EMAIL)
 
 # Security settings (production)

@@ -165,7 +165,7 @@ export function SubscriptionScreen() {
       </View>
 
       {/* Pending payment instructions (M9) */}
-      {sub.status === 'pending' && sub.plan_slug !== 'free' && (
+      {sub.status === 'pending' && (
         <View style={styles.pendingCard}>
           <Text style={styles.pendingTitle}>⏳ Pagamento pendente</Text>
           <Text style={styles.pendingText}>
@@ -180,7 +180,7 @@ export function SubscriptionScreen() {
             onPress={() => navigation.navigate('Checkout', {
               plan: { id: sub.plan, name: sub.plan_name, slug: sub.plan_slug as any,
                 price_monthly: sub.price_monthly, price_yearly: sub.price_yearly,
-                description: '', highlight_label: '', display_order: 0, is_active: true, features: [] },
+                description: '', highlight_label: '', display_order: 0, is_active: true, max_members: 1, features: [] },
               billingPeriod: sub.billing_period,
             })}
           >
@@ -197,7 +197,7 @@ export function SubscriptionScreen() {
         <Text style={styles.upgradeBtnText}>Ver planos / Fazer upgrade</Text>
       </TouchableOpacity>
 
-      {sub.is_active && sub.plan_slug !== 'free' && !sub.cancel_at_period_end && (
+      {sub.is_active && !sub.cancel_at_period_end && (
         <TouchableOpacity
           style={styles.cancelBtn}
           onPress={handleCancel}

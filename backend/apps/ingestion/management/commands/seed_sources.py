@@ -16,6 +16,7 @@ ORGS = [
     {'name': 'Federação Paulista de Tênis', 'short_name': 'FPT', 'type': 'federation'},
     {'name': 'Confederação Brasileira de Tênis', 'short_name': 'CBT', 'type': 'confederation'},
     {'name': 'Federação Catarinense de Tênis', 'short_name': 'FCT', 'type': 'federation'},
+    {'name': 'Federação Baiana de Tênis', 'short_name': 'FBT', 'type': 'federation'},
     {'name': 'Confederación Sudamericana de Tenis', 'short_name': 'COSAT', 'type': 'confederation'},
     {'name': 'International Tennis Federation', 'short_name': 'ITF', 'type': 'confederation'},
     {'name': 'Universal Tennis Rating', 'short_name': 'UTR', 'type': 'platform'},
@@ -57,6 +58,18 @@ SOURCES = [
         'enabled': True,
         'config_json': {},
         'legal_notes': 'Public HTML pages. Scraping respects robots.txt and rate limits.',
+    },
+    {
+        'org_short': 'FBT',
+        'source_name': 'FBT Calendário Público',
+        'connector_key': 'fbt_public',
+        'source_type': 'html',
+        'base_url': 'https://www.fbt.com.br',
+        'fetch_schedule_cron': '0 */12 * * *',  # every 12 hours
+        'priority': 'P2',
+        'enabled': False,  # DISABLED: no public calendar API confirmed. Enable after n8n workflow + targets identified.
+        'config_json': {},
+        'legal_notes': 'DISABLED — no confirmed public API/calendar endpoint. Pending n8n assisted import workflow.',
     },
     {
         'org_short': 'COSAT',

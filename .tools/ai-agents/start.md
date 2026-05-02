@@ -4,7 +4,7 @@ Antes de qualquer alteração, leia obrigatoriamente os arquivos:
 - CLAUDE.md
 - AI_CONTEXT.md
 - README.md
-- C:\Users\Usuario\Desktop\tennis_hub\escopo_contrato
+- C:\Users\Usuario\Desktop\tennis_hub\escopo_contrato.pdf
 
 Siga todas as regras, restrições, arquitetura, checklist e escopo definidos nesses arquivos.
 
@@ -32,7 +32,7 @@ Agentes:
 
 Trabalhar automaticamente nesta branch para deixar o projeto 100% pronto para MVP, comparando tudo com o arquivo/pasta:
 
-C:\Users\Usuario\Desktop\tennis_hub\escopo_contrato
+C:\Users\Usuario\Desktop\tennis_hub\escopo_contrato.pdf
 
 O projeto deve ser auditado, corrigido, refatorado e validado até estar de acordo com o escopo contratado.
 
@@ -229,3 +229,4 @@ Iniciar pela auditoria completa do projeto contra o escopo_contrato e criar o re
 .tools/ai-agents/reports/AUDITORIA-INICIAL-ESCOPO.md
 
 Depois disso, criar automaticamente a próxima task de execução na fila.
+

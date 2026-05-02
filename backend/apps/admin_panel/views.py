@@ -256,6 +256,74 @@ class EditionPatchSerializer(serializers.ModelSerializer):
         read_only_fields = ('id',)
 
 
+class AdminEditionListSerializer(serializers.ModelSerializer):
+    """Compact list serializer for the admin editions tab.
+    Includes is_published and curation flags so admin can see hidden items."""
+    organization_short_name = serializers.CharField(source='tournament.organization.short_name', read_only=True)
+    venue_city = serializers.CharField(source='venue.city', read_only=True, default='')
+    venue_state = serializers.CharField(source='venue.state', read_only=True, default='')
+
+    class Meta:
+        model = TournamentEdition
+        fields = (
+            'id', 'title', 'status',
+            'start_date', 'end_date', 'entry_close_at',
+            'data_confidence', 'is_manual_override', 'is_youth', 'is_published',
+            'official_source_url', 'source_name',
+            'organization_short_name', 'venue_city', 'venue_state',
+        )
+
+
+@api_view(['GET'])
+@permission_classes([IsAdmin])
+def admin_editions_list(request):
+    """
+    Admin-only listing of TournamentEdition that INCLUDES unpublished items.
+    Supports query params:
+      - q          → text search across title / org / venue
+      - published  → 'true' | 'false' to filter; omit for all
+      - youth_only → 'true' (default off — admin needs to see everything)
+      - page_size  → default 30 (cap 200)
+    """
+    qs = (
+        TournamentEdition.objects
+        .select_related('tournament__organization', 'venue')
+        .order_by('-start_date', '-id')
+    )
+
+    q = request.query_params.get('q', '').strip()
+    if q:
+        qs = qs.filter(
+            Q(title__icontains=q)
+            | Q(tournament__canonical_name__icontains=q)
+            | Q(tournament__organization__short_name__icontains=q)
+            | Q(venue__name__icontains=q)
+            | Q(venue__city__icontains=q)
+        )
+
+    published = request.query_params.get('published')
+    if published is not None:
+        if published.lower() in ('1', 'true', 'yes'):
+            qs = qs.filter(is_published=True)
+        elif published.lower() in ('0', 'false', 'no'):
+            qs = qs.filter(is_published=False)
+
+    if request.query_params.get('youth_only', 'false').lower() == 'true':
+        qs = qs.filter(Q(is_youth=True) | Q(is_youth__isnull=True))
+
+    try:
+        page_size = min(int(request.query_params.get('page_size', 30)), 200)
+    except ValueError:
+        page_size = 30
+
+    total = qs.count()
+    items = qs[:page_size]
+    return Response({
+        'count': total,
+        'results': AdminEditionListSerializer(items, many=True).data,
+    })
+
+
 class EditionCreateSerializer(serializers.ModelSerializer):
     """Serializer for manually creating a tournament edition in the admin panel."""
     circuit = serializers.CharField(required=True)
@@ -382,7 +450,10 @@ def edition_patch(request, pk):
         reviewed_by=request.user,
         is_manual_override=True,
     )
-    return Response(TournamentEditionListSerializer(instance).data)
+    # Return the patched fields (including is_published) plus list metadata.
+    patched = EditionPatchSerializer(instance).data
+    listed = TournamentEditionListSerializer(instance).data
+    return Response({**listed, **patched})
 
 
 class DataSourceSerializer(serializers.ModelSerializer):

@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Home, Calendar, Star, Bell, User, LogOut, ShieldCheck, Sun, Moon, Users, Award } from 'lucide-react';
+import { Home, Calendar, Star, Bell, User, LogOut, ShieldCheck, Sun, Moon, Users, Award, CreditCard } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -47,6 +47,14 @@ export const AppLayout: React.FC = () => {
                 <span className="hidden sm:inline">Alunos</span>
               </NavLink>
             )}
+            <NavLink
+              to="/assinatura"
+              className="btn-ghost flex items-center gap-1 text-xs"
+              title="Minha assinatura"
+            >
+              <CreditCard className="w-4 h-4" />
+              <span className="hidden sm:inline">Assinatura</span>
+            </NavLink>
             {user?.is_staff && (
               <NavLink
                 to="/admin-panel"

@@ -899,31 +899,43 @@ interface AdminEdition {
   data_confidence: string;
   is_manual_override: boolean;
   is_youth: boolean | null;
-  is_published?: boolean;
+  is_published: boolean;
   official_source_url: string;
+  source_name?: string;
+  organization_short_name?: string;
+  venue_city?: string;
+  venue_state?: string;
 }
+
+type PublishedFilter = 'all' | 'published' | 'unpublished';
 
 const EditionsAdminTab: React.FC = () => {
   const [items, setItems] = useState<AdminEdition[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [publishedFilter, setPublishedFilter] = useState<PublishedFilter>('all');
 
-  async function load(q = '') {
+  async function load(q = '', filter: PublishedFilter = publishedFilter) {
     setLoading(true);
     try {
-      const res = await api.get<{ results: AdminEdition[] } | AdminEdition[]>(
-        '/api/tournaments/editions/',
-        { params: { youth_only: 'false', ...(q ? { q } : {}), page_size: 30 } },
+      const params: Record<string, string | number> = { page_size: 50 };
+      if (q) params.q = q;
+      if (filter === 'published') params.published = 'true';
+      if (filter === 'unpublished') params.published = 'false';
+
+      // Admin-only endpoint: includes unpublished items so admin can republish.
+      const res = await api.get<{ count: number; results: AdminEdition[] }>(
+        '/api/admin-panel/editions-list/',
+        { params },
       );
-      const data = (res.data as any).results ?? res.data;
-      setItems(data);
+      setItems(res.data.results);
     } catch (err) {
       toast.error(extractApiError(err));
     } finally {
       setLoading(false);
     }
   }
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [publishedFilter]);
 
   async function togglePublished(e: AdminEdition) {
     try {
@@ -947,6 +959,23 @@ const EditionsAdminTab: React.FC = () => {
           onKeyDown={(e) => e.key === 'Enter' && load(search.trim())}
         />
       </div>
+
+      <div className="flex gap-1 text-xs">
+        {(['all', 'published', 'unpublished'] as PublishedFilter[]).map((f) => (
+          <button
+            key={f}
+            onClick={() => setPublishedFilter(f)}
+            className={`px-3 py-1.5 rounded border ${
+              publishedFilter === f
+                ? 'border-accent-neon text-accent-neon bg-accent-neon/10'
+                : 'border-border-subtle text-text-muted hover:text-text-primary'
+            }`}
+          >
+            {f === 'all' ? 'Todos' : f === 'published' ? 'Publicados' : 'Ocultos'}
+          </button>
+        ))}
+      </div>
+
       {loading ? (
         <div className="py-10 flex justify-center"><Loader2 className="w-6 h-6 text-accent-neon animate-spin" /></div>
       ) : items.length === 0 ? (
@@ -955,11 +984,14 @@ const EditionsAdminTab: React.FC = () => {
         <div className="space-y-2">
           {items.map((e) => (
             <div key={e.id} className="card !p-3 flex items-start justify-between gap-2">
-              <div>
-                <div className="text-sm font-semibold">{e.title}</div>
-                <div className="text-xs text-text-muted">{e.start_date || 'sem data'} · {e.status} · confiança {e.data_confidence}</div>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-semibold truncate">{e.title}</div>
+                <div className="text-xs text-text-muted">
+                  {e.start_date || 'sem data'} · {e.status} · confiança {e.data_confidence}
+                  {e.organization_short_name && ` · ${e.organization_short_name}`}
+                </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-shrink-0">
                 {e.is_published === false && <Badge color="amber">oculto</Badge>}
                 {e.is_manual_override && <Badge color="blue">override</Badge>}
                 <button

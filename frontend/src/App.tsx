@@ -16,6 +16,7 @@ import { ProfilePage } from './pages/ProfilePage';
 import { AdminPanelPage } from './pages/AdminPanelPage';
 import { ResultsPage } from './pages/ResultsPage';
 import { CoachPage } from './pages/CoachPage';
+import { SubscriptionPage } from './pages/SubscriptionPage';
 
 const App: React.FC = () => {
   return (
@@ -71,6 +72,7 @@ const App: React.FC = () => {
         <Route path="resultados" element={<ResultsPage />} />
         <Route path="alertas" element={<AlertsPage />} />
         <Route path="perfil" element={<ProfilePage />} />
+        <Route path="assinatura" element={<SubscriptionPage />} />
         <Route path="treinador" element={<CoachPage />} />
         <Route
           path="admin-panel"

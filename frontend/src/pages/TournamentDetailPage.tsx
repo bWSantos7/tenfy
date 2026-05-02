@@ -398,6 +398,21 @@ const CategoryGroup: React.FC<{
                 {c.result.reasons.map((r) => translateReason(r)).join(' • ')}
               </div>
             )}
+            {c.result.ranking_check && c.result.ranking_check !== 'not_applicable' && (
+              <div
+                className={`text-[10px] mt-0.5 ${
+                  c.result.ranking_check === 'within_cutoff'
+                    ? 'text-accent-neon'
+                    : c.result.ranking_check === 'beyond_cutoff'
+                    ? 'text-amber-400'
+                    : 'text-text-muted italic'
+                }`}
+              >
+                {c.result.ranking_check === 'within_cutoff' && '✓ Ranking dentro do corte estimado.'}
+                {c.result.ranking_check === 'beyond_cutoff' && '⚠ Ranking acima do corte estimado — vaga incerta. Confirme na fonte oficial.'}
+                {c.result.ranking_check === 'unknown' && (c.result.ranking_note || 'Corte de ranking não estimado.')}
+              </div>
+            )}
           </div>
           {c.price_brl && (
             <span className="text-xs text-text-muted whitespace-nowrap">{fmtBRL(c.price_brl)}</span>

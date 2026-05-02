@@ -171,6 +171,7 @@ export interface TournamentEditionDetail extends TournamentEditionList {
 }
 
 export type EligibilityStatus = 'compatible' | 'incompatible' | 'unknown';
+export type RankingCheck = 'not_applicable' | 'unknown' | 'within_cutoff' | 'beyond_cutoff';
 
 export interface EligibilityResult {
   status: EligibilityStatus;
@@ -178,6 +179,10 @@ export interface EligibilityResult {
   rule_version_id: number | null;
   category_code: string | null;
   category_label: string | null;
+  // Ranking metadata — informational only. Backend never marks compatible
+  // based on ranking, only adds context.
+  ranking_check?: RankingCheck;
+  ranking_note?: string;
 }
 
 export interface EditionEligibility {

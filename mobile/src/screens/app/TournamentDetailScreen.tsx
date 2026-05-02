@@ -344,6 +344,23 @@ export function TournamentDetailScreen({ route, navigation }: Props) {
                 {isUnknown && !item.result?.reasons?.length ? (
                   <AppText variant="muted" style={{ marginLeft: 24, color: '#f59e0b' }}>• Regra oficial não encontrada para esta categoria</AppText>
                 ) : null}
+                {item.result?.ranking_check && item.result.ranking_check !== 'not_applicable' ? (
+                  <AppText
+                    variant="muted"
+                    style={{
+                      marginLeft: 24,
+                      color: item.result.ranking_check === 'within_cutoff'
+                        ? colors.accentNeon
+                        : item.result.ranking_check === 'beyond_cutoff'
+                        ? '#f59e0b'
+                        : colors.textMuted,
+                    }}
+                  >
+                    {item.result.ranking_check === 'within_cutoff' && '✓ Ranking dentro do corte estimado.'}
+                    {item.result.ranking_check === 'beyond_cutoff' && '⚠ Ranking acima do corte estimado — vaga incerta. Confirme na fonte oficial.'}
+                    {item.result.ranking_check === 'unknown' && (item.result.ranking_note || 'Corte de ranking não estimado.')}
+                  </AppText>
+                ) : null}
               </Card>
             );
           })}

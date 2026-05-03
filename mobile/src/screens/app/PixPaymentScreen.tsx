@@ -3,10 +3,8 @@ import {
   ActivityIndicator,
   Alert,
   Image,
-  ScrollView,
   Share,
   Text,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -14,6 +12,7 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { MainStackParamList } from '../../navigation/types';
 import { fetchSubscription } from '../../services/billing';
+import { Screen, AppText, Card, Button } from '../../components/ui';
 
 type PixRoute = RouteProp<MainStackParamList, 'PixPayment'>;
 type Nav = NativeStackNavigationProp<MainStackParamList>;
@@ -89,96 +88,111 @@ export function PixPaymentScreen() {
     }
   }
 
-  const stateBadgeStyle = {
+  const stateBadge = {
     confirmed: { bg: `${colors.accentNeon}15`, border: `${colors.accentNeon}50`, text: colors.accentNeon },
-    expired:   { bg: '#ef444415', border: '#ef444450', text: '#ef4444' },
-    error:     { bg: '#ef444415', border: '#ef444450', text: '#ef4444' },
+    expired:   { bg: `${colors.danger}15`, border: `${colors.danger}50`, text: colors.danger },
+    error:     { bg: `${colors.danger}15`, border: `${colors.danger}50`, text: colors.danger },
     waiting:   { bg: `${colors.accentBlue}15`, border: `${colors.accentBlue}50`, text: colors.accentBlue },
   };
-  const bState = paymentState === 'confirmed' ? stateBadgeStyle.confirmed
-    : (paymentState === 'expired' || paymentState === 'error') ? stateBadgeStyle.expired
-    : stateBadgeStyle.waiting;
+  const badge = paymentState === 'confirmed' ? stateBadge.confirmed
+    : (paymentState === 'expired' || paymentState === 'error') ? stateBadge.expired
+    : stateBadge.waiting;
+
+  const badgeLabel = paymentState === 'confirmed' ? 'Pagamento confirmado'
+    : paymentState === 'expired' ? 'Pix expirado'
+    : paymentState === 'error' ? 'Erro ao verificar pagamento'
+    : 'Aguardando pagamento';
 
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: colors.bgBase }}
-      contentContainerStyle={{ padding: 24, paddingBottom: 40, alignItems: 'center' }}
-    >
-      <Text style={{ fontSize: 22, fontWeight: '700', color: colors.textPrimary, marginBottom: 8, textAlign: 'center' }}>
+    <Screen>
+      <AppText variant="title" style={{ textAlign: 'center', marginBottom: 8 }}>
         Pague com Pix
-      </Text>
-      <Text style={{ fontSize: 14, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: 24 }}>
+      </AppText>
+      <AppText variant="muted" style={{ textAlign: 'center', lineHeight: 20, marginBottom: 24 }}>
         Escaneie o QR code ou copie o código abaixo no seu banco. A confirmação é automática em até 1 minuto.
-      </Text>
+      </AppText>
 
-      {/* State badge */}
-      <View style={{ borderRadius: 999, paddingHorizontal: 14, paddingVertical: 7, marginBottom: 18, borderWidth: 1, backgroundColor: bState.bg, borderColor: bState.border }}>
-        <Text style={{ fontSize: 12, fontWeight: '700', color: bState.text }}>
-          {paymentState === 'confirmed' ? 'Pagamento confirmado'
-            : paymentState === 'expired' ? 'Pix expirado'
-            : paymentState === 'error' ? 'Erro ao verificar pagamento'
-            : 'Aguardando pagamento'}
-        </Text>
+      {/* Status badge */}
+      <View style={{
+        alignSelf: 'center', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 7,
+        marginBottom: 18, borderWidth: 1, backgroundColor: badge.bg, borderColor: badge.border,
+      }}>
+        <AppText style={{ fontSize: 12, fontWeight: '700', color: badge.text }}>
+          {badgeLabel}
+        </AppText>
       </View>
 
       {/* QR Code */}
       {pixData.qr_code_image ? (
-        <View style={{ backgroundColor: colors.bgCard, borderRadius: 16, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: colors.borderSubtle }}>
+        <Card style={{ alignItems: 'center', marginBottom: 24 }}>
           {pixData.qr_code_image.startsWith('iVBOR') ? (
-            <Image source={{ uri: `data:image/png;base64,${pixData.qr_code_image}` }} style={{ width: 220, height: 220 }} resizeMode="contain" />
+            <Image
+              source={{ uri: `data:image/png;base64,${pixData.qr_code_image}` }}
+              style={{ width: 220, height: 220 }}
+              resizeMode="contain"
+            />
           ) : (
-            <Text style={{ color: '#ef4444', textAlign: 'center' }}>QR code inválido. Use o código Copia e Cola.</Text>
+            <AppText style={{ color: colors.danger, textAlign: 'center' }}>
+              QR code inválido. Use o código Copia e Cola.
+            </AppText>
           )}
-        </View>
+        </Card>
       ) : (
-        <View style={{ width: 220, height: 220, justifyContent: 'center', alignItems: 'center', marginBottom: 24 }}>
+        <View style={{ alignSelf: 'center', width: 220, height: 220, justifyContent: 'center', alignItems: 'center', marginBottom: 24 }}>
           <ActivityIndicator size="large" color={colors.accentBlue} />
-          <Text style={{ marginTop: 12, color: colors.textMuted, fontSize: 14 }}>Gerando QR code...</Text>
+          <AppText variant="muted" style={{ marginTop: 12 }}>Gerando QR code...</AppText>
         </View>
       )}
 
       {/* Copia e cola */}
       {pixData.copia_e_cola ? (
-        <View style={{ width: '100%', backgroundColor: colors.bgCard, borderRadius: 12, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: colors.borderSubtle }}>
-          <Text style={{ fontSize: 12, fontWeight: '600', color: colors.textMuted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Pix Copia e Cola</Text>
-          <Text numberOfLines={3} ellipsizeMode="middle" style={{ fontSize: 12, color: colors.textSecondary, fontFamily: 'monospace', marginBottom: 12, lineHeight: 18 }}>
+        <Card style={{ marginBottom: 16 }}>
+          <AppText
+            variant="caption"
+            style={{ fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}
+          >
+            Pix Copia e Cola
+          </AppText>
+          <Text
+            numberOfLines={3}
+            ellipsizeMode="middle"
+            style={{ fontSize: 12, color: colors.textSecondary, fontFamily: 'monospace', marginBottom: 12, lineHeight: 18 }}
+          >
             {pixData.copia_e_cola}
           </Text>
-          <TouchableOpacity onPress={handleCopy} style={{ backgroundColor: `${colors.accentBlue}18`, borderRadius: 8, paddingVertical: 10, alignItems: 'center' }}>
-            <Text style={{ color: colors.accentBlue, fontWeight: '600', fontSize: 14 }}>
-              {copied ? 'Código aberto para copiar' : 'Copiar código Pix'}
-            </Text>
-          </TouchableOpacity>
-        </View>
+          <Button
+            title={copied ? 'Código aberto para copiar' : 'Copiar código Pix'}
+            onPress={handleCopy}
+            variant="secondary"
+          />
+        </Card>
       ) : null}
 
       {pixData.expiration ? (
-        <Text style={{ fontSize: 12, color: colors.textMuted, marginBottom: 24 }}>
+        <AppText variant="caption" style={{ marginBottom: 24, textAlign: 'center' }}>
           Válido até: {new Date(pixData.expiration).toLocaleString('pt-BR')}
-        </Text>
+        </AppText>
       ) : null}
 
       {paymentState !== 'expired' ? (
-        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
           <ActivityIndicator size="small" color={colors.accentBlue} style={{ marginRight: 8 }} />
-          <Text style={{ fontSize: 13, color: colors.textMuted }}>Verificando pagamento automaticamente...</Text>
+          <AppText variant="muted">Verificando pagamento automaticamente...</AppText>
         </View>
       ) : null}
 
-      <TouchableOpacity
-        style={{ width: '100%', backgroundColor: colors.accentBlue, borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginBottom: 12 }}
+      <Button
+        title="Já paguei — verificar agora"
         onPress={handleCheckManually}
-        disabled={checking}
-      >
-        {checking
-          ? <ActivityIndicator color="#FFF" />
-          : <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 15 }}>Já paguei — verificar agora</Text>
-        }
-      </TouchableOpacity>
+        loading={checking}
+        style={{ marginBottom: 12 }}
+      />
 
-      <TouchableOpacity style={{ paddingVertical: 8 }} onPress={() => navigation.navigate('Subscription')}>
-        <Text style={{ color: colors.textMuted, fontSize: 14 }}>Pagar depois</Text>
-      </TouchableOpacity>
-    </ScrollView>
+      <Button
+        title="Pagar depois"
+        onPress={() => navigation.navigate('Subscription')}
+        variant="ghost"
+      />
+    </Screen>
   );
 }

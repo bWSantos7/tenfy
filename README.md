@@ -431,7 +431,7 @@ COSAT_MONGO_CONNECT_TIMEOUT_MS=5000
 
 ```env
 VITE_API_BASE_URL=https://api.tennis.app.br
-EXPO_PUBLIC_API_URL=https://api.tennis.app.br
+EXPO_PUBLIC_API_BASE_URL=https://api.tennis.app.br
 ```
 
 ---

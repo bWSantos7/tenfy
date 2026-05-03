@@ -22,7 +22,7 @@ function passwordStrength(pwd: string): { score: number; label: string; color: s
   if (/[0-9]/.test(pwd)) score++;
   if (/[^A-Za-z0-9]/.test(pwd)) score++;
   if (score <= 1) return { score, label: 'Fraca', color: '#ef4444' };
-  if (score <= 2) return { score, label: 'Razoável', color: '#f59e0b' };
+  if (score <= 2) return { score, label: 'Razoavel', color: '#f59e0b' };
   if (score <= 3) return { score, label: 'Boa', color: '#3b82f6' };
   return { score, label: 'Forte', color: '#39ff14' };
 }
@@ -33,23 +33,23 @@ type Step = 'form' | 'otp' | 'profile';
 const GENDER_OPTIONS = [{ value: 'M', label: 'Masculino' }, { value: 'F', label: 'Feminino' }];
 const ROLE_OPTIONS = [
   { value: 'player', label: 'Jogador(a)' },
-  { value: 'parent', label: 'Responsável / Pai ou Mãe' },
+  { value: 'parent', label: 'Responsavel / Pai ou Mae' },
 ];
 const UF_OPTIONS = [
-  { value: 'AC', label: 'AC – Acre' }, { value: 'AL', label: 'AL – Alagoas' },
-  { value: 'AP', label: 'AP – Amapá' }, { value: 'AM', label: 'AM – Amazonas' },
-  { value: 'BA', label: 'BA – Bahia' }, { value: 'CE', label: 'CE – Ceará' },
-  { value: 'DF', label: 'DF – Distrito Federal' }, { value: 'ES', label: 'ES – Espírito Santo' },
-  { value: 'GO', label: 'GO – Goiás' }, { value: 'MA', label: 'MA – Maranhão' },
-  { value: 'MT', label: 'MT – Mato Grosso' }, { value: 'MS', label: 'MS – Mato Grosso do Sul' },
-  { value: 'MG', label: 'MG – Minas Gerais' }, { value: 'PA', label: 'PA – Pará' },
-  { value: 'PB', label: 'PB – Paraíba' }, { value: 'PR', label: 'PR – Paraná' },
-  { value: 'PE', label: 'PE – Pernambuco' }, { value: 'PI', label: 'PI – Piauí' },
-  { value: 'RJ', label: 'RJ – Rio de Janeiro' }, { value: 'RN', label: 'RN – Rio Grande do Norte' },
-  { value: 'RS', label: 'RS – Rio Grande do Sul' }, { value: 'RO', label: 'RO – Rondônia' },
-  { value: 'RR', label: 'RR – Roraima' }, { value: 'SC', label: 'SC – Santa Catarina' },
-  { value: 'SP', label: 'SP – São Paulo' }, { value: 'SE', label: 'SE – Sergipe' },
-  { value: 'TO', label: 'TO – Tocantins' },
+  { value: 'AC', label: 'AC - Acre' }, { value: 'AL', label: 'AL - Alagoas' },
+  { value: 'AP', label: 'AP - Amapa' }, { value: 'AM', label: 'AM - Amazonas' },
+  { value: 'BA', label: 'BA - Bahia' }, { value: 'CE', label: 'CE - Ceara' },
+  { value: 'DF', label: 'DF - Distrito Federal' }, { value: 'ES', label: 'ES - Espirito Santo' },
+  { value: 'GO', label: 'GO - Goias' }, { value: 'MA', label: 'MA - Maranhao' },
+  { value: 'MT', label: 'MT - Mato Grosso' }, { value: 'MS', label: 'MS - Mato Grosso do Sul' },
+  { value: 'MG', label: 'MG - Minas Gerais' }, { value: 'PA', label: 'PA - Para' },
+  { value: 'PB', label: 'PB - Paraiba' }, { value: 'PR', label: 'PR - Parana' },
+  { value: 'PE', label: 'PE - Pernambuco' }, { value: 'PI', label: 'PI - Piaui' },
+  { value: 'RJ', label: 'RJ - Rio de Janeiro' }, { value: 'RN', label: 'RN - Rio Grande do Norte' },
+  { value: 'RS', label: 'RS - Rio Grande do Sul' }, { value: 'RO', label: 'RO - Rondonia' },
+  { value: 'RR', label: 'RR - Roraima' }, { value: 'SC', label: 'SC - Santa Catarina' },
+  { value: 'SP', label: 'SP - Sao Paulo' }, { value: 'SE', label: 'SE - Sergipe' },
+  { value: 'TO', label: 'TO - Tocantins' },
 ];
 const LEVEL_OPTIONS = Object.entries(LEVEL_LABELS).map(([value, label]) => ({ value, label }));
 const CLASS_OPTIONS = [
@@ -111,8 +111,8 @@ export function RegisterScreen({ navigation }: Props) {
     if (!form.email.trim()) return Toast.show({ type: 'error', text1: 'Informe seu e-mail' });
     if (!form.phone.trim()) return Toast.show({ type: 'error', text1: 'Informe seu celular' });
     if (!form.password) return Toast.show({ type: 'error', text1: 'Defina uma senha' });
-    if (form.password.length < 8) return Toast.show({ type: 'error', text1: 'A senha precisa ter no mínimo 8 caracteres' });
-    if (form.password !== form.password_confirm) return Toast.show({ type: 'error', text1: 'As senhas não conferem' });
+    if (form.password.length < 8) return Toast.show({ type: 'error', text1: 'A senha precisa ter no minimo 8 caracteres' });
+    if (form.password !== form.password_confirm) return Toast.show({ type: 'error', text1: 'As senhas nao conferem' });
     if (!form.accept_terms) return Toast.show({ type: 'error', text1: 'Aceite os termos para continuar' });
     setSubmitting(true);
     try {
@@ -133,7 +133,7 @@ export function RegisterScreen({ navigation }: Props) {
       setStep('profile');
       Toast.show({ type: 'success', text1: 'E-mail verificado!' });
     } catch (err) {
-      Toast.show({ type: 'error', text1: 'Erro na verificação', text2: extractApiError(err) });
+      Toast.show({ type: 'error', text1: 'Erro na verificacao', text2: extractApiError(err) });
     } finally { setSubmitting(false); }
   }
 
@@ -160,8 +160,8 @@ export function RegisterScreen({ navigation }: Props) {
 
   async function resendOtp() {
     setResending(true);
-    try { await sendEmailOtp(); Toast.show({ type: 'success', text1: 'Novo código enviado.' }); }
-    catch { Toast.show({ type: 'error', text1: 'Não foi possível reenviar.' }); }
+    try { await sendEmailOtp(); Toast.show({ type: 'success', text1: 'Novo codigo enviado.' }); }
+    catch { Toast.show({ type: 'error', text1: 'Nao foi possivel reenviar.' }); }
     finally { setResending(false); }
   }
 
@@ -170,17 +170,17 @@ export function RegisterScreen({ navigation }: Props) {
       <Card>
         <AppText variant="section">Criar conta</AppText>
 
-        {/* ── Step 1: Form ─────────────────────────────────────────── */}
+        {/* Step 1: Form */}
         {step === 'form' ? (
           <>
             <AppText variant="muted" style={{ marginBottom: 4 }}>
-              Campos marcados com <AppText variant="muted" style={{ color: '#ef4444', fontWeight: '700' }}>*</AppText> são obrigatórios.
+              Campos marcados com <AppText variant="muted" style={{ color: '#ef4444', fontWeight: '700' }}>*</AppText> sao obrigatorios.
             </AppText>
 
             <Input label="Nome completo" required value={form.full_name} onChangeText={(v) => setForm({ ...form, full_name: v })} autoCapitalize="words" placeholder="Ex: Maria Silva" />
             <Input label="E-mail" required value={form.email} onChangeText={(v) => setForm({ ...form, email: v.trim() })} autoCapitalize="none" keyboardType="email-address" placeholder="seu@email.com" />
             <Input label="Celular" required value={form.phone} onChangeText={(v) => setForm({ ...form, phone: v.replace(/\D/g, '') })} keyboardType="phone-pad" placeholder="11999999999" />
-            <Input label="Senha" required value={form.password} onChangeText={(v) => setForm({ ...form, password: v })} secureTextEntry placeholder="Mínimo 8 caracteres" />
+            <Input label="Senha" required value={form.password} onChangeText={(v) => setForm({ ...form, password: v })} secureTextEntry placeholder="Minimo 8 caracteres" />
             {form.password.length > 0 && (() => {
               const { score, label, color } = passwordStrength(form.password);
               return (
@@ -208,11 +208,11 @@ export function RegisterScreen({ navigation }: Props) {
               <Checkbox
                 value={form.accept_terms}
                 onValueChange={(v) => setForm({ ...form, accept_terms: v })}
-                label="Aceito os Termos de Uso e a Política de Privacidade (LGPD) *"
+                label="Aceito os Termos de Uso e a Politica de Privacidade (LGPD) *"
                 sublabel={
-                  <Pressable onPress={() => Linking.openURL('https://tournamenthub.app/termos')}>
+                  <Pressable onPress={() => Linking.openURL('https://www.tennis.app.br/termos')}>
                     <AppText variant="caption" style={{ color: colors.accentNeon, textDecorationLine: 'underline' }}>
-                      Ler Termos e Política de Privacidade
+                      Ler Termos e Politica de Privacidade
                     </AppText>
                   </Pressable>
                 }
@@ -220,7 +220,7 @@ export function RegisterScreen({ navigation }: Props) {
               <Checkbox
                 value={form.marketing_consent}
                 onValueChange={(v) => setForm({ ...form, marketing_consent: v })}
-                label="Desejo receber novidades e comunicações por e-mail (opcional)"
+                label="Desejo receber novidades e comunicacoes por e-mail (opcional)"
               />
             </View>
 
@@ -228,36 +228,36 @@ export function RegisterScreen({ navigation }: Props) {
           </>
         ) : null}
 
-        {/* ── Step 2: OTP ──────────────────────────────────────────── */}
+        {/* Step 2: OTP */}
         {step === 'otp' ? (
           <>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Ionicons name="mail-outline" size={20} color={colors.accentNeon} />
-              <AppText variant="body" style={{ fontWeight: '600' }}>Verificação de e-mail</AppText>
+              <AppText variant="body" style={{ fontWeight: '600' }}>Verificacao de e-mail</AppText>
             </View>
-            <AppText variant="muted">Enviamos um código de 6 dígitos para <AppText variant="muted" style={{ fontWeight: '700' }}>{form.email}</AppText>. Digite-o abaixo.</AppText>
-            <Input label="Código de verificação" value={emailCode} onChangeText={setEmailCode} keyboardType="number-pad" placeholder="000000" />
+            <AppText variant="muted">Enviamos um codigo de 6 digitos para <AppText variant="muted" style={{ fontWeight: '700' }}>{form.email}</AppText>. Digite-o abaixo.</AppText>
+            <Input label="Codigo de verificacao" value={emailCode} onChangeText={setEmailCode} keyboardType="number-pad" placeholder="000000" />
             <Button title="Confirmar e-mail" onPress={onVerify} loading={submitting} />
-            <Button title="Reenviar código" variant="secondary" onPress={resendOtp} loading={resending} />
+            <Button title="Reenviar codigo" variant="secondary" onPress={resendOtp} loading={resending} />
           </>
         ) : null}
 
-        {/* ── Step 3: Profile ──────────────────────────────────────── */}
+        {/* Step 3: Profile */}
         {step === 'profile' ? (
           <>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Ionicons name="person-add-outline" size={20} color={colors.accentNeon} />
               <AppText variant="body" style={{ fontWeight: '600' }}>Perfil esportivo</AppText>
             </View>
-            <AppText variant="muted">Preencha seus dados para encontrar torneios compatíveis com você. Pode pular e configurar depois.</AppText>
+            <AppText variant="muted">Preencha seus dados para encontrar torneios compativeis com voce. Pode pular e configurar depois.</AppText>
 
-            <Input label="Nome de exibição" value={profile.display_name} onChangeText={(v) => setProfile({ ...profile, display_name: v })} autoCapitalize="words" />
+            <Input label="Nome de exibicao" value={profile.display_name} onChangeText={(v) => setProfile({ ...profile, display_name: v })} autoCapitalize="words" />
             <Input label="Ano de nascimento" value={profile.birth_year} onChangeText={(v) => setProfile({ ...profile, birth_year: v.replace(/\D/g, '').slice(0, 4) })} keyboardType="number-pad" placeholder="Ex: 2008" />
-            <SelectField label="Gênero" value={profile.gender} options={GENDER_OPTIONS} onSelect={(v) => setProfile({ ...profile, gender: v })} placeholder="Selecione" />
+            <SelectField label="Genero" value={profile.gender} options={GENDER_OPTIONS} onSelect={(v) => setProfile({ ...profile, gender: v })} placeholder="Selecione" />
             <SelectField label="Estado (UF)" value={profile.home_state} options={UF_OPTIONS} onSelect={(v) => setProfile({ ...profile, home_state: v, home_city: '' })} />
             <SelectField label="Cidade" value={profile.home_city} options={cities} onSelect={(v) => setProfile({ ...profile, home_city: v })} placeholder={loadingCities ? 'Carregando...' : 'Selecione a cidade'} loading={loadingCities} searchable />
             <SelectField label="Raio de viagem" value={profile.travel_radius_km} options={RADIUS_OPTIONS} onSelect={(v) => setProfile({ ...profile, travel_radius_km: v })} />
-            <SelectField label="Nível competitivo" value={profile.competitive_level} options={LEVEL_OPTIONS} onSelect={(v) => setProfile({ ...profile, competitive_level: v })} />
+            <SelectField label="Nivel competitivo" value={profile.competitive_level} options={LEVEL_OPTIONS} onSelect={(v) => setProfile({ ...profile, competitive_level: v })} />
             <SelectField label="Classe (FPT/CBT)" value={profile.tennis_class} options={CLASS_OPTIONS} onSelect={(v) => setProfile({ ...profile, tennis_class: v })} placeholder="Opcional" />
 
             <Button title="Finalizar cadastro" onPress={onFinish} loading={submitting} />
@@ -268,7 +268,7 @@ export function RegisterScreen({ navigation }: Props) {
 
       {step === 'form' ? (
         <View style={{ alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 4 }}>
-          <AppText variant="body" style={{ color: colors.textSecondary }}>Já possui conta?</AppText>
+          <AppText variant="body" style={{ color: colors.textSecondary }}>Ja possui conta?</AppText>
           <Pressable onPress={() => navigation.navigate('Login')}>
             <AppText variant="body" style={{ color: colors.accentNeon, fontWeight: '600' }}>Entrar</AppText>
           </Pressable>

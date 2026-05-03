@@ -197,7 +197,7 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^http://localhost:(3000|5173|8081|19000|19006)$",
     r"^http://127\.0\.0\.1:(3000|5173|8081|19000|19006)$",
     # Locked to the specific Railway subdomain — prevents other Railway tenants from matching
-    r"^https://tournamenthub-production\.up\.railway\.app$",
+    # Legacy Railway subdomain removed — use tennis.app.br domains
     # Production domains — tennis.app.br
     r"^https://(api|www|app)\.tennis\.app\.br$",
 ]

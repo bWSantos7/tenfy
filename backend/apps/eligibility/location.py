@@ -99,7 +99,7 @@ def geocode_location(city: str, state: str, address: str = ''):
                 'limit': 1,
                 'countrycodes': 'br',
             },
-            headers={'User-Agent': getattr(settings, 'SCRAPER_USER_AGENT', 'TournamentHubBot/1.0')},
+            headers={'User-Agent': getattr(settings, 'SCRAPER_USER_AGENT', 'TennisHubBot/1.0')},
             timeout=20,
         )
         response.raise_for_status()

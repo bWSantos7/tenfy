@@ -75,3 +75,5 @@ Sync*.json
 # Claude / local tools
 .claude/
 .tools/
+
+escopo_contrato.pdf

@@ -8,10 +8,10 @@ from .models import TournamentEdition
 def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Great-circle distance in km between two (lat, lon) points."""
     R = 6371.0
-    φ1, φ2 = math.radians(lat1), math.radians(lat2)
-    dφ = math.radians(lat2 - lat1)
-    dλ = math.radians(lon2 - lon1)
-    a = math.sin(dφ / 2) ** 2 + math.cos(φ1) * math.cos(φ2) * math.sin(dλ / 2) ** 2
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    d_phi = math.radians(lat2 - lat1)
+    d_lambda = math.radians(lon2 - lon1)
+    a = math.sin(d_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(d_lambda / 2) ** 2
     return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
@@ -48,7 +48,7 @@ class TournamentEditionFilter(filters.FilterSet):
 
     @property
     def qs(self):
-        # Always apply distinct() because category filters traverse a 1→N relation
+        # Always apply distinct() because category filters traverse a 1-to-N relation
         # and would otherwise duplicate editions with multiple matching categories.
         return super().qs.distinct()
 
@@ -91,6 +91,11 @@ class TournamentEditionFilter(filters.FilterSet):
         except PlayerProfile.DoesNotExist:
             return queryset
 
+        if not profile.home_lat or not profile.home_lng:
+            # Cannot compute distance without valid coordinates - return nothing
+            # rather than silently using 0,0 (Gulf of Guinea) as origin.
+            return queryset.none()
+
         radius_km = profile.travel_radius_km or 100
         # Pre-filter: only editions with geocoded venues
         candidates = queryset.filter(
@@ -101,7 +106,7 @@ class TournamentEditionFilter(filters.FilterSet):
         matching_ids = [
             ed.id for ed in candidates
             if _haversine_km(
-                profile.home_lat or 0, profile.home_lng or 0,
+                profile.home_lat, profile.home_lng,
                 ed.venue.latitude, ed.venue.longitude,
             ) <= radius_km
         ]

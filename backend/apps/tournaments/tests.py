@@ -7,6 +7,7 @@ from django.core.cache import cache
 from django.test import TestCase
 from rest_framework.test import APIClient
 
+from apps.players.models import PlayerProfile
 from apps.sources.models import Organization, DataSource
 from apps.tournaments.models import Tournament, TournamentEdition, Venue
 
@@ -81,7 +82,7 @@ class TournamentFilterCosatTestCase(TestCase):
         """Tournament with start_date=None is not excluded by the queryset filter."""
         self.edition.start_date = None
         self.edition.save(update_fields=['start_date', 'updated_at'])
-        # Directly test the queryset — no API pagination interaction
+        # Directly test the queryset - no API pagination interaction
         from apps.tournaments.models import TournamentEdition
         from django.db.models import Q
         ids = list(
@@ -151,3 +152,28 @@ class TournamentFilterCosatTestCase(TestCase):
         self.assertIn(rj_edition.id, unfiltered_ids)
         self.assertIn(self.edition.id, filtered_ids)
         self.assertNotIn(rj_edition.id, filtered_ids)
+
+    def test_near_profile_without_coordinates_returns_no_results(self):
+        """near_profile must not silently use 0,0 when profile has no coordinates."""
+        venue = Venue.objects.create(
+            name='Arena Geocoded',
+            city='Sao Paulo',
+            state='SP',
+            latitude=-23.5505,
+            longitude=-46.6333,
+        )
+        self.edition.venue = venue
+        self.edition.save(update_fields=['venue', 'updated_at'])
+        profile = PlayerProfile.objects.create(
+            user=self.user,
+            display_name='Filter Player',
+            home_state='SP',
+            home_city='Sao Paulo',
+            travel_radius_km=100,
+        )
+
+        res = self.client.get('/api/tournaments/editions/', {'near_profile': profile.id})
+
+        self.assertEqual(res.status_code, 200)
+        ids = [e['id'] for e in (res.data.get('results') or res.data)]
+        self.assertNotIn(self.edition.id, ids)

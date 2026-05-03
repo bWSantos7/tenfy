@@ -58,7 +58,7 @@ def _headers() -> dict:
     return {
         'access_token': api_key,
         'Content-Type': 'application/json',
-        'User-Agent': 'TournamentHub/1.0',
+        'User-Agent': 'TennisHub/1.0',
     }
 
 

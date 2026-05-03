@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -86,17 +85,23 @@ export function PlansScreen() {
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'yearly'>('monthly');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
-    Promise.all([fetchPlans(), fetchSubscription()])
+    setLoading(true);
+    setError(null);
+    Promise.all([
+      fetchPlans(),
+      fetchSubscription().catch(() => null),
+    ])
       .then(([p, s]) => {
         setPlans(p);
-        setSubscription(s);
-        setBillingPeriod(s.billing_period);
+        if (s) { setSubscription(s); setBillingPeriod(s.billing_period); }
       })
-      .catch(() => Alert.alert('Erro', 'Não foi possível carregar os planos.'))
+      .catch(() => setError('Não foi possível carregar os planos. Tente novamente.'))
       .finally(() => setLoading(false));
-  }, []);
+  }, [retryKey]);
 
   async function handleSelect(plan: Plan) {
     navigation.navigate('Checkout', { plan, billingPeriod });
@@ -110,7 +115,29 @@ export function PlansScreen() {
     );
   }
 
-  const currentSlug = subscription?.plan_slug ?? 'individual';
+  if (error) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.feedbackText}>{error}</Text>
+        <TouchableOpacity style={styles.selectBtn} onPress={() => setRetryKey((k) => k + 1)}>
+          <Text style={styles.selectBtnText}>Tentar novamente</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (plans.length === 0) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.feedbackText}>Nenhum plano disponível no momento.</Text>
+        <TouchableOpacity style={[styles.selectBtn, { backgroundColor: '#6B7280' }]} onPress={() => navigation.goBack()}>
+          <Text style={styles.selectBtnText}>Voltar</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  const currentSlug = subscription?.plan_slug ?? '';
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -148,6 +175,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8F9FA' },
   content:   { padding: 16, paddingBottom: 40 },
   center:    { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  feedbackText: { color: '#6B7280', textAlign: 'center', marginBottom: 16, paddingHorizontal: 24, lineHeight: 20 },
   title:     { fontSize: 24, fontWeight: '700', color: '#1F2937', marginBottom: 16, textAlign: 'center' },
 
   periodToggle: { flexDirection: 'row', backgroundColor: '#E5E7EB', borderRadius: 10, marginBottom: 20, padding: 2 },

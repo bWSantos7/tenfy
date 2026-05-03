@@ -4,7 +4,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import Toast from 'react-native-toast-message';
 import { MainStackParamList, MainTabParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -25,6 +24,7 @@ export function HomeScreen(_: Props) {
   const navigation = useNavigation<StackNav>();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [profile, setProfile] = useState<PlayerProfile | null>(null);
   const [hasProfile, setHasProfile] = useState(false);
   const [compat, setCompat] = useState<TournamentEditionList[]>([]);
@@ -34,11 +34,12 @@ export function HomeScreen(_: Props) {
   const hasLoadedRef = useRef(false);
 
   const loadData = useCallback(async (active = { current: true }) => {
+    setError(null);
     try {
       const [profiles, closingData, recentData, alerts] = await Promise.all([
-        listProfiles().catch(() => []),
-        closingSoon(14).catch(() => []),
-        listEditions({ page_size: 8, ordering: '-created_at' }).catch(() => ({ results: [] } as any)),
+        listProfiles(),
+        closingSoon(14),
+        listEditions({ page_size: 8, ordering: '-created_at' }),
         unreadAlerts().catch(() => []),
       ]);
       if (!active.current) return;
@@ -56,7 +57,7 @@ export function HomeScreen(_: Props) {
       }
       hasLoadedRef.current = true;
     } catch {
-      Toast.show({ type: 'error', text1: 'Erro ao carregar início' });
+      if (active.current) setError('Não foi possível carregar os dados. Verifique sua conexão.');
     }
   }, []);
 
@@ -76,7 +77,25 @@ export function HomeScreen(_: Props) {
     setRefreshing(false);
   }
 
+  function handleRetry() {
+    setError(null);
+    setLoading(true);
+    hasLoadedRef.current = false;
+    loadData().finally(() => setLoading(false));
+  }
+
   if (loading) return <Screen><LoadingBlock /></Screen>;
+
+  if (error) return (
+    <Screen>
+      <EmptyState
+        icon="wifi-outline"
+        title="Erro ao carregar"
+        subtitle="Não foi possível carregar os dados. Verifique sua conexão."
+        action={<Button title="Tentar novamente" onPress={handleRetry} />}
+      />
+    </Screen>
+  );
 
   return (
     <Screen onRefresh={onRefresh} refreshing={refreshing}>

@@ -53,15 +53,16 @@ export function SubscriptionScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async (showRefresh = false) => {
-    if (showRefresh) setRefreshing(true);
+    if (showRefresh) setRefreshing(true); else setError(null);
     try {
       const [sub, pays] = await Promise.all([fetchSubscription(), fetchPayments()]);
       setSubscription(sub);
       setPayments(pays.slice(0, 10));
     } catch {
-      Alert.alert('Erro', 'Não foi possível carregar as informações.');
+      setError('Não foi possível carregar as informações de assinatura.');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -120,7 +121,29 @@ export function SubscriptionScreen() {
     );
   }
 
-  const sub = subscription!;
+  if (error) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.feedbackText}>{error}</Text>
+        <TouchableOpacity style={styles.upgradeBtn} onPress={() => { setLoading(true); load(); }}>
+          <Text style={styles.upgradeBtnText}>Tentar novamente</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (!subscription) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.feedbackText}>Você ainda não possui uma assinatura ativa.</Text>
+        <TouchableOpacity style={styles.upgradeBtn} onPress={() => navigation.navigate('Plans')}>
+          <Text style={styles.upgradeBtnText}>Ver planos disponíveis</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  const sub = subscription;
   const statusInfo = STATUS_LABELS[sub.status] ?? { label: sub.status, color: '#6B7280' };
 
   return (
@@ -265,6 +288,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8F9FA' },
   content:   { padding: 16, paddingBottom: 40 },
   center:    { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  feedbackText: { color: '#6B7280', textAlign: 'center', marginBottom: 16, paddingHorizontal: 24, lineHeight: 20 },
   title:     { fontSize: 22, fontWeight: '700', color: '#1F2937', marginBottom: 16 },
 
   planCard:    { backgroundColor: '#FFF', borderRadius: 14, padding: 18, marginBottom: 14, borderWidth: 1, borderColor: '#E5E7EB' },

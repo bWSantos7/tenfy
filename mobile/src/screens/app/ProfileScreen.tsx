@@ -53,12 +53,15 @@ export function ProfileScreen(_: Props) {
   const { user, setUser, logout } = useAuth();
   const navigation = useNavigation<StackNav>();
   const [loading, setLoading] = useState(true);
+  const [profileError, setProfileError] = useState<string | null>(null);
   const [profiles, setProfiles] = useState<PlayerProfile[]>([]);
   const [editing, setEditing] = useState<PlayerProfile | null>(null);
 
   async function load() {
     setLoading(true);
-    try { setProfiles(await listProfiles().catch(() => []) as PlayerProfile[]); }
+    setProfileError(null);
+    try { setProfiles(await listProfiles() as PlayerProfile[]); }
+    catch { setProfileError('Não foi possível carregar seus perfis. Verifique sua conexão.'); }
     finally { setLoading(false); }
   }
 
@@ -231,7 +234,14 @@ export function ProfileScreen(_: Props) {
           </Pressable>
         </View>
 
-        {loading ? <LoadingBlock /> : profiles.length === 0 ? (
+        {loading ? <LoadingBlock /> : profileError ? (
+          <EmptyState
+            icon="alert-circle-outline"
+            title="Erro ao carregar perfis"
+            subtitle={profileError}
+            action={<Button title="Tentar novamente" onPress={load} />}
+          />
+        ) : profiles.length === 0 ? (
           <EmptyState
             title="Nenhum perfil criado."
             subtitle="Crie um perfil para ver torneios compatíveis, agenda e resultados."

@@ -1,10 +1,10 @@
 ﻿{
-    "status":  "running",
-    "cycle":  11,
+    "status":  "done",
+    "cycle":  16,
     "max_cycles":  50,
-    "current_task":  "011-auto-cycle-11.md",
-    "last_agent":  "codex-planner",
-    "final_verdict":  null,
-    "stop_reason":  null,
+    "current_task":  "000-start.md",
+    "last_agent":  "claude",
+    "final_verdict":  "mvp_pronto_com_ressalvas",
+    "stop_reason":  "Cycle 16: verified and committed pending cycle-13 mobile changes. FINAL-REPORT stands.",
     "last_error":  null
 }

@@ -160,13 +160,14 @@ export function Checkbox({
 // ─── Button ───────────────────────────────────────────────────────────────────
 
 export function Button({
-  title, onPress, loading, disabled, variant = 'primary', style,
+  title, onPress, loading, disabled, variant = 'primary', size = 'default', style,
 }: {
   title: string;
   onPress?: () => void;
   loading?: boolean;
   disabled?: boolean;
   variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
+  size?: 'default' | 'small';
   style?: any;
 }) {
   const { colors } = useTheme();
@@ -198,15 +199,17 @@ export function Button({
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
       disabled={disabled || loading}
+      hitSlop={size === 'small' ? { top: 6, right: 4, bottom: 6, left: 4 } : undefined}
     >
       <Animated.View style={[
         styles.button,
+        size === 'small' && styles.buttonSmall,
         { backgroundColor: palette.bg, borderColor: palette.border, opacity: disabled ? 0.5 : 1, transform: [{ scale }] },
         style,
       ]}>
         {loading
           ? <ActivityIndicator color={variant === 'primary' ? colors.bgBase : colors.accentNeon} />
-          : <Text style={{ color: palette.text, fontWeight: '700', fontSize: 15 }}>{title}</Text>
+          : <Text style={{ color: palette.text, fontWeight: '700', fontSize: size === 'small' ? 13 : 15 }}>{title}</Text>
         }
       </Animated.View>
     </Pressable>
@@ -378,5 +381,6 @@ const styles = StyleSheet.create({
   content: { padding: 16, paddingBottom: 100, gap: 16 },
   card:    { borderWidth: 1, borderRadius: 16, padding: 16, gap: 10 },
   input:   { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13, fontSize: 15 },
-  button:  { minHeight: 50, borderWidth: 1, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20, paddingVertical: 13 },
+  button:      { minHeight: 50, borderWidth: 1, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20, paddingVertical: 13 },
+  buttonSmall: { minHeight: 32, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
 });

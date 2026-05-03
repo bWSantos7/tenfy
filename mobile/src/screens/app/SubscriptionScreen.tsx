@@ -1,7 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import {
   Alert,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -22,17 +21,30 @@ import {
 import { extractApiError } from '../../services/api';
 import { AppText, Button, Card, EmptyState, Input, LoadingBlock, Screen, SectionHeader } from '../../components/ui';
 import { useTheme } from '../../contexts/ThemeContext';
+import { palette } from '../../theme';
 
 type Nav = NativeStackNavigationProp<MainStackParamList>;
 
-const STATUS_LABELS: Record<string, { label: string; color: string }> = {
-  active:   { label: 'Ativa',        color: '#10B981' },
-  pending:  { label: 'Pendente',     color: '#F59E0B' },
-  canceled: { label: 'Cancelada',    color: '#EF4444' },
-  expired:  { label: 'Expirada',     color: '#6B7280' },
-  unpaid:   { label: 'Inadimplente', color: '#EF4444' },
-  trial:    { label: 'Trial',        color: '#6366F1' },
+const STATUS_LABELS: Record<string, string> = {
+  active:   'Ativa',
+  pending:  'Pendente',
+  canceled: 'Cancelada',
+  expired:  'Expirada',
+  unpaid:   'Inadimplente',
+  trial:    'Trial',
 };
+
+function getStatusColor(status: string, c: typeof palette.dark): string {
+  switch (status) {
+    case 'active':   return c.statusOpen;
+    case 'pending':  return c.statusClosing;
+    case 'canceled': return c.statusCanceled;
+    case 'expired':  return c.statusClosed;
+    case 'unpaid':   return c.statusCanceled;
+    case 'trial':    return c.statusProgress;
+    default:         return c.textMuted;
+  }
+}
 
 function formatDate(d: string | null): string {
   if (!d) return '—';
@@ -149,8 +161,9 @@ export function SubscriptionScreen() {
     );
   }
 
-  const sub        = subscription;
-  const statusInfo = STATUS_LABELS[sub.status] ?? { label: sub.status, color: '#6B7280' };
+  const sub         = subscription;
+  const statusLabel = STATUS_LABELS[sub.status] ?? 'Não informado';
+  const statusColor = getStatusColor(sub.status, colors);
 
   return (
     <Screen onRefresh={() => load(true)} refreshing={refreshing}>
@@ -165,9 +178,9 @@ export function SubscriptionScreen() {
               {sub.billing_period === 'yearly' ? 'Cobrança anual' : 'Cobrança mensal'}
             </AppText>
           </View>
-          <View style={{ borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4, backgroundColor: statusInfo.color + '20' }}>
-            <AppText style={{ fontSize: 12, fontWeight: '700', color: statusInfo.color }}>
-              {statusInfo.label}
+          <View style={{ borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4, backgroundColor: statusColor + '20' }}>
+            <AppText style={{ fontSize: 12, fontWeight: '700', color: statusColor }}>
+              {statusLabel}
             </AppText>
           </View>
         </View>
@@ -194,8 +207,8 @@ export function SubscriptionScreen() {
         </View>
 
         {sub.cancel_at_period_end && (
-          <View style={{ backgroundColor: '#FEF3C7', borderRadius: 8, padding: 10, marginTop: 10 }}>
-            <AppText style={{ color: '#92400E', fontSize: 12 }}>
+          <View style={{ backgroundColor: `${colors.statusClosing}20`, borderRadius: 8, padding: 10, marginTop: 10 }}>
+            <AppText style={{ color: colors.statusClosing, fontSize: 12 }}>
               Cancelamento agendado — ativo até {formatDate(sub.next_due_date)}
             </AppText>
           </View>
@@ -204,15 +217,15 @@ export function SubscriptionScreen() {
 
       {/* Pending payment instructions */}
       {sub.status === 'pending' && (
-        <Card style={{ marginBottom: 14, borderColor: '#F59E0B', borderWidth: 1, backgroundColor: '#FFFBEB' }}>
-          <AppText style={{ fontSize: 16, fontWeight: '700', color: '#92400E', marginBottom: 8 }}>
+        <Card style={{ marginBottom: 14, borderColor: colors.statusClosing, borderWidth: 1, backgroundColor: `${colors.statusClosing}10` }}>
+          <AppText style={{ fontSize: 16, fontWeight: '700', color: colors.statusClosing, marginBottom: 8 }}>
             Pagamento pendente
           </AppText>
-          <AppText style={{ fontSize: 13, color: '#78350F', lineHeight: 19, marginBottom: 8 }}>
+          <AppText style={{ fontSize: 13, color: colors.textSecondary, lineHeight: 19, marginBottom: 8 }}>
             Sua assinatura foi criada e está aguardando confirmação do pagamento.
             Verifique seu e-mail para instruções de pagamento (Pix, boleto ou cartão).
           </AppText>
-          <AppText style={{ fontSize: 12, color: '#92400E', fontStyle: 'italic', marginBottom: 12 }}>
+          <AppText style={{ fontSize: 12, color: colors.textMuted, fontStyle: 'italic', marginBottom: 12 }}>
             Após a confirmação do pagamento, sua assinatura será ativada automaticamente.
           </AppText>
           <Button
@@ -275,7 +288,7 @@ export function SubscriptionScreen() {
               <AppText style={{
                 fontSize: 14,
                 fontWeight: '700',
-                color: p.status === 'paid' ? '#10B981' : colors.textMuted,
+                color: p.status === 'paid' ? colors.statusOpen : colors.textMuted,
               }}>
                 {formatAmount(p.amount)}
               </AppText>
@@ -390,15 +403,12 @@ function FamilySection() {
                 {m.status === 'active' ? 'Ativo' : m.status === 'pending' ? 'Aguardando aceite' : 'Removido'}
               </AppText>
             </View>
-            <TouchableOpacity
+            <Button
+              variant="danger"
+              size="small"
+              title="Remover"
               onPress={() => handleRemove(m)}
-              style={{
-                paddingHorizontal: 10, paddingVertical: 6,
-                borderRadius: 6, borderWidth: 1, borderColor: colors.danger,
-              }}
-            >
-              <AppText style={{ color: colors.danger, fontSize: 12, fontWeight: '600' }}>Remover</AppText>
-            </TouchableOpacity>
+            />
           </View>
         ))
       )}

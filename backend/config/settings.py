@@ -135,6 +135,7 @@ WSGI_APPLICATION = 'config.wsgi.application'
 ASGI_APPLICATION = 'config.asgi.application'
 
 # Database — PostgreSQL only; SQLite is never allowed in any environment
+_IS_CI = os.getenv('CI', '').lower() == 'true' or os.getenv('GITHUB_ACTIONS', '').lower() == 'true'
 _DATABASE_URL = config('DATABASE_URL', default=None)
 if not _DATABASE_URL:
     raise ImproperlyConfigured(
@@ -149,9 +150,11 @@ DATABASES = {
     'default': dj_database_url.parse(
         _DATABASE_URL,
         conn_max_age=600,
-        ssl_require=not DEBUG,
+        ssl_require=not DEBUG and not _IS_CI,
     )
 }
+if _IS_CI:
+    DATABASES['default'].setdefault('OPTIONS', {})['sslmode'] = 'disable'
 
 # Password validation - Argon2 as primary hasher
 PASSWORD_HASHERS = [

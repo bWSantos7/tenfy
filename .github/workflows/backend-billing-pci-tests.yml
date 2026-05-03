@@ -31,6 +31,7 @@ jobs:
         working-directory: backend
 
     env:
+      CI: "true"
       DEBUG: "False"
       SECRET_KEY: "ci-test-secret-key-only-000000000000000000000000000000000000000000000000"
       DATABASE_URL: "postgresql://postgres:postgres@127.0.0.1:5432/tennis_hub_test?sslmode=disable"

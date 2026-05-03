@@ -89,6 +89,13 @@ const STATUS_LABELS: Record<string, string> = {
   canceled:      'Cancelado',
 };
 
+const EXECUTION_STATUS_LABELS: Record<string, string> = {
+  running: 'Executando',
+  success: 'Sucesso',
+  failed:  'Falhou',
+  partial: 'Parcial',
+};
+
 const DATA_CONFIDENCE_LABELS: Record<string, string> = {
   low: 'Baixa',
   med: 'Média',
@@ -240,7 +247,7 @@ function DashboardTab() {
                 </View>
                 <View style={{ alignItems: 'flex-end', gap: 2 }}>
                   <View style={{ backgroundColor: `${STATUS_COLORS[log.status] ?? colors.borderSubtle}20`, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
-                    <AppText variant="muted" style={{ fontSize: 10, color: STATUS_COLORS[log.status] ?? colors.textMuted, fontWeight: '700' }}>{log.status.toUpperCase()}</AppText>
+                    <AppText variant="muted" style={{ fontSize: 10, color: STATUS_COLORS[log.status] ?? colors.textMuted, fontWeight: '700' }}>{EXECUTION_STATUS_LABELS[log.status] ?? log.status.toUpperCase()}</AppText>
                   </View>
                   {log.duration_seconds != null && (
                     <AppText variant="muted" style={{ fontSize: 9 }}>{log.duration_seconds}s</AppText>

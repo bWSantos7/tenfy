@@ -48,6 +48,7 @@ coverage/
 
 # OS
 Thumbs.db
+nul
 
 # Project
 scraper_cache/

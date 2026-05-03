@@ -1,10 +1,10 @@
 ﻿{
     "status":  "done",
-    "cycle":  16,
+    "cycle":  17,
     "max_cycles":  50,
     "current_task":  "000-start.md",
-    "last_agent":  "claude",
+    "last_agent":  "codex-planner",
     "final_verdict":  "mvp_pronto_com_ressalvas",
-    "stop_reason":  "Cycle 16: verified and committed pending cycle-13 mobile changes. FINAL-REPORT stands.",
+    "stop_reason":  "Cycle 17 planner: FINAL-REPORT.md confirmed as closing artifact; no autonomous cycle 18 task required.",
     "last_error":  null
 }

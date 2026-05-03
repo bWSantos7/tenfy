@@ -24,13 +24,13 @@ type Nav = NativeStackNavigationProp<MainStackParamList>;
 const FIELD_ROWS = [
   { key: 'status',       label: 'Status',        render: (d: TournamentEditionDetail) => STATUS_LABELS[d.status] ?? d.status },
   { key: 'dates',        label: 'Datas',          render: (d: TournamentEditionDetail) => fmtDateRange(d.start_date, d.end_date) },
-  { key: 'deadline',     label: 'Prazo inscrição',render: (d: TournamentEditionDetail) => fmtDate(d.entry_close_at) },
+  { key: 'deadline',     label: 'Prazo de inscrição', render: (d: TournamentEditionDetail) => fmtDate(d.entry_close_at) },
   { key: 'location',     label: 'Local',          render: (d: TournamentEditionDetail) => d.venue_city && d.venue_state ? `${d.venue_city} – ${d.venue_state}` : d.venue_name ?? '—' },
   { key: 'price',        label: 'Valor',          render: (d: TournamentEditionDetail) => d.base_price_brl ? fmtBRL(d.base_price_brl) : '—' },
   { key: 'categories',   label: 'Categorias',     render: (d: TournamentEditionDetail) => String(d.categories?.length ?? 0) },
   { key: 'circuit',      label: 'Circuito',       render: (d: TournamentEditionDetail) => d.circuit || d.organization_short || '—' },
   { key: 'surface',      label: 'Quadra',         render: (d: TournamentEditionDetail) => d.surface || '—' },
-  { key: 'confidence',   label: 'Confiança dado', render: (d: TournamentEditionDetail) => ({ low: 'Baixa', med: 'Média', high: 'Alta' }[d.data_confidence] ?? '—') },
+  { key: 'confidence',   label: 'Qualidade dos dados', render: (d: TournamentEditionDetail) => ({ low: 'Baixa', med: 'Média', medium: 'Média', high: 'Alta' }[d.data_confidence] ?? '—') },
 ];
 
 function ColHeader({ detail, onPress }: { detail: TournamentEditionDetail; onPress: () => void }) {

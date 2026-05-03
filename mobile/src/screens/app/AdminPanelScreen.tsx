@@ -89,6 +89,13 @@ const STATUS_LABELS: Record<string, string> = {
   canceled:      'Cancelado',
 };
 
+const DATA_CONFIDENCE_LABELS: Record<string, string> = {
+  low: 'Baixa',
+  med: 'Média',
+  medium: 'Média',
+  high: 'Alta',
+};
+
 export function AdminPanelScreen({ navigation }: Props) {
   const { colors } = useTheme();
   const [tab, setTab] = useState<Tab>('dashboard');
@@ -98,7 +105,7 @@ export function AdminPanelScreen({ navigation }: Props) {
     { key: 'connectors', label: 'Conectores' },
     { key: 'review',     label: 'Curadoria' },
     { key: 'sources',    label: 'Fontes' },
-    { key: 'stats',      label: 'Stats' },
+    { key: 'stats',      label: 'Estatísticas' },
     { key: 'users',      label: 'Usuários' },
   ];
 
@@ -194,9 +201,9 @@ function DashboardTab() {
         <StatCard label="Abertos"     value={dash.counts.tournaments_open}         accent colors={colors} />
         <StatCard label="Fechando"    value={dash.counts.tournaments_closing_soon} warn colors={colors} />
         <StatCard label="Fontes"      value={`${dash.counts.data_sources_enabled}/${dash.counts.data_sources_total}`} colors={colors} />
-        <StatCard label="Overrides"   value={dash.counts.manual_overrides}         colors={colors} />
-        <StatCard label="Baixa conf." value={dash.counts.low_confidence}           warn colors={colors} />
-        <StatCard label="Sem URL"     value={dash.counts.missing_official_url}     warn colors={colors} />
+        <StatCard label="Validações manuais" value={dash.counts.manual_overrides}  colors={colors} />
+        <StatCard label="Baixa qualidade" value={dash.counts.low_confidence}        warn colors={colors} />
+        <StatCard label="Sem link oficial" value={dash.counts.missing_official_url} warn colors={colors} />
         <StatCard label="Exec. 24h"   value={`${dash.ingestion.runs_24h} (${dash.ingestion.failed_24h} falhas)`} colors={colors} />
       </View>
 
@@ -277,7 +284,7 @@ function StatsTab() {
       const res = await api.get<AdminStats>(`/api/admin-panel/stats/?days=${d}`);
       setData(res.data);
     } catch (err) {
-      Toast.show({ type: 'error', text1: 'Erro ao carregar stats', text2: extractApiError(err) });
+      Toast.show({ type: 'error', text1: 'Erro ao carregar estatísticas', text2: extractApiError(err) });
     } finally {
       setLoading(false);
     }
@@ -769,9 +776,9 @@ function ConnectorsTab() {
               { label: 'Link oficial', key: 'official_source_url', placeholder: 'https://...' },
               { label: 'Cidade', key: 'venue_city', placeholder: 'São Paulo' },
               { label: 'Estado (UF)', key: 'venue_state', placeholder: 'SP', maxLength: 2 },
-              { label: 'Data início (YYYY-MM-DD) *', key: 'start_date', placeholder: '2026-06-01' },
-              { label: 'Data fim (YYYY-MM-DD)', key: 'end_date', placeholder: '2026-06-07' },
-              { label: 'Prazo inscrição (YYYY-MM-DD)', key: 'entry_close_at', placeholder: '2026-05-25' },
+              { label: 'Data de início (AAAA-MM-DD) *', key: 'start_date', placeholder: '2026-06-01' },
+              { label: 'Data de fim (AAAA-MM-DD)', key: 'end_date', placeholder: '2026-06-07' },
+              { label: 'Prazo de inscrição (AAAA-MM-DD)', key: 'entry_close_at', placeholder: '2026-05-25' },
             ].map(({ label, key, placeholder, maxLength }) => (
               <View key={key}>
                 <AppText variant="caption" style={{ marginBottom: 4, fontSize: 12 }}>{label}</AppText>
@@ -866,7 +873,7 @@ function ReviewTab() {
   async function markHighConfidence(id: number) {
     try {
       await api.patch(`/api/admin-panel/editions/${id}/`, { data_confidence: 'high', is_manual_override: true });
-      Toast.show({ type: 'success', text1: 'Confiança atualizada.' });
+      Toast.show({ type: 'success', text1: 'Qualidade dos dados atualizada.' });
       await load();
     } catch (err) {
       Toast.show({ type: 'error', text1: 'Erro', text2: extractApiError(err) });
@@ -877,8 +884,8 @@ function ReviewTab() {
   if (!data) return <EmptyState title="Nenhum dado disponível." />;
 
   const sections: { key: keyof ReviewSection; label: string; color: string }[] = [
-    { key: 'low_confidence', label: 'Baixa confiança', color: '#ef4444' },
-    { key: 'missing_official_url', label: 'Sem URL oficial', color: '#f59e0b' },
+    { key: 'low_confidence', label: 'Baixa qualidade dos dados', color: '#ef4444' },
+    { key: 'missing_official_url', label: 'Sem link oficial', color: '#f59e0b' },
     { key: 'recently_changed', label: 'Recentemente alterados', color: colors.accentBlue },
   ];
 
@@ -899,11 +906,11 @@ function ReviewTab() {
                 <AppText variant="body" style={{ fontWeight: '600', fontSize: 13, marginBottom: 4 }} numberOfLines={2}>{ed.title}</AppText>
                 <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
                   <View style={{ backgroundColor: `${sec.color}20`, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
-                    <AppText variant="muted" style={{ fontSize: 10, color: sec.color }}>{ed.data_confidence}</AppText>
+                    <AppText variant="muted" style={{ fontSize: 10, color: sec.color }}>{DATA_CONFIDENCE_LABELS[ed.data_confidence] ?? 'Não informado'}</AppText>
                   </View>
                   {ed.is_manual_override && (
                     <View style={{ backgroundColor: `${colors.accentNeon}20`, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
-                      <AppText variant="muted" style={{ fontSize: 10, color: colors.accentNeon }}>Override</AppText>
+                      <AppText variant="muted" style={{ fontSize: 10, color: colors.accentNeon }}>Validado manualmente</AppText>
                     </View>
                   )}
                 </View>
@@ -918,7 +925,7 @@ function ReviewTab() {
                       autoCapitalize="none"
                     />
                     <View style={{ flexDirection: 'row', gap: 8 }}>
-                      <Button title="Salvar URL" onPress={() => saveUrl(ed.id)} loading={saving} style={{ flex: 1 }} />
+                      <Button title="Salvar link" onPress={() => saveUrl(ed.id)} loading={saving} style={{ flex: 1 }} />
                       <Button title="Cancelar" variant="ghost" onPress={() => setEditingId(null)} style={{ flex: 1 }} />
                     </View>
                   </View>
@@ -928,7 +935,7 @@ function ReviewTab() {
                       onPress={() => { setEditingId(ed.id); setEditUrl(ed.official_source_url || ''); }}
                       style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4, padding: 6, backgroundColor: colors.bgElevated, borderRadius: 8 }}>
                       <Ionicons name="link-outline" size={14} color={colors.textMuted} />
-                      <AppText variant="muted" style={{ fontSize: 11 }} numberOfLines={1}>{ed.official_source_url || 'Sem URL'}</AppText>
+                      <AppText variant="muted" style={{ fontSize: 11 }} numberOfLines={1}>{ed.official_source_url || 'Sem link oficial'}</AppText>
                     </Pressable>
                     <Pressable onPress={() => markHighConfidence(ed.id)}
                       style={{ padding: 6, backgroundColor: `${colors.accentNeon}15`, borderRadius: 8 }}>

@@ -1,22 +1,17 @@
 import React, { useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { TouchableOpacity, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { MainStackParamList } from '../../navigation/types';
 import { checkout, fetchPlans, fetchSubscription, Plan, Subscription } from '../../services/billing';
+import { AppText, Button, Card, EmptyState, LoadingBlock, Screen } from '../../components/ui';
+import { useTheme } from '../../contexts/ThemeContext';
 
 type Nav = NativeStackNavigationProp<MainStackParamList>;
 
 const PERIOD_LABELS: Record<string, string> = {
   monthly: 'Mensal',
-  yearly: 'Anual',
+  yearly:  'Anual',
 };
 
 function formatPrice(price: string): string {
@@ -36,56 +31,77 @@ function PlanCard({
   billingPeriod: 'monthly' | 'yearly';
   onSelect: (plan: Plan) => void;
 }) {
-  const isCurrent = plan.slug === currentSlug;
-  const price = billingPeriod === 'yearly' ? plan.price_yearly : plan.price_monthly;
+  const { colors } = useTheme();
+  const isCurrent  = plan.slug === currentSlug;
+  const price      = billingPeriod === 'yearly' ? plan.price_yearly : plan.price_monthly;
   const isHighlighted = Boolean(plan.highlight_label);
 
   return (
-    <View style={[styles.card, isHighlighted && styles.cardHighlighted, isCurrent && styles.cardCurrent]}>
+    <Card style={[
+      { marginBottom: 16 },
+      isHighlighted && { borderColor: colors.accentNeon, borderWidth: 2 },
+      isCurrent      && { backgroundColor: `${colors.accentNeon}14` },
+    ]}>
       {plan.highlight_label ? (
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>{plan.highlight_label}</Text>
+        <View style={{
+          backgroundColor: colors.accentNeon, borderRadius: 20,
+          paddingHorizontal: 10, paddingVertical: 3,
+          alignSelf: 'flex-start', marginBottom: 8,
+        }}>
+          <AppText variant="caption" style={{ color: colors.bgBase, fontWeight: '700' }}>
+            {plan.highlight_label}
+          </AppText>
         </View>
       ) : null}
-      <Text style={styles.planName}>{plan.name}</Text>
-      <Text style={styles.planPrice}>
-        {formatPrice(price)}
-        {parseFloat(price) > 0 && (
-          <Text style={styles.pricePeriod}> /{billingPeriod === 'yearly' ? 'ano' : 'mês'}</Text>
-        )}
-      </Text>
-      {plan.description ? <Text style={styles.planDesc}>{plan.description}</Text> : null}
 
-      <View style={styles.featureList}>
+      <AppText variant="section" style={{ marginBottom: 4 }}>{plan.name}</AppText>
+
+      <View style={{ flexDirection: 'row', alignItems: 'baseline', marginBottom: 6 }}>
+        <AppText style={{ fontSize: 26, fontWeight: '800', color: colors.accentNeon }}>
+          {formatPrice(price)}
+        </AppText>
+        {parseFloat(price) > 0 && (
+          <AppText variant="muted" style={{ marginLeft: 2 }}>
+            {' /'}{billingPeriod === 'yearly' ? 'ano' : 'mês'}
+          </AppText>
+        )}
+      </View>
+
+      {plan.description ? (
+        <AppText variant="muted" style={{ marginBottom: 12 }}>{plan.description}</AppText>
+      ) : null}
+
+      <View style={{ marginBottom: 16 }}>
         {plan.features.map((f) => (
-          <View key={f.code} style={styles.featureRow}>
-            <Text style={styles.featureCheck}>✓</Text>
-            <Text style={styles.featureName}>
-              {f.name}
-              {f.limit != null ? ` (até ${f.limit})` : ''}
-            </Text>
+          <View key={f.code} style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 5 }}>
+            <AppText style={{ color: colors.accentNeon, fontWeight: '700', marginRight: 6, fontSize: 14 }}>
+              ✓
+            </AppText>
+            <AppText variant="caption" style={{ flex: 1, lineHeight: 18 }}>
+              {f.name}{f.limit != null ? ` (até ${f.limit})` : ''}
+            </AppText>
           </View>
         ))}
       </View>
 
-      <TouchableOpacity
-        style={[styles.selectBtn, isCurrent && styles.selectBtnCurrent]}
-        onPress={() => onSelect(plan)}
+      <Button
+        title={isCurrent ? 'Plano atual' : 'Selecionar'}
+        variant={isCurrent ? 'secondary' : 'primary'}
         disabled={isCurrent}
-      >
-        <Text style={styles.selectBtnText}>{isCurrent ? 'Plano atual' : 'Selecionar'}</Text>
-      </TouchableOpacity>
-    </View>
+        onPress={() => onSelect(plan)}
+      />
+    </Card>
   );
 }
 
 export function PlansScreen() {
-  const navigation = useNavigation<Nav>();
-  const [plans, setPlans] = useState<Plan[]>([]);
+  const navigation   = useNavigation<Nav>();
+  const { colors }   = useTheme();
+  const [plans, setPlans]           = useState<Plan[]>([]);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'yearly'>('monthly');
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError]     = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
@@ -109,51 +125,84 @@ export function PlansScreen() {
 
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color="#6366F1" />
-      </View>
+      <Screen scroll={false}>
+        <View style={{ flex: 1, justifyContent: 'center' }}>
+          <LoadingBlock />
+        </View>
+      </Screen>
     );
   }
 
   if (error) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.feedbackText}>{error}</Text>
-        <TouchableOpacity style={styles.selectBtn} onPress={() => setRetryKey((k) => k + 1)}>
-          <Text style={styles.selectBtnText}>Tentar novamente</Text>
-        </TouchableOpacity>
-      </View>
+      <Screen scroll={false}>
+        <View style={{ flex: 1, justifyContent: 'center' }}>
+          <EmptyState
+            title="Não foi possível carregar"
+            subtitle={error}
+            icon="cloud-offline-outline"
+            action={<Button title="Tentar novamente" onPress={() => setRetryKey((k) => k + 1)} />}
+          />
+        </View>
+      </Screen>
     );
   }
 
   if (plans.length === 0) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.feedbackText}>Nenhum plano disponível no momento.</Text>
-        <TouchableOpacity style={[styles.selectBtn, { backgroundColor: '#6B7280' }]} onPress={() => navigation.goBack()}>
-          <Text style={styles.selectBtnText}>Voltar</Text>
-        </TouchableOpacity>
-      </View>
+      <Screen scroll={false}>
+        <View style={{ flex: 1, justifyContent: 'center' }}>
+          <EmptyState
+            title="Nenhum plano disponível"
+            subtitle="Não há planos disponíveis no momento."
+            icon="pricetag-outline"
+            action={<Button title="Voltar" variant="secondary" onPress={() => navigation.goBack()} />}
+          />
+        </View>
+      </Screen>
     );
   }
 
   const currentSlug = subscription?.plan_slug ?? '';
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Escolha seu plano</Text>
+    <Screen>
+      <AppText variant="section" style={{ textAlign: 'center', marginBottom: 16 }}>
+        Escolha seu plano
+      </AppText>
 
-      <View style={styles.periodToggle}>
+      {/* Period toggle */}
+      <View style={{
+        flexDirection: 'row',
+        backgroundColor: colors.bgElevated,
+        borderRadius: 10,
+        marginBottom: 20,
+        padding: 2,
+      }}>
         {(['monthly', 'yearly'] as const).map((p) => (
           <TouchableOpacity
             key={p}
-            style={[styles.periodBtn, billingPeriod === p && styles.periodBtnActive]}
+            style={[
+              { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 9 },
+              billingPeriod === p && { backgroundColor: colors.bgCard },
+            ]}
             onPress={() => setBillingPeriod(p)}
           >
-            <Text style={[styles.periodBtnText, billingPeriod === p && styles.periodBtnTextActive]}>
+            <AppText style={{
+              fontSize: 13,
+              fontWeight: billingPeriod === p ? '600' : '400',
+              color: billingPeriod === p ? colors.accentNeon : colors.textMuted,
+            }}>
               {PERIOD_LABELS[p]}
-              {p === 'yearly' ? '  (2 meses grátis)' : ''}
-            </Text>
+            </AppText>
+            {p === 'yearly' && (
+              <AppText style={{
+                fontSize: 11,
+                color: billingPeriod === p ? colors.accentNeon : colors.textMuted,
+              }}>
+                2 meses grátis
+              </AppText>
+            )}
           </TouchableOpacity>
         ))}
       </View>
@@ -167,41 +216,6 @@ export function PlansScreen() {
           onSelect={handleSelect}
         />
       ))}
-    </ScrollView>
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8F9FA' },
-  content:   { padding: 16, paddingBottom: 40 },
-  center:    { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  feedbackText: { color: '#6B7280', textAlign: 'center', marginBottom: 16, paddingHorizontal: 24, lineHeight: 20 },
-  title:     { fontSize: 24, fontWeight: '700', color: '#1F2937', marginBottom: 16, textAlign: 'center' },
-
-  periodToggle: { flexDirection: 'row', backgroundColor: '#E5E7EB', borderRadius: 10, marginBottom: 20, padding: 2 },
-  periodBtn:    { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 9 },
-  periodBtnActive:     { backgroundColor: '#FFFFFF' },
-  periodBtnText:       { fontSize: 13, color: '#6B7280' },
-  periodBtnTextActive: { color: '#6366F1', fontWeight: '600' },
-
-  card:            { backgroundColor: '#FFF', borderRadius: 14, padding: 20, marginBottom: 16, borderWidth: 1, borderColor: '#E5E7EB' },
-  cardHighlighted: { borderColor: '#6366F1', borderWidth: 2 },
-  cardCurrent:     { backgroundColor: '#F0F0FF' },
-
-  badge:     { backgroundColor: '#6366F1', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 3, alignSelf: 'flex-start', marginBottom: 8 },
-  badgeText: { color: '#FFF', fontSize: 11, fontWeight: '700' },
-
-  planName:  { fontSize: 20, fontWeight: '700', color: '#1F2937', marginBottom: 4 },
-  planPrice: { fontSize: 26, fontWeight: '800', color: '#6366F1', marginBottom: 6 },
-  pricePeriod: { fontSize: 14, fontWeight: '400', color: '#6B7280' },
-  planDesc:  { fontSize: 13, color: '#6B7280', marginBottom: 12 },
-
-  featureList: { marginBottom: 16 },
-  featureRow:  { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 5 },
-  featureCheck:{ color: '#10B981', fontWeight: '700', marginRight: 6, fontSize: 14 },
-  featureName: { fontSize: 13, color: '#374151', flex: 1 },
-
-  selectBtn:        { backgroundColor: '#6366F1', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
-  selectBtnCurrent: { backgroundColor: '#D1D5DB' },
-  selectBtnText:    { color: '#FFF', fontWeight: '700', fontSize: 15 },
-});

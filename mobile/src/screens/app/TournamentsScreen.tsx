@@ -15,7 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import { MainStackParamList, MainTabParamList } from '../../navigation/types';
 import { useTheme } from '../../contexts/ThemeContext';
-import { AppText, EmptyState, Input, Screen, SelectField } from '../../components/ui';
+import { AppText, Button, EmptyState, Input, Screen, SelectField } from '../../components/ui';
 import { TournamentCard } from '../../components/TournamentCard';
 import { TournamentListSkeleton } from '../../components/Skeleton';
 import { Organization, PlayerProfile, TournamentEditionList } from '../../types';
@@ -98,6 +98,7 @@ export function TournamentsScreen({ route }: Props) {
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<TournamentEditionList[]>([]);
   const [nextPage, setNextPage] = useState<number | null>(null);
   const [calendarMap, setCalendarMap] = useState<Record<string, TournamentEditionList[]>>({});
@@ -166,6 +167,8 @@ export function TournamentsScreen({ route }: Props) {
     const myVersion = ++reloadVersion.current;
     if (page === 1) {
       setLoading(true);
+      setError(null);
+      setItems([]);
       setNextPage(null);
     } else {
       setLoadingMore(true);
@@ -182,7 +185,11 @@ export function TournamentsScreen({ route }: Props) {
       setNextPage(data.next ? page + 1 : null);
     } catch {
       if (myVersion === reloadVersion.current) {
-        Toast.show({ type: 'error', text1: 'Erro ao carregar torneios' });
+        if (page === 1) {
+          setError('Não foi possível carregar os torneios. Verifique sua conexão e tente novamente.');
+        } else {
+          Toast.show({ type: 'error', text1: 'Erro ao carregar mais torneios' });
+        }
       }
     } finally {
       if (myVersion === reloadVersion.current) {
@@ -195,6 +202,7 @@ export function TournamentsScreen({ route }: Props) {
   async function loadCalendar() {
     const myVersion = ++reloadVersion.current;
     setLoading(true);
+    setError(null);
     try {
       const months = await calendar(buildFilters());
       if (myVersion !== reloadVersion.current) return;
@@ -211,7 +219,7 @@ export function TournamentsScreen({ route }: Props) {
       setCalendarMap(map);
     } catch {
       if (myVersion === reloadVersion.current) {
-        Toast.show({ type: 'error', text1: 'Erro ao carregar calendário' });
+        setError('Não foi possível carregar o calendário. Verifique sua conexão e tente novamente.');
       }
     } finally {
       if (myVersion === reloadVersion.current) setLoading(false);
@@ -544,14 +552,25 @@ export function TournamentsScreen({ route }: Props) {
             ListEmptyComponent={
               loading
                 ? <TournamentListSkeleton count={6} />
-                : (
-                  <EmptyState
-                    title="Nenhum torneio encontrado."
-                    subtitle={nearMe
-                      ? 'Confira a cidade, UF e raio de viagem no seu perfil ou ajuste os filtros.'
-                      : 'Tente ajustar a busca ou os filtros.'}
-                  />
-                )
+                : error
+                  ? (
+                    <EmptyState
+                      icon="cloud-offline-outline"
+                      title="Não foi possível carregar"
+                      subtitle={error}
+                      action={<Button title="Tentar novamente" variant="ghost" onPress={() => loadList(1)} />}
+                    />
+                  )
+                  : (
+                    <EmptyState
+                      title="Nenhum torneio encontrado."
+                      subtitle={nearMe
+                        ? 'Confira a cidade, UF e raio de viagem no seu perfil ou ajuste os filtros.'
+                        : hasAnyFilter
+                          ? 'Nenhum resultado para os filtros aplicados. Tente ampliar a busca.'
+                          : 'Ainda não há torneios disponíveis. Volte em breve.'}
+                    />
+                  )
             }
             ListFooterComponent={loadingMore ? <TournamentListSkeleton count={2} /> : null}
             onEndReached={handleEndReached}
@@ -596,7 +615,14 @@ export function TournamentsScreen({ route }: Props) {
             ))}
           </View>
 
-          {loading ? <TournamentListSkeleton count={3} /> : (
+          {loading ? <TournamentListSkeleton count={3} /> : error ? (
+            <EmptyState
+              icon="cloud-offline-outline"
+              title="Não foi possível carregar"
+              subtitle={error}
+              action={<Button title="Tentar novamente" variant="ghost" onPress={loadCalendar} />}
+            />
+          ) : (
             <>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 8 }}>
                 {Array.from({ length: firstDayOfMonth }).map((_, i) => <View key={`empty-${i}`} style={{ width: `${100 / 7}%` }} />)}

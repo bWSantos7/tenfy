@@ -96,20 +96,112 @@ api.interceptors.response.use(
 
 export default api;
 
+const FIELD_LABELS: Record<string, string> = {
+  email: 'E-mail',
+  password: 'Senha',
+  password_confirm: 'Confirmação de senha',
+  username: 'Usuário',
+  first_name: 'Nome',
+  last_name: 'Sobrenome',
+  full_name: 'Nome completo',
+  name: 'Nome',
+  phone: 'Celular',
+  role: 'Tipo de conta',
+  accept_terms: 'Termos de uso',
+  display_name: 'Nome de exibição',
+  birth_year: 'Ano de nascimento',
+  gender: 'Gênero',
+  home_state: 'Estado',
+  home_city: 'Cidade',
+  travel_radius_km: 'Raio de viagem',
+  competitive_level: 'Nível competitivo',
+  tennis_class: 'Classe',
+  category_id: 'Categoria',
+  athlete_email: 'E-mail do aluno',
+  marketing_consent: 'Comunicações',
+  edition: 'Torneio',
+  edition_id: 'Torneio',
+  category: 'Categoria',
+  player: 'Jogador',
+  from_date: 'Data inicial',
+  to_date: 'Data final',
+  entry_close_at: 'Prazo de inscrição',
+  non_field_errors: '',
+  detail: '',
+};
+
+function humanizeKey(key: string): string {
+  if (key in FIELD_LABELS) return FIELD_LABELS[key];
+  return key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function statusFallback(status: number | undefined): string | null {
+  if (status === 401 || status === 403) return 'Sessão expirada ou acesso não autorizado.';
+  if (status === 404) return 'Não encontramos o que você procurava.';
+  if (status && status >= 500) return 'O servidor está com instabilidade. Tente novamente em instantes.';
+  return null;
+}
+
+function validationFallback(status: number | undefined): string {
+  if (status === 400 || status === 422) return 'Revise os dados informados e tente novamente.';
+  return 'Algo deu errado. Tente novamente em instantes.';
+}
+
+function safeApiMessage(value: string): string | null {
+  const text = value.trim();
+  if (!text || text.length > 240) return null;
+  if (/^\s*[{[]/.test(text) || /<[^>]+>/.test(text)) return null;
+  if (/\b(traceback|stack trace|exception|integrityerror|validationerror|keyerror|typeerror|valueerror)\b/i.test(text)) return null;
+  if (/\b(select|insert|update|delete|where|join)\b.+\b(from|into|set|table)\b/i.test(text)) return null;
+  if (/(\/api\/|\.py\b|\.js\b|\.tsx\b|\.ts\b|[a-z]+_[a-z0-9_]+)/i.test(text)) return null;
+  return text;
+}
+
+function stringifyApiErrorValue(value: unknown): string {
+  if (typeof value === 'string') return safeApiMessage(value) ?? '';
+  if (Array.isArray(value)) return value.map(stringifyApiErrorValue).filter(Boolean).join(', ');
+  if (value && typeof value === 'object') {
+    return Object.entries(value as Record<string, unknown>)
+      .map(([key, child]) => {
+        const label = humanizeKey(key);
+        const text = stringifyApiErrorValue(child);
+        if (!text) return '';
+        return label ? `${label}: ${text}` : text;
+      })
+      .filter(Boolean)
+      .join(', ');
+  }
+  return '';
+}
+
 export function extractApiError(err: unknown): string {
   const ax = err as AxiosError<Record<string, unknown>>;
+  const status = ax.response?.status;
   const data = ax.response?.data;
-  if (!data) return ax.message || 'Erro desconhecido';
-  if (typeof data === 'string') return data;
+
+  if (!data) {
+    if (ax.request && !ax.response) return 'Não foi possível conectar ao servidor. Verifique sua conexão.';
+    return 'Algo deu errado. Tente novamente em instantes.';
+  }
+
+  const fallback = statusFallback(status);
+  if (fallback) return fallback;
+
   if (typeof data === 'object') {
     const detail = (data as Record<string, unknown>).detail;
-    if (typeof detail === 'string') return detail;
+    if (typeof detail === 'string') {
+      const safeDetail = safeApiMessage(detail);
+      if (safeDetail) return safeDetail;
+    }
     const parts: string[] = [];
     for (const [k, v] of Object.entries(data)) {
-      if (Array.isArray(v)) parts.push(`${k}: ${v.join(', ')}`);
-      else if (typeof v === 'string') parts.push(`${k}: ${v}`);
+      const label = humanizeKey(k);
+      const value = stringifyApiErrorValue(v);
+      if (!value) continue;
+      parts.push(label ? `${label}: ${value}` : value);
     }
     if (parts.length) return parts.join(' • ');
   }
-  return ax.message || 'Erro desconhecido';
+
+  return validationFallback(status);
 }

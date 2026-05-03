@@ -17,8 +17,8 @@ export class ErrorBoundary extends Component<Props, State> {
     this.state = { hasError: false, errorMessage: '' };
   }
 
-  static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, errorMessage: error.message || 'Erro desconhecido' };
+  static getDerivedStateFromError(_error: Error): State {
+    return { hasError: true, errorMessage: '' };
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
@@ -39,7 +39,7 @@ export class ErrorBoundary extends Component<Props, State> {
           <Text style={styles.message}>
             O aplicativo encontrou um erro inesperado. Tente recarregar.
           </Text>
-          <Text style={styles.detail} numberOfLines={3}>{this.state.errorMessage}</Text>
+          <Text style={styles.detail}>Pressione "Tentar novamente" ou reinicie o aplicativo.</Text>
           <Pressable style={styles.btn} onPress={this.handleReset}>
             <Text style={styles.btnText}>Tentar novamente</Text>
           </Pressable>

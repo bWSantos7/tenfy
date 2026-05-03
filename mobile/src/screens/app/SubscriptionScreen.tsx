@@ -24,6 +24,7 @@ import {
   removeFamilyMember,
   Subscription,
 } from '../../services/billing';
+import { extractApiError } from '../../services/api';
 
 type Nav = NativeStackNavigationProp<MainStackParamList>;
 
@@ -321,7 +322,7 @@ function FamilySection() {
       const data = await listFamilyMembers();
       setMembers(data);
     } catch (err: any) {
-      Alert.alert('Família', err?.response?.data?.detail ?? 'Erro ao carregar dependentes');
+      Alert.alert('Família', extractApiError(err));
     } finally {
       setLoading(false);
     }
@@ -337,7 +338,7 @@ function FamilySection() {
       setEmail('');
       await load();
     } catch (err: any) {
-      Alert.alert('Família', err?.response?.data?.detail ?? 'Não foi possível adicionar.');
+      Alert.alert('Família', extractApiError(err));
     } finally {
       setAdding(false);
     }
@@ -355,7 +356,7 @@ function FamilySection() {
               await removeFamilyMember(m.id);
               await load();
             } catch (err: any) {
-              Alert.alert('Família', err?.response?.data?.detail ?? 'Erro ao remover.');
+              Alert.alert('Família', extractApiError(err));
             }
           },
         },

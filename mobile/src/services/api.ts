@@ -156,9 +156,11 @@ const FIELD_LABELS: Record<string, string> = {
   candidate_entry_links: 'Links de inscritos',
   organization_slug: 'Entidade',
   synced_at: 'Última atualização',
+  athlete_email: 'E-mail do aluno',
   home_lat: 'Latitude da cidade',
   home_lng: 'Longitude da cidade',
   non_field_errors: '',
+  detail: '',
 };
 
 function humanizeFieldKey(key: string): string {
@@ -176,8 +178,23 @@ function statusFallback(status: number | undefined): string | null {
   return null;
 }
 
+function validationFallback(status: number | undefined): string {
+  if (status === 400 || status === 422) return 'Revise os dados informados e tente novamente.';
+  return 'Algo deu errado. Tente novamente em instantes.';
+}
+
+function safeApiMessage(value: string): string | null {
+  const text = value.trim();
+  if (!text || text.length > 240) return null;
+  if (/^\s*[{[]/.test(text) || /<[^>]+>/.test(text)) return null;
+  if (/\b(traceback|stack trace|exception|integrityerror|validationerror|keyerror|typeerror|valueerror)\b/i.test(text)) return null;
+  if (/\b(select|insert|update|delete|where|join)\b.+\b(from|into|set|table)\b/i.test(text)) return null;
+  if (/(\/api\/|\.py\b|\.js\b|\.tsx\b|\.ts\b|[a-z]+_[a-z0-9_]+)/i.test(text)) return null;
+  return text;
+}
+
 function stringifyApiErrorValue(value: unknown): string {
-  if (typeof value === 'string') return value;
+  if (typeof value === 'string') return safeApiMessage(value) ?? '';
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
   if (Array.isArray(value)) return value.map(stringifyApiErrorValue).filter(Boolean).join(', ');
   if (value && typeof value === 'object') {
@@ -206,9 +223,12 @@ export function extractApiError(err: unknown): string {
   }
   const fallback = statusFallback(status);
   if (fallback) return fallback;
-  if (typeof data === 'string') return data;
+  if (typeof data === 'string') return safeApiMessage(data) ?? validationFallback(status);
   const detail = (data as Record<string, unknown>).detail;
-  if (typeof detail === 'string') return detail;
+  if (typeof detail === 'string') {
+    const safeDetail = safeApiMessage(detail);
+    if (safeDetail) return safeDetail;
+  }
   const parts: string[] = [];
   for (const [k, v] of Object.entries(data)) {
     const label = humanizeFieldKey(k);
@@ -217,5 +237,5 @@ export function extractApiError(err: unknown): string {
     parts.push(label ? `${label}: ${value}` : value);
   }
   if (parts.length) return parts.join(' • ');
-  return 'Algo deu errado. Tente novamente em instantes.';
+  return validationFallback(status);
 }

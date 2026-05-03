@@ -15,7 +15,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { MainStackParamList } from '../../navigation/types';
 import { checkout, CheckoutPayload } from '../../services/billing';
 import { tokenizeCard, getAsaasCustomerId } from '../../services/asaas';
-import api from '../../services/api';
+import api, { extractApiError } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 
@@ -114,10 +114,8 @@ export function CheckoutScreen() {
             customerId,
           );
           cardToken = tokenResult.creditCardToken;
-        } catch (tokenErr: any) {
-          const msg = tokenErr?.response?.data?.errors?.[0]?.description
-            || 'Dados do cartão inválidos. Verifique e tente novamente.';
-          Alert.alert('Erro no cartão', msg);
+        } catch {
+          Alert.alert('Erro no cartão', 'Dados do cartão inválidos. Verifique e tente novamente.');
           setLoading(false);
           return;
         }
@@ -154,18 +152,9 @@ export function CheckoutScreen() {
         navigation.navigate('Subscription');
       }
     } catch (err: any) {
-      let msg = 'Não foi possível processar o pagamento.';
-      if (!err?.response) {
-        msg = 'Sem conexão com a internet. Verifique sua rede e tente novamente.';
-      } else if (err.response.status >= 500) {
-        msg = 'Erro interno no servidor. Tente novamente em alguns minutos.';
-      } else if (err.response.status === 422 || err.response.status === 400) {
-        msg = err.response.data?.detail ?? 'Dados inválidos. Verifique as informações.';
-      } else if (err.response.status === 402) {
-        msg = 'Pagamento recusado. Verifique os dados do cartão ou escolha outro método.';
-      } else if (err.response.data?.detail) {
-        msg = err.response.data.detail;
-      }
+      const msg = err?.response?.status === 402
+        ? 'Pagamento recusado. Verifique os dados do cartão ou escolha outro método.'
+        : extractApiError(err);
       Alert.alert('Erro no pagamento', msg);
     } finally {
       setLoading(false);

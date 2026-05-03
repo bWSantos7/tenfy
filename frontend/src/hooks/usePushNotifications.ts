@@ -18,11 +18,11 @@ export function usePushNotifications() {
 
   async function subscribe(): Promise<boolean> {
     if (!isSupported) {
-      setError('Push notifications não são suportadas neste dispositivo.');
+      setError('Notificações push não são suportadas neste dispositivo.');
       return false;
     }
     if (!VAPID_PUBLIC_KEY) {
-      setError('VAPID key não configurada. Defina VITE_VAPID_PUBLIC_KEY no .env.');
+      setError('Notificações push não estão disponíveis no momento.');
       return false;
     }
     setLoading(true);
@@ -42,9 +42,8 @@ export function usePushNotifications() {
         keys: json.keys,
       });
       return true;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Erro ao ativar notificações.';
-      setError(msg);
+    } catch {
+      setError('Erro ao ativar notificações. Tente novamente.');
       return false;
     } finally {
       setLoading(false);
@@ -63,9 +62,8 @@ export function usePushNotifications() {
         await sub.unsubscribe();
       }
       return true;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Erro ao desativar notificações.';
-      setError(msg);
+    } catch {
+      setError('Erro ao desativar notificações. Tente novamente.');
       return false;
     } finally {
       setLoading(false);

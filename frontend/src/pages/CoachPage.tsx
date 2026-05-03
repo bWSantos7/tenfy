@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Users, Plus, Trash2, ChevronRight, ChevronLeft, Star, Trophy, Calendar, X } from 'lucide-react';
 import { CoachAthlete, WatchlistItem } from '../types';
 import { addAthlete, getAthleteWatchlist, listAthletes, removeAthlete } from '../services/data';
+import { extractApiError } from '../services/api';
 
 type View = 'roster' | 'watchlist';
 
@@ -63,11 +64,7 @@ export const CoachPage: React.FC = () => {
       setNotesInput('');
       setShowAddForm(false);
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { athlete_email?: string[]; non_field_errors?: string[] } } })
-        ?.response?.data;
-      setAddError(
-        msg?.athlete_email?.[0] ?? msg?.non_field_errors?.[0] ?? 'Erro ao adicionar aluno.'
-      );
+      setAddError(extractApiError(err));
     } finally {
       setAddLoading(false);
     }

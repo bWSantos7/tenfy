@@ -62,6 +62,36 @@ interface AdminStats {
 
 type Tab = 'dashboard' | 'stats' | 'users' | 'sources' | 'connectors' | 'editions';
 
+const EDITION_STATUS_LABELS: Record<string, string> = {
+  unknown:   'Não informado',
+  announced: 'Anunciado',
+  open:      'Aberto',
+  upcoming:  'Em breve',
+  closed:    'Encerrado',
+  closing_soon: 'Encerrando em breve',
+  draws_published: 'Chaves publicadas',
+  in_progress: 'Em andamento',
+  finished:  'Finalizado',
+  canceled:  'Cancelado',
+  completed: 'Concluído',
+};
+
+const CONFIDENCE_LABELS: Record<string, string> = {
+  high: 'Alta qualidade dos dados',
+  med:  'Qualidade média dos dados',
+  medium: 'Qualidade média dos dados',
+  low:  'Baixa qualidade dos dados',
+};
+
+const RUN_STATUS_LABELS: Record<string, string> = {
+  success: 'Concluído',
+  partial: 'Parcial',
+  failed:  'Falhou',
+  running: 'Em execução',
+};
+
+const UNKNOWN_STATUS_LABEL = 'Status não informado';
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export const AdminPanelPage: React.FC = () => {
@@ -179,14 +209,14 @@ const DashboardTab: React.FC = () => {
         <StatCard label="Fechando" value={dash.counts.tournaments_closing_soon} warn />
         <StatCard label="Fontes ativas" value={`${dash.counts.data_sources_enabled}/${dash.counts.data_sources_total}`} />
         <StatCard label="Overrides manuais" value={dash.counts.manual_overrides} />
-        <StatCard label="Baixa confiança" value={dash.counts.low_confidence} warn />
-        <StatCard label="Sem URL oficial" value={dash.counts.missing_official_url} warn />
+        <StatCard label="Dados para revisar" value={dash.counts.low_confidence} warn />
+        <StatCard label="Sem link oficial" value={dash.counts.missing_official_url} warn />
         <StatCard label="Execuções 24h" value={`${dash.ingestion.runs_24h} (${dash.ingestion.failed_24h} falhas)`} />
       </div>
 
       {queue && (
         <>
-          <QueueSection title="Baixa confiança" icon={<AlertTriangle className="w-4 h-4 text-status-closing" />} items={queue.low_confidence} emptyText="Nenhuma edição com baixa confiança." />
+          <QueueSection title="Dados para revisar" icon={<AlertTriangle className="w-4 h-4 text-status-closing" />} items={queue.low_confidence} emptyText="Nenhuma edição com qualidade de dados baixa." />
           <QueueSection title="Sem link oficial" icon={<Link2 className="w-4 h-4 text-status-canceled" />} items={queue.missing_official_url} emptyText="Todas as edições possuem link oficial." />
           <QueueSection title="Alteradas recentemente" icon={<RefreshCcw className="w-4 h-4 text-accent-blue" />} items={queue.recently_changed} emptyText="Nenhuma alteração recente." />
         </>
@@ -304,7 +334,7 @@ const StatsTab: React.FC = () => {
           <ResponsiveContainer width="100%" height={180}>
             <BarChart data={data.users_by_role} margin={{ top: 4, right: 4, bottom: 4, left: -20 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-              <XAxis dataKey="role" tick={{ fontSize: 10, fill: 'rgb(var(--text-muted))' }} />
+              <XAxis dataKey="role" tick={{ fontSize: 10, fill: 'rgb(var(--text-muted))' }} tickFormatter={(v: string) => ROLE_LABELS[v] ?? 'Perfil não informado'} />
               <YAxis tick={{ fontSize: 10, fill: 'rgb(var(--text-muted))' }} allowDecimals={false} />
               <Tooltip contentStyle={tooltipStyle} />
               <Bar dataKey="count" name="Usuários" radius={[4, 4, 0, 0]}>
@@ -321,7 +351,7 @@ const StatsTab: React.FC = () => {
           <ResponsiveContainer width="100%" height={180}>
             <BarChart data={data.tournaments_by_status} margin={{ top: 4, right: 4, bottom: 4, left: -20 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-              <XAxis dataKey="status" tick={{ fontSize: 9, fill: 'rgb(var(--text-muted))' }} />
+              <XAxis dataKey="status" tick={{ fontSize: 9, fill: 'rgb(var(--text-muted))' }} tickFormatter={(v: string) => EDITION_STATUS_LABELS[v] ?? UNKNOWN_STATUS_LABEL} />
               <YAxis tick={{ fontSize: 10, fill: 'rgb(var(--text-muted))' }} allowDecimals={false} />
               <Tooltip contentStyle={tooltipStyle} />
               <Bar dataKey="count" name="Torneios" fill="#3b82f6" radius={[4, 4, 0, 0]} />
@@ -335,7 +365,7 @@ const StatsTab: React.FC = () => {
             <BarChart data={data.watchlist_by_status} layout="vertical" margin={{ top: 4, right: 16, bottom: 4, left: 60 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" horizontal={false} />
               <XAxis type="number" tick={{ fontSize: 10, fill: 'rgb(var(--text-muted))' }} allowDecimals={false} />
-              <YAxis type="category" dataKey="status" tick={{ fontSize: 10, fill: 'rgb(var(--text-muted))' }} width={60} />
+              <YAxis type="category" dataKey="status" tick={{ fontSize: 10, fill: 'rgb(var(--text-muted))' }} width={80} tickFormatter={(v: string) => EDITION_STATUS_LABELS[v] ?? UNKNOWN_STATUS_LABEL} />
               <Tooltip contentStyle={tooltipStyle} />
               <Bar dataKey="count" name="Itens" fill="#f59e0b" radius={[0, 4, 4, 0]} />
             </BarChart>
@@ -430,7 +460,7 @@ const UsersTab: React.FC = () => {
                   {!u.is_active && <Badge color="red">Inativo</Badge>}
                 </div>
                 <div className="text-xs text-text-muted truncate">{u.email}</div>
-                <div className="text-xs text-text-muted">{ROLE_LABELS[u.role] ?? u.role}</div>
+                <div className="text-xs text-text-muted">{ROLE_LABELS[u.role] ?? 'Perfil não informado'}</div>
               </div>
               <div className="flex items-center gap-1 shrink-0">
                 <button
@@ -706,8 +736,8 @@ const SourcesTab: React.FC = () => {
           <div className="flex items-start justify-between gap-2">
             <div>
               <div className="text-sm font-semibold">{s.source_name}</div>
-              <div className="text-xs text-text-muted">{s.org_name} · {s.connector_key} · {s.priority}</div>
-              <div className="text-[11px] text-text-muted mt-0.5">cron: {s.fetch_schedule_cron || '—'}</div>
+              <div className="text-xs text-text-muted">{s.org_name} · Conector {s.connector_key} · prioridade {s.priority}</div>
+              <div className="text-[11px] text-text-muted mt-0.5">Agendamento: {s.fetch_schedule_cron || '—'}</div>
             </div>
             <div className="flex gap-1">
               <button
@@ -760,7 +790,7 @@ const SourceEditModal: React.FC<{
         </div>
         <div className="space-y-2">
           <div>
-            <label className="text-xs text-text-secondary">Cron</label>
+            <label className="text-xs text-text-secondary">Agendamento</label>
             <input className="input-base" value={cron} onChange={(e) => setCron(e.target.value)} placeholder="0 */6 * * *" />
           </div>
           <div>
@@ -773,7 +803,7 @@ const SourceEditModal: React.FC<{
             </select>
           </div>
           <div>
-            <label className="text-xs text-text-secondary">Base URL</label>
+            <label className="text-xs text-text-secondary">Link base</label>
             <input className="input-base" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
           </div>
           <div>
@@ -850,7 +880,7 @@ const ConnectorsTab: React.FC = () => {
                 <div className="text-sm font-semibold">{r.connector_key} · {r.organization}</div>
                 <div className="text-xs text-text-muted">{r.source_name}</div>
                 <div className="text-[11px] text-text-muted mt-0.5">
-                  Último: {r.last_run_at ? new Date(r.last_run_at).toLocaleString('pt-BR') : '—'} ({r.last_run_status || '—'})
+                  Último: {r.last_run_at ? new Date(r.last_run_at).toLocaleString('pt-BR') : '—'} ({r.last_run_status ? (RUN_STATUS_LABELS[r.last_run_status] ?? UNKNOWN_STATUS_LABEL) : '—'})
                 </div>
               </div>
               <div className="flex flex-col items-end gap-1">
@@ -877,7 +907,7 @@ const ConnectorsTab: React.FC = () => {
                 <span className="text-text-muted ml-2">{l.started_at ? new Date(l.started_at).toLocaleString('pt-BR') : ''}</span>
               </div>
               <div className="flex items-center gap-2">
-                <Badge color={l.status === 'success' ? 'green' : l.status === 'partial' ? 'amber' : 'red'}>{l.status}</Badge>
+                <Badge color={l.status === 'success' ? 'green' : l.status === 'partial' ? 'amber' : 'red'}>{RUN_STATUS_LABELS[l.status] ?? UNKNOWN_STATUS_LABEL}</Badge>
                 <span className="text-text-muted">{l.editions_created}+ / {l.editions_updated}~</span>
               </div>
             </div>
@@ -987,7 +1017,7 @@ const EditionsAdminTab: React.FC = () => {
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-semibold truncate">{e.title}</div>
                 <div className="text-xs text-text-muted">
-                  {e.start_date || 'sem data'} · {e.status} · confiança {e.data_confidence}
+                  {e.start_date || 'Sem data'} · {EDITION_STATUS_LABELS[e.status] ?? UNKNOWN_STATUS_LABEL} · {CONFIDENCE_LABELS[e.data_confidence] ?? 'Qualidade dos dados não informada'}
                   {e.organization_short_name && ` · ${e.organization_short_name}`}
                 </div>
               </div>

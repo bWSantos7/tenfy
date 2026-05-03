@@ -92,6 +92,13 @@ export const STATUS_LABELS: Record<TournamentStatus, string> = {
   canceled: 'Cancelado',
 };
 
+const DATA_CONFIDENCE_LABELS: Record<string, string> = {
+  high: 'alta',
+  med: 'média',
+  medium: 'média',
+  low: 'baixa',
+};
+
 export function fmtBRL(value: string | number | null | undefined): string {
   if (value === null || value === undefined || value === '') return '—';
   const n = typeof value === 'string' ? parseFloat(value) : value;
@@ -147,7 +154,11 @@ function formatChangeValue(field: string, value: unknown): string {
   if (value === null || value === undefined || value === '') return 'não informado';
 
   if (field === 'status' && typeof value === 'string') {
-    return STATUS_LABELS[value as TournamentStatus] || value;
+    return STATUS_LABELS[value as TournamentStatus] || 'status não informado';
+  }
+
+  if (field === 'data_confidence' && typeof value === 'string') {
+    return DATA_CONFIDENCE_LABELS[value] || 'confiabilidade não informada';
   }
 
   if (field === 'base_price_brl') {

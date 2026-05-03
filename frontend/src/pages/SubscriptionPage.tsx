@@ -123,7 +123,7 @@ export const SubscriptionPage: React.FC = () => {
     );
   }
 
-  const statusInfo = sub ? (STATUS_LABELS[sub.status] ?? { label: sub.status, color: 'text-text-muted' }) : null;
+  const statusInfo = sub ? (STATUS_LABELS[sub.status] ?? { label: 'Status desconhecido', color: 'text-text-muted' }) : null;
   const currentPlan = plans.find((p) => p.id === sub?.plan);
 
   return (

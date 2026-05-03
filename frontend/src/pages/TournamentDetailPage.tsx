@@ -297,7 +297,7 @@ export const TournamentDetailPage: React.FC = () => {
           </div>
           {ed.official_source_url && (
             <div className="flex justify-between items-center">
-              <dt>URL</dt>
+              <dt>Link oficial</dt>
               <dd>
                 <a
                   href={ed.official_source_url}

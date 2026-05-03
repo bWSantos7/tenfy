@@ -76,6 +76,13 @@ class CheckoutSerializer(serializers.Serializer):
     # Client-side tokenization is performed directly with Asaas from the mobile device.
     card_token = serializers.CharField(required=False, allow_blank=True, default='')
 
+    def validate(self, attrs):
+        if attrs.get('payment_method') == 'credit_card' and not attrs.get('card_token', '').strip():
+            raise serializers.ValidationError(
+                {'card_token': 'card_token é obrigatório para pagamento com cartão de crédito.'}
+            )
+        return attrs
+
 
 class FamilyMembershipSerializer(serializers.ModelSerializer):
     member_email = serializers.EmailField(source='member_user.email', read_only=True)

@@ -14,7 +14,6 @@ Production: https://api.asaas.com
 import logging
 import time
 from decimal import Decimal
-from typing import Optional
 
 import requests
 from django.conf import settings
@@ -188,23 +187,28 @@ def create_subscription(
     billing_period: str,
     payment_method: str,
     card_token: str = '',
-    card_data: Optional[dict] = None,
 ) -> dict:
     """
     Create an Asaas subscription (recorrência).
     https://docs.asaas.com/reference/criar-assinatura-com-cartao-de-credito
+
+    PCI-DSS: only card_token accepted. Raw card data must never reach this function.
+    Client-side tokenization is performed by the mobile app directly with Asaas.
 
     Args:
         user: Django user instance
         plan: billing.Plan instance
         billing_period: 'monthly' or 'yearly'
         payment_method: 'CREDIT_CARD' | 'PIX' | 'BOLETO'
-        card_token: tokenized card (optional)
-        card_data: raw card fields dict (for direct card submission)
+        card_token: tokenized card reference from Asaas client-side SDK
 
     Returns Asaas subscription response dict.
     """
     from datetime import date
+
+    if payment_method.upper() == 'CREDIT_CARD' and not card_token:
+        raise ValueError('card_token is required for CREDIT_CARD payment — raw card data is never accepted.')
+
     customer_id = get_or_create_customer(user)
     price = float(plan.price_for_period(billing_period))
     cycle = 'MONTHLY' if billing_period == 'monthly' else 'YEARLY'
@@ -219,24 +223,7 @@ def create_subscription(
         'externalReference': str(user.id),
     }
     if payment_method.upper() == 'CREDIT_CARD':
-        if card_token:
-            payload['creditCardToken'] = card_token
-        elif card_data:
-            payload['creditCard'] = {
-                'holderName': card_data.get('holder_name', ''),
-                'number': card_data.get('number', '').replace(' ', ''),
-                'expiryMonth': card_data.get('expiry_month', ''),
-                'expiryYear': card_data.get('expiry_year', ''),
-                'ccv': card_data.get('ccv', ''),
-            }
-            payload['creditCardHolderInfo'] = {
-                'name': card_data.get('holder_name', ''),
-                'email': user.email,
-                'cpfCnpj': card_data.get('cpf', '').replace('.', '').replace('-', ''),
-                'postalCode': card_data.get('postal_code', '').replace('-', ''),
-                'addressNumber': '0',
-                'phone': getattr(user, 'phone', '') or '',
-            }
+        payload['creditCardToken'] = card_token
 
     logger.info('Creating Asaas subscription for user %s plan %s', user.id, plan.slug)
     return _request('POST', '/subscriptions', json=payload)

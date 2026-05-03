@@ -405,3 +405,126 @@ class FamilyMemberEndpointsTestCase(TestCase):
         self.client.force_authenticate(user=self.dependent1)
         res = self.client.delete(f'/api/billing/family/members/{m.pk}/')
         self.assertEqual(res.status_code, 403)
+
+
+# ── PCI-DSS / Card security ────────────────────────────────────────────────────
+
+class CardRawDataSecurityTestCase(TestCase):
+    """Guarantee the public checkout endpoint never accepts raw card data."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user = make_user('cardsec@example.com')
+        self.individual, _, _ = make_plans()
+        self.client.force_authenticate(user=self.user)
+
+    _RAW_CARD_FIELDS = [
+        'cardNumber', 'number', 'ccv', 'cvv', 'expiryMonth',
+        'expiryYear', 'creditCard', 'card',
+    ]
+
+    @override_settings(ASAAS_API_KEY='')
+    def test_credit_card_without_token_returns_400(self):
+        """CREDIT_CARD with no card_token must be rejected before calling Asaas."""
+        res = self.client.post('/api/billing/subscription/checkout/', {
+            'plan_slug': 'individual',
+            'billing_period': 'monthly',
+            'payment_method': 'credit_card',
+        }, format='json')
+        self.assertEqual(res.status_code, 400)
+
+    @override_settings(ASAAS_API_KEY='')
+    def test_credit_card_with_empty_token_returns_400(self):
+        res = self.client.post('/api/billing/subscription/checkout/', {
+            'plan_slug': 'individual',
+            'billing_period': 'monthly',
+            'payment_method': 'credit_card',
+            'card_token': '',
+        }, format='json')
+        self.assertEqual(res.status_code, 400)
+
+    @override_settings(ASAAS_API_KEY='')
+    def test_raw_card_fields_in_body_do_not_reach_service(self):
+        """Sending raw card fields alongside a valid token must not leak to the service.
+
+        The service should only receive card_token; raw fields are unknown to
+        CheckoutSerializer and must be silently ignored (not forwarded).
+        """
+        with patch('apps.billing.services.asaas_service.create_subscription') as mock_svc:
+            mock_svc.return_value = {'id': 'sub_test', 'status': 'PENDING'}
+            self.client.post('/api/billing/subscription/checkout/', {
+                'plan_slug': 'individual',
+                'billing_period': 'monthly',
+                'payment_method': 'credit_card',
+                'card_token': 'tok_valid_test',
+                # Attempt to inject raw fields
+                'cardNumber': '4111111111111111',
+                'number': '4111111111111111',
+                'ccv': '123',
+                'cvv': '123',
+                'expiryMonth': '12',
+                'expiryYear': '2030',
+                'creditCard': {'number': '4111111111111111'},
+            }, format='json')
+
+        if mock_svc.called:
+            _, kwargs = mock_svc.call_args
+            # card_token must be the provided token
+            self.assertEqual(kwargs.get('card_token'), 'tok_valid_test')
+            # Service must not have received any raw card kwarg
+            for field in self._RAW_CARD_FIELDS:
+                self.assertNotIn(field, kwargs, f'Raw card field "{field}" leaked to service')
+
+    @override_settings(ASAAS_API_KEY='')
+    def test_raw_card_fields_without_token_still_returns_400(self):
+        """Sending raw card fields without card_token must be rejected (not processed)."""
+        res = self.client.post('/api/billing/subscription/checkout/', {
+            'plan_slug': 'individual',
+            'billing_period': 'monthly',
+            'payment_method': 'credit_card',
+            'cardNumber': '4111111111111111',
+            'ccv': '123',
+            'expiryMonth': '12',
+            'expiryYear': '2030',
+        }, format='json')
+        self.assertEqual(res.status_code, 400)
+
+
+class CreateSubscriptionServiceTestCase(TestCase):
+    """Unit tests for asaas_service.create_subscription() PCI-DSS contract."""
+
+    def setUp(self):
+        self.user = make_user('svctest@example.com')
+        self.individual, _, _ = make_plans()
+
+    def test_credit_card_without_token_raises_value_error(self):
+        from apps.billing.services.asaas_service import create_subscription
+        with self.assertRaises(ValueError) as ctx:
+            create_subscription(
+                user=self.user,
+                plan=self.individual,
+                billing_period='monthly',
+                payment_method='CREDIT_CARD',
+                card_token='',
+            )
+        self.assertIn('card_token', str(ctx.exception))
+
+    @patch('apps.billing.services.asaas_service._request')
+    @patch('apps.billing.services.asaas_service.get_or_create_customer', return_value='cus_test')
+    def test_credit_card_with_token_sends_only_creditcardtoken(self, _mock_cust, mock_req):
+        mock_req.return_value = {'id': 'sub_test', 'status': 'PENDING'}
+        from apps.billing.services.asaas_service import create_subscription
+        create_subscription(
+            user=self.user,
+            plan=self.individual,
+            billing_period='monthly',
+            payment_method='CREDIT_CARD',
+            card_token='tok_abc123',
+        )
+        self.assertTrue(mock_req.called)
+        _, kwargs = mock_req.call_args
+        payload = kwargs['json']
+        self.assertEqual(payload.get('creditCardToken'), 'tok_abc123')
+        # No raw card fields must appear in the payload
+        for field in ('creditCard', 'number', 'ccv', 'cvv', 'expiryMonth', 'expiryYear'):
+            self.assertNotIn(field, payload, f'Raw field "{field}" present in Asaas payload')

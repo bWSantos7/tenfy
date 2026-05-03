@@ -102,19 +102,32 @@ export function ResultsScreen(_: Props) {
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<WatchlistItem[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
-    const list = await listWatchlist().catch(() => []);
-    setItems((list as WatchlistItem[]).filter((item) => !!item.result));
-    setLoading(false);
+    setError(null);
+    try {
+      const list = await listWatchlist();
+      setItems((list as WatchlistItem[]).filter((item) => !!item.result));
+    } catch {
+      setError('Não foi possível carregar seus resultados agora.');
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function onRefresh() {
     setRefreshing(true);
-    const list = await listWatchlist().catch(() => []);
-    setItems((list as WatchlistItem[]).filter((item) => !!item.result));
-    setRefreshing(false);
+    setError(null);
+    try {
+      const list = await listWatchlist();
+      setItems((list as WatchlistItem[]).filter((item) => !!item.result));
+    } catch {
+      setError('Não foi possível atualizar seus resultados agora.');
+    } finally {
+      setRefreshing(false);
+    }
   }
 
   useFocusEffect(useCallback(() => { load(); }, []));
@@ -146,6 +159,20 @@ export function ResultsScreen(_: Props) {
 
       {loading ? (
         <TournamentListSkeleton count={3} />
+      ) : error && items.length === 0 ? (
+        <EmptyState
+          title="Não foi possível carregar"
+          subtitle={error}
+          icon="cloud-offline-outline"
+          action={
+            <Pressable
+              onPress={load}
+              style={{ backgroundColor: `${colors.accentNeon}18`, borderRadius: 10, paddingHorizontal: 16, paddingVertical: 8, borderWidth: 1, borderColor: `${colors.accentNeon}33` }}
+            >
+              <AppText variant="caption" style={{ color: colors.accentNeon, fontWeight: '700' }}>Tentar novamente</AppText>
+            </Pressable>
+          }
+        />
       ) : items.length === 0 ? (
         <EmptyState
           title="Nenhum resultado ainda"

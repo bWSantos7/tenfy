@@ -30,17 +30,32 @@ const PAYMENT_COLORS: Record<string, string> = {
 export function MyRegistrationsScreen({ navigation }: Props) {
   const { colors } = useTheme();
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [registrations, setRegistrations] = useState<TournamentRegistration[]>([]);
   const [withdrawing, setWithdrawing] = useState<number | null>(null);
 
   async function load() {
     setLoading(true);
+    setError(null);
     try {
       setRegistrations(await myRegistrations());
     } catch (err) {
-      Toast.show({ type: 'error', text1: 'Erro ao carregar inscrições', text2: extractApiError(err) });
+      setError(extractApiError(err));
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function onRefresh() {
+    setRefreshing(true);
+    setError(null);
+    try {
+      setRegistrations(await myRegistrations());
+    } catch (err) {
+      setError(extractApiError(err));
+    } finally {
+      setRefreshing(false);
     }
   }
 
@@ -53,7 +68,7 @@ export function MyRegistrationsScreen({ navigation }: Props) {
       Toast.show({ type: 'success', text1: 'Inscrição cancelada.' });
       await load();
     } catch (err) {
-      Toast.show({ type: 'error', text1: 'Erro ao cancelar', text2: extractApiError(err) });
+      Toast.show({ type: 'error', text1: 'Não foi possível cancelar', text2: extractApiError(err) });
     } finally {
       setWithdrawing(null);
     }
@@ -63,7 +78,7 @@ export function MyRegistrationsScreen({ navigation }: Props) {
   const withdrawn = registrations.filter((r) => r.is_withdrawn);
 
   return (
-    <Screen>
+    <Screen onRefresh={onRefresh} refreshing={refreshing}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
         <Pressable onPress={() => navigation.goBack()} style={{ padding: 4 }}>
           <Ionicons name="arrow-back" size={22} color={colors.textPrimary} />
@@ -73,10 +88,18 @@ export function MyRegistrationsScreen({ navigation }: Props) {
 
       {loading ? (
         <LoadingBlock />
+      ) : error && registrations.length === 0 ? (
+        <EmptyState
+          icon="cloud-offline-outline"
+          title="Não foi possível carregar"
+          subtitle={error}
+          action={<Button title="Tentar novamente" variant="ghost" onPress={load} />}
+        />
       ) : active.length === 0 && withdrawn.length === 0 ? (
         <EmptyState
-          title="Nenhuma inscrição encontrada."
-          subtitle="Acesse um torneio e toque em 'Inscrever-se' para participar."
+          icon="ticket-outline"
+          title="Você ainda não tem inscrições"
+          subtitle="Quando se inscrever em um torneio, suas inscrições aparecerão aqui."
         />
       ) : (
         <>

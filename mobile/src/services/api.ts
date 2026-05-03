@@ -120,24 +120,102 @@ api.interceptors.response.use(
 
 export default api;
 
+// Friendly labels for backend field names — keeps user-facing toasts clean
+// instead of leaking raw API keys (e.g. `entry_close_at: ...`).
+const FIELD_LABELS: Record<string, string> = {
+  email: 'E-mail',
+  password: 'Senha',
+  password_confirm: 'Confirmação de senha',
+  full_name: 'Nome completo',
+  phone: 'Celular',
+  role: 'Tipo de conta',
+  accept_terms: 'Termos de uso',
+  marketing_consent: 'Comunicações',
+  display_name: 'Nome de exibição',
+  birth_year: 'Ano de nascimento',
+  gender: 'Gênero',
+  home_state: 'Estado',
+  home_city: 'Cidade',
+  travel_radius_km: 'Raio de viagem',
+  competitive_level: 'Nível competitivo',
+  tennis_class: 'Classe',
+  category_id: 'Categoria',
+  edition: 'Torneio',
+  edition_id: 'Torneio',
+  category: 'Categoria',
+  player: 'Jogador',
+  from_date: 'Data inicial',
+  to_date: 'Data final',
+  entry_close_at: 'Prazo de inscrição',
+  is_youth: 'Categoria juvenil',
+  slug: 'Identificador',
+  confidence: 'Confiabilidade',
+  near_profile: 'Perto do perfil',
+  source_url: 'Link da fonte',
+  ranking_source_url: 'Link do ranking',
+  candidate_entry_links: 'Links de inscritos',
+  organization_slug: 'Entidade',
+  synced_at: 'Última atualização',
+  home_lat: 'Latitude da cidade',
+  home_lng: 'Longitude da cidade',
+  non_field_errors: '',
+};
+
+function humanizeFieldKey(key: string): string {
+  if (key in FIELD_LABELS) return FIELD_LABELS[key];
+  // Fallback: turn snake_case into Title Case for unknown keys.
+  return key
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function statusFallback(status: number | undefined): string | null {
+  if (status === 401 || status === 403) return 'Sua sessão expirou ou você não tem acesso a este recurso.';
+  if (status === 404) return 'Não encontramos o que você procurava.';
+  if (status && status >= 500) return 'O servidor está com instabilidade. Tente novamente em instantes.';
+  return null;
+}
+
+function stringifyApiErrorValue(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (Array.isArray(value)) return value.map(stringifyApiErrorValue).filter(Boolean).join(', ');
+  if (value && typeof value === 'object') {
+    return Object.entries(value as Record<string, unknown>)
+      .map(([key, child]) => {
+        const label = humanizeFieldKey(key);
+        const text = stringifyApiErrorValue(child);
+        if (!text) return '';
+        return label ? `${label}: ${text}` : text;
+      })
+      .filter(Boolean)
+      .join(', ');
+  }
+  return '';
+}
+
 export function extractApiError(err: unknown): string {
   const ax = err as AxiosError<Record<string, unknown>>;
   const data = ax.response?.data;
+  const status = ax.response?.status;
   if (!data) {
     if (ax.request && !ax.response) {
-      return `Não foi possível conectar à API (${BASE_URL}). Verifique internet, VPN e a URL configurada.`;
+      return 'Não foi possível conectar ao servidor. Verifique sua conexão com a internet.';
     }
-    return ax.message || 'Erro desconhecido';
+    return 'Algo deu errado. Tente novamente em instantes.';
   }
+  const fallback = statusFallback(status);
+  if (fallback) return fallback;
   if (typeof data === 'string') return data;
   const detail = (data as Record<string, unknown>).detail;
   if (typeof detail === 'string') return detail;
   const parts: string[] = [];
   for (const [k, v] of Object.entries(data)) {
-    if (Array.isArray(v)) parts.push(`${k}: ${v.join(', ')}`);
-    else if (typeof v === 'string') parts.push(`${k}: ${v}`);
+    const label = humanizeFieldKey(k);
+    const value = stringifyApiErrorValue(v);
+    if (!value) continue;
+    parts.push(label ? `${label}: ${value}` : value);
   }
   if (parts.length) return parts.join(' • ');
-  if (ax.response?.status) return `Erro ${ax.response.status} ao acessar ${BASE_URL}`;
-  return ax.message || 'Erro desconhecido';
+  return 'Algo deu errado. Tente novamente em instantes.';
 }

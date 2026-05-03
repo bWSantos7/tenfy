@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { Alert, Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { Alert, Pressable, View } from 'react-native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -7,7 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import { MainStackParamList, MainTabParamList } from '../../navigation/types';
 import { useTheme } from '../../contexts/ThemeContext';
-import { AppText, Card, EmptyState, LoadingBlock, Screen, SectionHeader } from '../../components/ui';
+import { AppText, Button, Card, EmptyState, LoadingBlock, Screen, SectionHeader } from '../../components/ui';
 import { haptic } from '../../hooks/useHaptic';
 import { TournamentCard } from '../../components/TournamentCard';
 import { listWatchlist, watchlistSummary, removeWatchlist } from '../../services/data';
@@ -48,24 +48,26 @@ export function WatchlistScreen(_: Props) {
   const [summary, setSummary] = useState<any>(null);
   const [conflicts, setConflicts] = useState<Set<number>>(new Set());
   const [removing, setRemoving] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function fetchAll(): Promise<void> {
+    const [wl, sm] = await Promise.all([listWatchlist(), watchlistSummary()]);
+    const list = wl as WatchlistItem[];
+    setItems(list);
+    setSummary(sm);
+    setConflicts(detectConflicts(list));
+  }
 
   useFocusEffect(
     useCallback(() => {
       let active = true;
       (async () => {
         setLoading(true);
+        setError(null);
         try {
-          const [wl, sm] = await Promise.all([
-            listWatchlist().catch(() => []),
-            watchlistSummary().catch(() => null),
-          ]);
-          if (!active) return;
-          const list = wl as WatchlistItem[];
-          setItems(list);
-          setSummary(sm);
-          setConflicts(detectConflicts(list));
+          await fetchAll();
         } catch {
-          Toast.show({ type: 'error', text1: 'Erro ao carregar agenda' });
+          if (active) setError('Não foi possível carregar sua agenda agora.');
         } finally {
           if (active) setLoading(false);
         }
@@ -76,17 +78,25 @@ export function WatchlistScreen(_: Props) {
 
   async function onRefresh() {
     setRefreshing(true);
+    setError(null);
     try {
-      const [wl, sm] = await Promise.all([
-        listWatchlist().catch(() => []),
-        watchlistSummary().catch(() => null),
-      ]);
-      const list = wl as WatchlistItem[];
-      setItems(list);
-      setSummary(sm);
-      setConflicts(detectConflicts(list));
-    } catch {}
+      await fetchAll();
+    } catch {
+      setError('Não foi possível atualizar sua agenda agora.');
+    }
     setRefreshing(false);
+  }
+
+  async function reload() {
+    setLoading(true);
+    setError(null);
+    try {
+      await fetchAll();
+    } catch {
+      setError('Não foi possível carregar sua agenda agora.');
+    } finally {
+      setLoading(false);
+    }
   }
 
   function handleRemove(item: WatchlistItem) {
@@ -155,8 +165,19 @@ export function WatchlistScreen(_: Props) {
 
       {loading ? (
         <LoadingBlock />
+      ) : error && items.length === 0 ? (
+        <EmptyState
+          icon="cloud-offline-outline"
+          title="Não foi possível carregar"
+          subtitle={error}
+          action={<Button title="Tentar novamente" variant="ghost" onPress={reload} />}
+        />
       ) : items.length === 0 ? (
-        <EmptyState title="Sua agenda está vazia." subtitle="Adicione torneios pela tela de detalhes." />
+        <EmptyState
+          icon="calendar-outline"
+          title="Sua agenda está vazia"
+          subtitle="Procure um torneio na lista e toque em adicionar à agenda para começar a acompanhar."
+        />
       ) : (
         items.map((item) => (
           <View key={item.id}>

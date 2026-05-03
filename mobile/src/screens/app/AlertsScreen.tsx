@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, Switch, View } from 'react-native';
+import { Pressable, Switch, View } from 'react-native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,7 +8,7 @@ import { MainTabParamList } from '../../navigation/types';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Alert } from '../../types';
 import { listAlerts, markAlertRead, markAllAlertsRead } from '../../services/data';
-import { AppText, Button, Card, EmptyState, LoadingBlock, Screen, SectionHeader } from '../../components/ui';
+import { AppText, Button, Card, EmptyState, LoadingBlock, Screen } from '../../components/ui';
 import { haptic } from '../../hooks/useHaptic';
 import { fmtDateTime } from '../../utils/format';
 import api from '../../services/api';
@@ -36,6 +36,8 @@ export function AlertsScreen(_: Props) {
   const { colors } = useTheme();
   const [tab, setTab] = useState<PrefsTab>('alerts');
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [prefs, setPrefs] = useState<AlertPrefs | null>(null);
   const [savingPrefs, setSavingPrefs] = useState(false);
@@ -49,12 +51,28 @@ export function AlertsScreen(_: Props) {
 
   async function loadAlerts() {
     setLoading(true);
+    setError(null);
     try {
-      setAlerts(await listAlerts().catch(() => []) as Alert[]);
+      const data = await listAlerts();
+      setAlerts(data as Alert[]);
     } catch {
-      Toast.show({ type: 'error', text1: 'Erro ao carregar alertas' });
+      setError('Não foi possível carregar seus alertas agora.');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function onRefresh() {
+    setRefreshing(true);
+    setError(null);
+    try {
+      const data = await listAlerts();
+      setAlerts(data as Alert[]);
+      await loadPrefs();
+    } catch {
+      setError('Não foi possível atualizar seus alertas agora.');
+    } finally {
+      setRefreshing(false);
     }
   }
 
@@ -103,7 +121,7 @@ export function AlertsScreen(_: Props) {
   const unreadCount = alerts.filter((a) => a.status !== 'read').length;
 
   return (
-    <Screen scroll={false}>
+    <Screen onRefresh={onRefresh} refreshing={refreshing}>
       {/* Header */}
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <View>
@@ -135,8 +153,19 @@ export function AlertsScreen(_: Props) {
           {unreadCount > 0 && (
             <Button title="Marcar tudo como lido" variant="ghost" onPress={readAll} style={{ marginBottom: 8 }} />
           )}
-          {loading ? <LoadingBlock /> : alerts.length === 0 ? (
-            <EmptyState title="Nenhum alerta por enquanto." subtitle="Adicione torneios à agenda para receber notificações." />
+          {loading ? <LoadingBlock /> : error && alerts.length === 0 ? (
+            <EmptyState
+              icon="cloud-offline-outline"
+              title="Não foi possível carregar"
+              subtitle={error}
+              action={<Button title="Tentar novamente" variant="ghost" onPress={loadAlerts} />}
+            />
+          ) : alerts.length === 0 ? (
+            <EmptyState
+              icon="notifications-off-outline"
+              title="Nenhum alerta por enquanto"
+              subtitle="Adicione torneios à sua agenda para receber avisos sobre prazos, alterações e chaves."
+            />
           ) : (
             alerts.map((alert) => {
               const cfg = KIND_CONFIG[alert.kind] ?? KIND_CONFIG.other;

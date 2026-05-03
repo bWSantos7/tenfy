@@ -33,7 +33,7 @@ jobs:
     env:
       DEBUG: "False"
       SECRET_KEY: "ci-test-secret-key-only-000000000000000000000000000000000000000000000000"
-      DATABASE_URL: "postgresql://postgres:postgres@127.0.0.1:5432/tennis_hub_test"
+      DATABASE_URL: "postgresql://postgres:postgres@127.0.0.1:5432/tennis_hub_test?sslmode=disable"
       REDIS_URL: "redis://localhost:6379/1"
       ALLOWED_HOSTS: "localhost,127.0.0.1,testserver"
       CSRF_TRUSTED_ORIGINS: "http://localhost:8000,http://127.0.0.1:8000"

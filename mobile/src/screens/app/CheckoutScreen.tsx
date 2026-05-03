@@ -1,15 +1,5 @@
 import React, { useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Alert, TouchableOpacity, View } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { MainStackParamList } from '../../navigation/types';
@@ -18,6 +8,7 @@ import { tokenizeCard, getAsaasCustomerId } from '../../services/asaas';
 import api, { extractApiError } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
+import { Screen, AppText, Card, Button, Input } from '../../components/ui';
 
 type CheckoutRouteProp = RouteProp<MainStackParamList, 'Checkout'>;
 type Nav = NativeStackNavigationProp<MainStackParamList>;
@@ -57,22 +48,22 @@ export function CheckoutScreen() {
   const [loading, setLoading] = useState(false);
 
   // Credit card fields
-  const [cardName, setCardName]       = useState('');
-  const [cardNumber, setCardNumber]   = useState('');
-  const [expiry, setExpiry]           = useState('');
-  const [ccv, setCcv]                 = useState('');
-  const [cpf, setCpf]                 = useState('');
-  const [cep, setCep]                 = useState('');
+  const [cardName, setCardName]     = useState('');
+  const [cardNumber, setCardNumber] = useState('');
+  const [expiry, setExpiry]         = useState('');
+  const [ccv, setCcv]               = useState('');
+  const [cpf, setCpf]               = useState('');
+  const [cep, setCep]               = useState('');
 
   const price = billingPeriod === 'yearly' ? plan.price_yearly : plan.price_monthly;
 
   function validateCard(): string | null {
-    if (!cardName.trim())               return 'Informe o nome no cartão.';
+    if (!cardName.trim())                          return 'Informe o nome no cartão.';
     if (cardNumber.replace(/\s/g, '').length < 16) return 'Número do cartão inválido.';
-    if (expiry.length < 5)              return 'Informe a validade (MM/AA).';
-    if (ccv.length < 3)                 return 'CVV inválido.';
-    if (cpf.replace(/\D/g, '').length < 11) return 'CPF inválido.';
-    if (cep.replace(/\D/g, '').length < 8)  return 'CEP inválido.';
+    if (expiry.length < 5)                         return 'Informe a validade (MM/AA).';
+    if (ccv.length < 3)                            return 'CVV inválido.';
+    if (cpf.replace(/\D/g, '').length < 11)        return 'CPF inválido.';
+    if (cep.replace(/\D/g, '').length < 8)         return 'CEP inválido.';
     return null;
   }
 
@@ -161,111 +152,121 @@ export function CheckoutScreen() {
     }
   }
 
-  const inp = {
-    backgroundColor: colors.bgCard,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 15,
-    color: colors.textPrimary,
-    marginBottom: 10,
-  } as const;
-
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView
-        style={{ flex: 1, backgroundColor: colors.bgBase }}
-        contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
-        keyboardShouldPersistTaps="handled"
-      >
-        <Text style={{ fontSize: 22, fontWeight: '700', color: colors.textPrimary, marginBottom: 20 }}>
-          Finalizar assinatura
-        </Text>
+    <Screen>
+      <AppText variant="title">Finalizar assinatura</AppText>
 
-        {/* Summary */}
-        <View style={{ backgroundColor: colors.accentBlue, borderRadius: 14, padding: 20, marginBottom: 24 }}>
-          <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 14, marginBottom: 4 }}>{plan.name}</Text>
-          <Text style={{ color: '#FFF', fontSize: 26, fontWeight: '800' }}>{formatPrice(price, billingPeriod)}</Text>
-          {billingPeriod === 'yearly' && (
-            <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, marginTop: 6 }}>
-              Equivale a R$ {(parseFloat(price) / 12).toFixed(2).replace('.', ',')}/mês — 2 meses grátis
-            </Text>
-          )}
-        </View>
-
-        {/* Payment method */}
-        {(
-          <>
-            <Text style={{ fontSize: 15, fontWeight: '600', color: colors.textSecondary, marginBottom: 10, marginTop: 8 }}>
-              Forma de pagamento
-            </Text>
-            {(Object.keys(METHOD_CONFIG) as PaymentMethod[]).map((m) => {
-              const cfg = METHOD_CONFIG[m];
-              const selected = method === m;
-              return (
-                <TouchableOpacity
-                  key={m}
-                  onPress={() => setMethod(m)}
-                  style={{
-                    flexDirection: 'row', alignItems: 'center',
-                    backgroundColor: selected ? `${colors.accentBlue}18` : colors.bgCard,
-                    borderRadius: 12, padding: 14, marginBottom: 10,
-                    borderWidth: 1, borderColor: selected ? colors.accentBlue : colors.borderSubtle,
-                  }}
-                >
-                  <Text style={{ fontSize: 22, marginRight: 12 }}>{cfg.icon}</Text>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 15, fontWeight: '600', color: colors.textPrimary }}>{cfg.label}</Text>
-                    <Text style={{ fontSize: 12, color: colors.textMuted }}>{cfg.description}</Text>
-                  </View>
-                  <View style={{
-                    width: 18, height: 18, borderRadius: 9, borderWidth: 2,
-                    borderColor: selected ? colors.accentBlue : colors.borderSubtle,
-                    backgroundColor: selected ? colors.accentBlue : 'transparent',
-                  }} />
-                </TouchableOpacity>
-              );
-            })}
-          </>
+      {/* Summary */}
+      <View style={{ backgroundColor: colors.accentBlue, borderRadius: 14, padding: 20 }}>
+        <AppText variant="caption" style={{ color: 'rgba(255,255,255,0.8)', marginBottom: 4 }}>
+          {plan.name}
+        </AppText>
+        <AppText variant="title" style={{ color: '#FFF', fontSize: 26, fontWeight: '800' }}>
+          {formatPrice(price, billingPeriod)}
+        </AppText>
+        {billingPeriod === 'yearly' && (
+          <AppText variant="caption" style={{ color: 'rgba(255,255,255,0.7)', marginTop: 6 }}>
+            Equivale a R$ {(parseFloat(price) / 12).toFixed(2).replace('.', ',')}/mês — 2 meses grátis
+          </AppText>
         )}
+      </View>
 
-        {/* Card form */}
-        {(method === 'credit_card' || method === 'debit_card') && (
-          <View style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: 16, marginTop: 8, marginBottom: 8, borderWidth: 1, borderColor: colors.borderSubtle }}>
-            <Text style={{ fontSize: 15, fontWeight: '600', color: colors.textSecondary, marginBottom: 10 }}>Dados do cartão</Text>
-            <TextInput style={inp} placeholder="Nome no cartão" placeholderTextColor={colors.textMuted} value={cardName} onChangeText={setCardName} autoCapitalize="characters" />
-            <TextInput style={inp} placeholder="Número do cartão" placeholderTextColor={colors.textMuted} value={cardNumber} onChangeText={(v) => setCardNumber(formatCardNumber(v))} keyboardType="numeric" maxLength={19} />
-            <View style={{ flexDirection: 'row', gap: 10 }}>
-              <TextInput style={[inp, { flex: 1 }]} placeholder="Validade (MM/AA)" placeholderTextColor={colors.textMuted} value={expiry} onChangeText={(v) => setExpiry(formatExpiry(v))} keyboardType="numeric" maxLength={5} />
-              <TextInput style={[inp, { flex: 1 }]} placeholder="CVV" placeholderTextColor={colors.textMuted} value={ccv} onChangeText={(v) => setCcv(v.replace(/\D/g, '').slice(0, 4))} keyboardType="numeric" maxLength={4} secureTextEntry contextMenuHidden selectTextOnFocus={false} />
+      {/* Payment method */}
+      <View style={{ gap: 8 }}>
+        <AppText variant="muted" style={{ fontWeight: '600' }}>Forma de pagamento</AppText>
+        {(Object.keys(METHOD_CONFIG) as PaymentMethod[]).map((m) => {
+          const cfg = METHOD_CONFIG[m];
+          const selected = method === m;
+          return (
+            <TouchableOpacity
+              key={m}
+              onPress={() => setMethod(m)}
+              style={{
+                flexDirection: 'row', alignItems: 'center',
+                backgroundColor: selected ? `${colors.accentBlue}18` : colors.bgCard,
+                borderRadius: 12, padding: 14,
+                borderWidth: 1, borderColor: selected ? colors.accentBlue : colors.borderSubtle,
+              }}
+            >
+              <AppText style={{ fontSize: 22, marginRight: 12 }}>{cfg.icon}</AppText>
+              <View style={{ flex: 1 }}>
+                <AppText variant="body" style={{ fontWeight: '600' }}>{cfg.label}</AppText>
+                <AppText variant="caption">{cfg.description}</AppText>
+              </View>
+              <View style={{
+                width: 18, height: 18, borderRadius: 9, borderWidth: 2,
+                borderColor: selected ? colors.accentBlue : colors.borderSubtle,
+                backgroundColor: selected ? colors.accentBlue : 'transparent',
+              }} />
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      {/* Card form */}
+      {(method === 'credit_card' || method === 'debit_card') && (
+        <Card>
+          <AppText variant="caption" style={{ fontWeight: '600' }}>Dados do cartão</AppText>
+          <Input
+            placeholder="Nome no cartão"
+            value={cardName}
+            onChangeText={setCardName}
+            autoCapitalize="characters"
+          />
+          <Input
+            placeholder="Número do cartão"
+            value={cardNumber}
+            onChangeText={(v) => setCardNumber(formatCardNumber(v))}
+            keyboardType="numeric"
+            maxLength={19}
+          />
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <View style={{ flex: 1 }}>
+              <Input
+                placeholder="Validade (MM/AA)"
+                value={expiry}
+                onChangeText={(v) => setExpiry(formatExpiry(v))}
+                keyboardType="numeric"
+                maxLength={5}
+              />
             </View>
-            <Text style={{ fontSize: 15, fontWeight: '600', color: colors.textSecondary, marginBottom: 10, marginTop: 4 }}>Dados do titular</Text>
-            <TextInput style={inp} placeholder="CPF (somente números)" placeholderTextColor={colors.textMuted} value={cpf} onChangeText={(v) => setCpf(v.replace(/\D/g, '').slice(0, 11))} keyboardType="numeric" maxLength={11} />
-            <TextInput style={inp} placeholder="CEP (somente números)" placeholderTextColor={colors.textMuted} value={cep} onChangeText={(v) => setCep(v.replace(/\D/g, '').slice(0, 8))} keyboardType="numeric" maxLength={8} />
+            <View style={{ flex: 1 }}>
+              <Input
+                placeholder="CVV"
+                value={ccv}
+                onChangeText={(v) => setCcv(v.replace(/\D/g, '').slice(0, 4))}
+                keyboardType="numeric"
+                maxLength={4}
+                secureTextEntry
+                contextMenuHidden
+                selectTextOnFocus={false}
+              />
+            </View>
           </View>
-        )}
+          <AppText variant="caption" style={{ fontWeight: '600', marginTop: 4 }}>Dados do titular</AppText>
+          <Input
+            placeholder="CPF (somente números)"
+            value={cpf}
+            onChangeText={(v) => setCpf(v.replace(/\D/g, '').slice(0, 11))}
+            keyboardType="numeric"
+            maxLength={11}
+          />
+          <Input
+            placeholder="CEP (somente números)"
+            value={cep}
+            onChangeText={(v) => setCep(v.replace(/\D/g, '').slice(0, 8))}
+            keyboardType="numeric"
+            maxLength={8}
+          />
+        </Card>
+      )}
 
-        <Text style={{ fontSize: 11, color: colors.textMuted, textAlign: 'center', marginTop: 12, marginBottom: 20, lineHeight: 16 }}>
-          Ao confirmar, você concorda com os Termos de Uso. Você pode cancelar a qualquer momento.
-        </Text>
+      <AppText variant="caption" style={{ textAlign: 'center', lineHeight: 16 }}>
+        Ao confirmar, você concorda com os Termos de Uso. Você pode cancelar a qualquer momento.
+      </AppText>
 
-        <TouchableOpacity
-          style={{ backgroundColor: colors.accentBlue, borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginBottom: 12 }}
-          onPress={handleConfirm}
-          disabled={loading}
-        >
-          {loading
-            ? <ActivityIndicator color="#FFF" />
-            : <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 16 }}>Confirmar assinatura</Text>
-          }
-        </TouchableOpacity>
-
-        <TouchableOpacity style={{ alignItems: 'center' }} onPress={() => navigation.goBack()}>
-          <Text style={{ color: colors.textMuted, fontSize: 14 }}>Voltar</Text>
-        </TouchableOpacity>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      <Button title="Confirmar assinatura" onPress={handleConfirm} loading={loading} />
+      <Button title="Voltar" variant="ghost" onPress={() => navigation.goBack()} />
+    </Screen>
   );
 }

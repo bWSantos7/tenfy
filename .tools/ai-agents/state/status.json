@@ -1,10 +1,10 @@
 ﻿{
-  "status": "running",
-  "cycle": 0,
-  "max_cycles": 50,
-  "current_task": null,
-  "last_agent": null,
-  "final_verdict": null,
-  "stop_reason": null,
-  "last_error": null
+    "status":  "running",
+    "cycle":  2,
+    "max_cycles":  50,
+    "current_task":  "001-mobile-filters-parity.md",
+    "last_agent":  "codex-planner",
+    "final_verdict":  null,
+    "stop_reason":  null,
+    "last_error":  null
 }

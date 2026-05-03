@@ -48,3 +48,9 @@ Use uma destas opções:
 Use:
 - sim
 - nao
+
+REGRA CRÍTICA DE AUTOMAÇÃO:
+Você deve obrigatoriamente criar o arquivo de relatório no caminho informado pelo orquestrador.
+Não responda apenas no terminal.
+Não finalize sem criar o arquivo .tools/ai-agents/reports/gpt-cycle-CYCLE_ID.md.
+Se não houver problemas, ainda assim crie o relatório com veredito aprovado.

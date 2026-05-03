@@ -3,11 +3,12 @@ Tests for tournament filters and views.
 Focused on COSAT visibility regression and search filter coverage.
 """
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.test import TestCase
 from rest_framework.test import APIClient
 
 from apps.sources.models import Organization, DataSource
-from apps.tournaments.models import Tournament, TournamentEdition
+from apps.tournaments.models import Tournament, TournamentEdition, Venue
 
 User = get_user_model()
 
@@ -111,3 +112,42 @@ class TournamentFilterCosatTestCase(TestCase):
         self.assertEqual(res.status_code, 200)
         ids = [e['id'] for e in (res.data.get('results') or res.data)]
         self.assertIn(self.edition.id, ids)
+
+    def test_calendar_cache_varies_by_filter_params(self):
+        """Calendar cache must not reuse an unfiltered response for filtered queries."""
+        cache.clear()
+        sp_venue = Venue.objects.create(name='Arena SP', city='Sao Paulo', state='SP')
+        rj_venue = Venue.objects.create(name='Arena RJ', city='Rio de Janeiro', state='RJ')
+        self.edition.start_date = '2026-06-10'
+        self.edition.venue = sp_venue
+        self.edition.save(update_fields=['start_date', 'venue', 'updated_at'])
+        rj_edition = TournamentEdition.objects.create(
+            tournament=self.edition.tournament,
+            external_id='cosat:rj-cache-test',
+            title='Copa COSAT RJ',
+            season_year=2026,
+            status='unknown',
+            is_youth=True,
+            start_date='2026-06-11',
+            venue=rj_venue,
+        )
+
+        unfiltered = self.client.get('/api/tournaments/editions/calendar/')
+        filtered = self.client.get('/api/tournaments/editions/calendar/', {'state': 'SP'})
+
+        self.assertEqual(unfiltered.status_code, 200)
+        self.assertEqual(filtered.status_code, 200)
+        unfiltered_ids = [
+            item['id']
+            for month in unfiltered.data
+            for item in month['items']
+        ]
+        filtered_ids = [
+            item['id']
+            for month in filtered.data
+            for item in month['items']
+        ]
+
+        self.assertIn(rj_edition.id, unfiltered_ids)
+        self.assertIn(self.edition.id, filtered_ids)
+        self.assertNotIn(rj_edition.id, filtered_ids)

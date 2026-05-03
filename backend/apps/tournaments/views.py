@@ -148,7 +148,11 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=False, methods=['get'], throttle_classes=[HeavyUserThrottle])
     def calendar(self, request):
-        cache_key = 'tournaments:calendar'
+        import json as _json
+        params = dict(sorted(request.query_params.items()))
+        cache_key = 'tournaments:calendar:' + hashlib.md5(
+            _json.dumps(params).encode()
+        ).hexdigest()
         cached = cache.get(cache_key)
         if cached:
             return Response(cached)

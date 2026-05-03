@@ -32,3 +32,8 @@ Se ainda houver trabalho:
 
 Se o projeto estiver pronto:
 .tools/ai-agents/reports/FINAL-REPORT.md
+
+REGRA CRÍTICA DE AUTOMAÇÃO:
+Você deve obrigatoriamente criar uma próxima task em .tools/ai-agents/queue/NEXT_TASK_FILE.md ou criar .tools/ai-agents/reports/FINAL-REPORT.md.
+Não responda apenas no terminal.
+Não finalize sem criar um desses arquivos.

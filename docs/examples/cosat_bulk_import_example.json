@@ -1,0 +1,69 @@
+{
+  "_comment": "Exemplo real de payload para importar inscritos COSAT via POST /api/registrations/import/",
+  "_instructions": [
+    "1. Substituir edition_id pelo ID real do torneio (buscar em /admin/ ou /api/tournaments/editions/)",
+    "2. Substituir source_url pela URL real da pagina do torneio",
+    "3. Substituir entries pelos atletas reais copiados da pagina COSAT",
+    "4. Enviar com dry_run=true primeiro para revisar",
+    "5. Confirmar com dry_run=false"
+  ],
+  "edition_id": 42,
+  "source": "cosat",
+  "source_url": "https://cosat.tournamentsoftware.com/sport/tournament?id=XXXX",
+  "confidence": "medium",
+  "dry_run": true,
+  "entries": [
+    {
+      "player_name": "Joao Silva",
+      "category_text": "Sub-14 Masculino",
+      "player_external_id": "COSAT-001",
+      "ranking_position": 8,
+      "ranking_source": "COSAT Jan/2026",
+      "payment_status": "paid",
+      "removed_or_replaced": false,
+      "replacement_reason": "",
+      "notes": "",
+      "source_url": "https://cosat.tournamentsoftware.com/sport/draw?id=XXXX",
+      "confidence": "medium"
+    },
+    {
+      "player_name": "Pedro Oliveira",
+      "category_text": "Sub-14 Masculino",
+      "player_external_id": "COSAT-002",
+      "ranking_position": 35,
+      "ranking_source": "COSAT Jan/2026",
+      "payment_status": "paid",
+      "removed_or_replaced": true,
+      "replacement_reason": "Substituido por atleta de ranking superior apos fechamento das vagas.",
+      "notes": "",
+      "source_url": "",
+      "confidence": "medium"
+    },
+    {
+      "player_name": "Ana Costa",
+      "category_text": "Sub-14 Feminino",
+      "player_external_id": "COSAT-003",
+      "ranking_position": 12,
+      "ranking_source": "COSAT Jan/2026",
+      "payment_status": "paid",
+      "removed_or_replaced": false,
+      "replacement_reason": "",
+      "notes": "",
+      "source_url": "",
+      "confidence": "medium"
+    },
+    {
+      "player_name": "Maria Rodrigues",
+      "category_text": "Sub-14 Feminino",
+      "player_external_id": "COSAT-004",
+      "ranking_position": null,
+      "ranking_source": "COSAT Jan/2026",
+      "payment_status": "pending",
+      "removed_or_replaced": false,
+      "replacement_reason": "",
+      "notes": "Ranking nao disponivel no momento da importacao",
+      "source_url": "",
+      "confidence": "low"
+    }
+  ]
+}

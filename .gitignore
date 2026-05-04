@@ -1,0 +1,79 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+.venv_local/
+ENV/
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Django
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+media/
+staticfiles/
+/static/
+
+# Environment variables
+.env
+.env.local
+.env.production
+.env.development
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnp.*
+dist/
+build/
+coverage/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# OS
+Thumbs.db
+nul
+
+# Project
+scraper_cache/
+logs/*.log
+*.pyc
+.claude
+.tools/
+
+# Local exports / temp files
+cbt-targets.json
+*-targets.json
+parse-result.json
+sync-targets.json
+*.tmp
+.tmp/
+temp/
+tmp/
+
+# n8n exports
+Sync*.json
+*Tennis Hub*.json
+*n8n*.json
+
+# Claude / local tools
+.claude/
+.tools/
+
+escopo_contrato.pdf

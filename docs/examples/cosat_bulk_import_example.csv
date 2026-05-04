@@ -1,0 +1,7 @@
+player_name,category_text,player_external_id,ranking_position,ranking_source,payment_status,removed_or_replaced,replacement_reason,notes
+Joao Silva,Sub-14 Masculino,COSAT-001,8,COSAT Jan/2026,paid,false,,
+Pedro Oliveira,Sub-14 Masculino,COSAT-002,35,COSAT Jan/2026,paid,true,Substituido por atleta de ranking superior apos fechamento das vagas.,
+Ana Costa,Sub-14 Feminino,COSAT-003,12,COSAT Jan/2026,paid,false,,
+Maria Rodrigues,Sub-14 Feminino,COSAT-004,,COSAT Jan/2026,pending,false,,Ranking nao disponivel
+Carlos Lima,Sub-16 Masculino,COSAT-005,3,COSAT Jan/2026,paid,false,,
+Bruno Santos,Sub-16 Masculino,COSAT-006,28,COSAT Jan/2026,unknown,false,,Aguardando confirmacao de pagamento

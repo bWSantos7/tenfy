@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>{{ alert.title }}</title>
+</head>
+<body style="margin:0;padding:0;background:#0D0D0D;color:#FFFFFF;font-family:Arial,Helvetica,sans-serif;">
+  <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:#0D0D0D;padding:24px 0;">
+    <tr><td align="center">
+      <table role="presentation" cellpadding="0" cellspacing="0" width="560"
+             style="background:#1F1F1F;border-radius:12px;padding:28px;">
+        <tr><td>
+          <div style="font-size:12px;color:#00FF88;letter-spacing:2px;text-transform:uppercase;">Tennis Hub</div>
+          <h1 style="color:#FFFFFF;font-size:22px;margin:12px 0 16px;">{{ alert.title }}</h1>
+          <p style="color:#E6E6E6;line-height:1.55;white-space:pre-line;">{{ alert.body }}</p>
+          {% if edition and edition.official_source_url %}
+          <p style="margin-top:24px;">
+            <a href="{{ edition.official_source_url }}"
+               style="background:#00FF88;color:#0D0D0D;padding:12px 20px;border-radius:8px;
+                      text-decoration:none;font-weight:bold;display:inline-block;">
+              Abrir inscrição oficial
+            </a>
+          </p>
+          {% endif %}
+          {% if frontend_url %}
+          <p style="margin-top:16px;">
+            <a href="{{ frontend_url }}" style="color:#00B2FF;font-size:14px;">Ver no Tennis Hub</a>
+          </p>
+          {% endif %}
+          <hr style="border:0;border-top:1px solid #333;margin:24px 0;">
+          <p style="color:#888;font-size:12px;">
+            Você recebeu este aviso porque está acompanhando este torneio. Ajuste suas preferências
+            em seu perfil ou ignore esta mensagem se não deseja mais recebê-la.
+          </p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>

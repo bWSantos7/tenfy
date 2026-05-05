@@ -251,13 +251,26 @@ export function ProfileScreen(_: Props) {
       </Card>
 
       {/* Children section for parents */}
-      {isParent && children.length > 0 ? (
+      {isParent ? (
         <Card>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-            <Ionicons name="people-outline" size={18} color={colors.accentNeon} />
-            <AppText variant="body" style={{ fontWeight: '700' }}>Meus filhos</AppText>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Ionicons name="people-outline" size={18} color={colors.accentNeon} />
+              <AppText variant="body" style={{ fontWeight: '700' }}>Meus filhos</AppText>
+            </View>
+            <Pressable
+              onPress={() => navigation.navigate('Register' as never)}
+              style={{ backgroundColor: `${colors.accentNeon}20`, borderWidth: 1, borderColor: `${colors.accentNeon}55`, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4, flexDirection: 'row', gap: 4, alignItems: 'center' }}
+            >
+              <Ionicons name="add" size={14} color={colors.accentNeon} />
+              <AppText variant="caption" style={{ color: colors.accentNeon, fontWeight: '700' }}>Adicionar filho</AppText>
+            </Pressable>
           </View>
-          {children.map((link) => (
+          {children.length === 0 ? (
+            <AppText variant="muted" style={{ textAlign: 'center', paddingVertical: 12 }}>
+              Nenhum filho cadastrado ainda. Adicione um filho para gerenciar o perfil dele.
+            </AppText>
+          ) : children.map((link) => (
             <View key={link.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.borderSubtle }}>
               <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: `${colors.accentBlue}22`, alignItems: 'center', justifyContent: 'center' }}>
                 <AppText variant="caption" style={{ color: colors.accentBlue, fontWeight: '700', fontSize: 14 }}>
@@ -278,9 +291,11 @@ export function ProfileScreen(_: Props) {
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <View>
             <AppText variant="section">Perfis esportivos</AppText>
-            <AppText variant="caption" style={{ marginTop: 2 }}>{isParent ? 'Perfis esportivos dos seus filhos' : 'Gerencie seus perfis de jogador'}</AppText>
+            <AppText variant="caption" style={{ marginTop: 2 }}>
+              {isParent ? 'Perfis esportivos dos seus filhos' : isManagedChild ? 'Seu perfil esportivo' : 'Gerencie seus perfis de jogador'}
+            </AppText>
           </View>
-          {!isParent ? (
+          {!isParent && !isManagedChild ? (
             <Pressable
               onPress={() => navigation.navigate('Onboarding')}
               style={{ backgroundColor: `${colors.accentNeon}20`, borderWidth: 1, borderColor: `${colors.accentNeon}55`, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 6, flexDirection: 'row', gap: 6, alignItems: 'center' }}
@@ -300,8 +315,8 @@ export function ProfileScreen(_: Props) {
           />
         ) : profiles.length === 0 ? (
           <EmptyState
-            title={isParent ? 'Nenhum perfil esportivo dos filhos encontrado.' : 'Nenhum perfil criado.'}
-            subtitle={isParent ? 'Peça ao seu filho para completar o perfil esportivo no app.' : 'Crie um perfil para ver torneios compatíveis, agenda e resultados.'}
+            title={isParent ? 'Nenhum perfil esportivo dos filhos encontrado.' : isManagedChild ? 'Seu perfil esportivo ainda não foi preenchido.' : 'Nenhum perfil criado.'}
+            subtitle={isParent ? 'Peça ao seu filho para completar o perfil esportivo no app.' : isManagedChild ? 'Peça ao seu responsável para ajudar a completar seu perfil.' : 'Crie um perfil para ver torneios compatíveis, agenda e resultados.'}
           />
         ) : profiles.map((p) =>
           editing?.id === p.id ? (
@@ -310,6 +325,7 @@ export function ProfileScreen(_: Props) {
               profile={p}
               onSaved={async () => { setEditing(null); await load(); }}
               onCancel={() => setEditing(null)}
+              restrictedMode={isManagedChild}
             />
           ) : (
             <ProfileCard
@@ -319,13 +335,14 @@ export function ProfileScreen(_: Props) {
               onEdit={() => setEditing(p)}
               onMakePrimary={() => makePrimaryProfile(p.id)}
               onRemove={() => removeProfile(p.id)}
+              restrictedMode={isManagedChild}
             />
           )
         )}
       </View>
 
-      {/* Privacy */}
-      <PrivacyCard onDeleteAccount={handleDeleteAccount} />
+      {/* Privacy — hide for managed child accounts */}
+      {!isManagedChild ? <PrivacyCard onDeleteAccount={handleDeleteAccount} /> : null}
     </Screen>
   );
 }
@@ -367,12 +384,13 @@ function PrivacyCard({ onDeleteAccount }: { onDeleteAccount: () => void }) {
   );
 }
 
-function ProfileCard({ profile: p, colors, onEdit, onMakePrimary, onRemove }: {
+function ProfileCard({ profile: p, colors, onEdit, onMakePrimary, onRemove, restrictedMode = false }: {
   profile: PlayerProfile;
   colors: any;
   onEdit: () => void;
   onMakePrimary: () => void;
   onRemove: () => void;
+  restrictedMode?: boolean;
 }) {
   const classLabel = p.tennis_class ? (TENNIS_CLASS_LABELS[p.tennis_class] ?? `Classe ${p.tennis_class}`) : null;
   const levelLabel = LEVEL_LABELS[p.competitive_level] ?? p.competitive_level;
@@ -418,14 +436,14 @@ function ProfileCard({ profile: p, colors, onEdit, onMakePrimary, onRemove }: {
 
       <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
         <Button title="Editar" variant="secondary" onPress={onEdit} style={{ flex: 1 }} />
-        {!p.is_primary ? <Button title="Tornar principal" variant="ghost" onPress={onMakePrimary} style={{ flex: 1 }} /> : null}
-        <Button title="Remover" variant="danger" onPress={onRemove} style={{ flex: p.is_primary ? 2 : 1 }} />
+        {!restrictedMode && !p.is_primary ? <Button title="Tornar principal" variant="ghost" onPress={onMakePrimary} style={{ flex: 1 }} /> : null}
+        {!restrictedMode ? <Button title="Remover" variant="danger" onPress={onRemove} style={{ flex: p.is_primary ? 2 : 1 }} /> : null}
       </View>
     </Card>
   );
 }
 
-function ProfileEditor({ profile, onSaved, onCancel }: { profile: PlayerProfile; onSaved: () => Promise<void>; onCancel: () => void; }) {
+function ProfileEditor({ profile, onSaved, onCancel, restrictedMode = false }: { profile: PlayerProfile; onSaved: () => Promise<void>; onCancel: () => void; restrictedMode?: boolean; }) {
   const [form, setForm] = useState({
     display_name: profile.display_name,
     birth_year: profile.birth_year ? String(profile.birth_year) : '',
@@ -474,7 +492,9 @@ function ProfileEditor({ profile, onSaved, onCancel }: { profile: PlayerProfile;
   return (
     <Card style={{ marginBottom: 10 }}>
       <AppText variant="body" style={{ fontWeight: '700' }}>Editando: {profile.display_name}</AppText>
-      <Input label="Nome de exibição" value={form.display_name} onChangeText={(v) => setForm({ ...form, display_name: v })} />
+      {!restrictedMode ? (
+        <Input label="Nome de exibição" value={form.display_name} onChangeText={(v) => setForm({ ...form, display_name: v })} />
+      ) : null}
       <Input
         label="Ano de nascimento"
         value={form.birth_year}
@@ -498,14 +518,18 @@ function ProfileEditor({ profile, onSaved, onCancel }: { profile: PlayerProfile;
         loading={loadingCities}
         searchable
       />
-      <SelectField
-        label="Raio de viagem"
-        value={form.travel_radius_km}
-        options={RADIUS_OPTIONS}
-        onSelect={(v) => setForm({ ...form, travel_radius_km: v })}
-      />
-      <SelectField label="Nível competitivo" value={form.competitive_level} options={LEVEL_OPTIONS} onSelect={(v) => setForm({ ...form, competitive_level: v as PlayerProfile['competitive_level'] })} />
-      <SelectField label="Classe" value={form.tennis_class} options={CLASS_OPTIONS} onSelect={(v) => setForm({ ...form, tennis_class: v })} />
+      {!restrictedMode ? (
+        <>
+          <SelectField
+            label="Raio de viagem"
+            value={form.travel_radius_km}
+            options={RADIUS_OPTIONS}
+            onSelect={(v) => setForm({ ...form, travel_radius_km: v })}
+          />
+          <SelectField label="Nível competitivo" value={form.competitive_level} options={LEVEL_OPTIONS} onSelect={(v) => setForm({ ...form, competitive_level: v as PlayerProfile['competitive_level'] })} />
+          <SelectField label="Classe" value={form.tennis_class} options={CLASS_OPTIONS} onSelect={(v) => setForm({ ...form, tennis_class: v })} />
+        </>
+      ) : null}
       <Button title="Salvar alterações" onPress={save} loading={saving} />
       <Button title="Cancelar" variant="ghost" onPress={onCancel} />
     </Card>

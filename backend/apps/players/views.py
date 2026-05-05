@@ -23,7 +23,27 @@ class PlayerProfileViewSet(viewsets.ModelViewSet):
             .order_by('-is_primary', '-created_at')
         )
 
+    def _is_managed_child(self):
+        """Check if the current user is a child account managed by a parent."""
+        from apps.accounts.models import ParentChild
+        return ParentChild.objects.filter(child=self.request.user, is_active=True).exists()
+
+    def create(self, request, *args, **kwargs):
+        # Managed children cannot create new profiles — only their parent can
+        if self._is_managed_child():
+            return Response(
+                {'detail': 'Contas de filho não podem criar novos perfis esportivos.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return super().create(request, *args, **kwargs)
+
     def destroy(self, request, *args, **kwargs):
+        # Managed children cannot delete profiles
+        if self._is_managed_child():
+            return Response(
+                {'detail': 'Contas de filho não podem remover perfis esportivos.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         profile = self.get_object()
         if request.user.role == 'player':
             return Response(
@@ -34,6 +54,11 @@ class PlayerProfileViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def set_primary(self, request, pk=None):
+        if self._is_managed_child():
+            return Response(
+                {'detail': 'Contas de filho não podem alterar o perfil principal.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         profile = self.get_object()
         PlayerProfile.objects.filter(user=request.user, is_primary=True).update(is_primary=False)
         profile.is_primary = True

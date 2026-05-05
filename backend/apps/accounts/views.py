@@ -395,6 +395,28 @@ class ParentChildViewSet(viewsets.ModelViewSet):
         return ParentChildSerializer
 
     def create(self, request, *args, **kwargs):
+        # Enforce plan-based child limit
+        from apps.billing.models import Subscription, Plan
+        try:
+            sub = request.user.subscription
+            if sub.plan.slug == Plan.SLUG_INDIVIDUAL:
+                return Response(
+                    {'detail': 'O Plano Individual não permite cadastrar filhos. Faça upgrade para o Plano Família.'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            current_children = ParentChild.objects.filter(parent=request.user, is_active=True).count()
+            max_children = sub.plan.max_members - 1  # titular doesn't count
+            if current_children >= max_children:
+                return Response(
+                    {'detail': f'Limite de {max_children} filho(s) atingido para o seu plano. Faça upgrade para adicionar mais.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        except Subscription.DoesNotExist:
+            return Response(
+                {'detail': 'Você precisa de uma assinatura ativa para cadastrar filhos.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         link = serializer.save()

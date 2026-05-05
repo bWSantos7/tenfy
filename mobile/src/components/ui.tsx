@@ -372,7 +372,7 @@ export function SelectField({
 }
 
 const styles = StyleSheet.create({
-  content: { padding: 16, paddingBottom: 16, gap: 16 },
+  content: { padding: 16, paddingBottom: 4, gap: 16 },
   card:    { borderWidth: 1, borderRadius: 16, padding: 16, gap: 10 },
   input:   { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13, fontSize: 15 },
   button:      { minHeight: 50, borderWidth: 1, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20, paddingVertical: 13 },

@@ -30,7 +30,8 @@ export function MainTabs() {
       sceneContainerStyle: { backgroundColor: colors.bgBase },
       tabBarStyle: {
         backgroundColor: colors.bgBase,
-        borderTopWidth: 0,
+        borderTopWidth: 1,
+        borderTopColor: colors.borderSubtle,
         elevation: 0,
         height: 48,
         paddingTop: 2,
@@ -38,7 +39,7 @@ export function MainTabs() {
       },
       tabBarActiveTintColor: colors.accentNeon,
       tabBarInactiveTintColor: colors.textMuted,
-      tabBarLabelStyle: { fontSize: 10, fontWeight: '700', marginTop: 2 },
+      tabBarLabelStyle: { fontSize: 10, fontWeight: '700', marginTop: 1 },
       tabBarIcon: ({ color, size, focused }) => (
         <Ionicons
           name={focused ? icons[route.name].replace('-outline', '') : icons[route.name]}

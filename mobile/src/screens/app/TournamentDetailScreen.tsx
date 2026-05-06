@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, Linking, Modal, Pressable, ScrollView, Share, View } from 'react-native';
+import { Alert, Linking, Pressable, Share, View } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { MainStackParamList } from '../../navigation/types';
 import { useTheme } from '../../contexts/ThemeContext';
-import { AppText, Button, Card, EmptyState, Input, LoadingBlock, Screen, SectionHeader, SelectField } from '../../components/ui';
+import { AppText, Button, Card, EmptyState, LoadingBlock, Screen, SectionHeader } from '../../components/ui';
 import {
   EditionEligibility,
   TournamentChangeEvent,
@@ -14,7 +14,7 @@ import {
 } from '../../types';
 import { getEdition, evaluateEdition, editionHistory } from '../../services/tournaments';
 import { listProfiles, listWatchlist, toggleWatchlist } from '../../services/data';
-import { myRegistrations, registerForEdition, withdrawRegistration } from '../../services/registrations';
+import { myRegistrations, withdrawRegistration } from '../../services/registrations';
 import { pickBestProfile } from '../../utils/profile';
 import { fmtBRL, fmtDate, fmtDateMaybeTime, fmtDateRange, formatChangeEventDetails, formatChangeEventTitle, translateReason, STATUS_LABELS, SURFACE_LABELS } from '../../utils/format';
 import { extractApiError } from '../../services/api';
@@ -57,7 +57,6 @@ export function TournamentDetailScreen({ route, navigation }: Props) {
   const [togglingWatch, setTogglingWatch] = useState(false);
   const [showAllCategories, setShowAllCategories] = useState(false);
   const [myReg, setMyReg] = useState<TournamentRegistration | null>(null);
-  const [showRegModal, setShowRegModal] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -316,10 +315,19 @@ export function TournamentDetailScreen({ route, navigation }: Props) {
           <Button title="Cancelar minha inscrição" variant="danger" onPress={onWithdraw} style={{ marginTop: 4 }} />
         </Card>
       ) : (
-        /* Register button */
         <Button
           title="Inscrever-se neste torneio"
-          onPress={() => setShowRegModal(true)}
+          onPress={() => {
+            const regLink = detail.links?.find((l) => l.link_type === 'registration');
+            const url = regLink?.url || detail.official_source_url;
+            if (url) {
+              Linking.openURL(url).catch(() =>
+                Toast.show({ type: 'error', text1: 'Não foi possível abrir o link' })
+              );
+            } else {
+              Toast.show({ type: 'info', text1: 'Link não disponível', text2: 'Acesse o site da entidade organizadora.' });
+            }
+          }}
         />
       )}
 
@@ -439,94 +447,6 @@ export function TournamentDetailScreen({ route, navigation }: Props) {
         </View>
       )}
 
-      {/* Registration Modal */}
-      <RegistrationModal
-        visible={showRegModal}
-        onClose={() => setShowRegModal(false)}
-        detail={detail}
-        colors={colors}
-        onSuccess={(reg) => { setMyReg(reg); setShowRegModal(false); }}
-      />
     </Screen>
-  );
-}
-
-function RegistrationModal({ visible, onClose, detail, colors, onSuccess }: {
-  visible: boolean;
-  onClose: () => void;
-  detail: TournamentEditionDetail;
-  colors: ReturnType<typeof import('../../contexts/ThemeContext').useTheme>['colors'];
-  onSuccess: (reg: TournamentRegistration) => void;
-}) {
-  const [categoryId, setCategoryId] = useState<string>('');
-  const [rankingPosition, setRankingPosition] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-
-  const categoryOptions = detail.categories.map((c) => ({
-    value: String(c.id),
-    label: c.source_category_text,
-  }));
-
-  async function submit() {
-    setSubmitting(true);
-    try {
-      const reg = await registerForEdition({
-        edition: detail.id,
-        category: categoryId ? Number(categoryId) : null,
-        ranking_position: rankingPosition ? Number(rankingPosition) : null,
-      });
-      Toast.show({ type: 'success', text1: 'Inscrição realizada!', text2: reg.registration_status_label });
-      onSuccess(reg);
-    } catch (err) {
-      Toast.show({ type: 'error', text1: 'Erro ao se inscrever', text2: extractApiError(err) });
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={{ flex: 1, justifyContent: 'flex-end' }}>
-        <Pressable style={{ ...require('react-native').StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)' }} onPress={onClose} />
-        <ScrollView
-          keyboardShouldPersistTaps="handled"
-          style={{ maxHeight: '88%', backgroundColor: colors.bgCard, borderTopLeftRadius: 24, borderTopRightRadius: 24 }}
-          contentContainerStyle={{ padding: 20, paddingBottom: 20, gap: 16 }}
-        >
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <AppText variant="section">Inscrever-se</AppText>
-            <Pressable onPress={onClose} style={{ padding: 4 }}>
-              <Ionicons name="close" size={22} color={colors.textMuted} />
-            </Pressable>
-          </View>
-          <AppText variant="muted" numberOfLines={2}>{detail.title}</AppText>
-
-          {categoryOptions.length > 0 ? (
-            <SelectField
-              label="Categoria"
-              value={categoryId}
-              options={[{ value: '', label: 'Sem categoria específica' }, ...categoryOptions]}
-              onSelect={setCategoryId}
-              placeholder="Selecione a categoria"
-            />
-          ) : null}
-
-          <Input
-            label="Posição no ranking (opcional)"
-            value={rankingPosition}
-            onChangeText={(v) => setRankingPosition(v.replace(/\D/g, ''))}
-            keyboardType="number-pad"
-            placeholder="Ex: 15 (deixe em branco se não souber)"
-          />
-
-          <AppText variant="muted" style={{ fontSize: 11 }}>
-            A confirmação da vaga depende do pagamento da inscrição. Você receberá a posição na lista após se inscrever.
-          </AppText>
-
-          <Button title="Confirmar inscrição" onPress={submit} loading={submitting} />
-          <Button title="Cancelar" variant="ghost" onPress={onClose} />
-        </ScrollView>
-      </View>
-    </Modal>
   );
 }

@@ -1,4 +1,5 @@
-import React, { useRef, useMemo, useState } from 'react';
+import React, { useRef, useMemo, useState, useContext } from 'react';
+import { BottomTabBarHeightContext } from '@react-navigation/bottom-tabs';
 import {
   ActivityIndicator, Animated, FlatList,
   Modal, Pressable, RefreshControl, ScrollView,
@@ -23,10 +24,12 @@ export function Screen({
   refreshing?: boolean;
 }) {
   const { colors } = useTheme();
+  const tabBarHeight = useContext(BottomTabBarHeightContext) ?? 0;
+  const bottomPad = tabBarHeight > 0 ? tabBarHeight + 12 : 24;
   const content = scroll ? (
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.bgBase }}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[styles.content, { paddingBottom: bottomPad }]}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
       showsVerticalScrollIndicator={false}
@@ -44,7 +47,7 @@ export function Screen({
       {children}
     </ScrollView>
   ) : (
-    <View style={[styles.content, { flex: 1, backgroundColor: colors.bgBase }]}>{children}</View>
+    <View style={[styles.content, { flex: 1, backgroundColor: colors.bgBase, paddingBottom: bottomPad }]}>{children}</View>
   );
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bgBase }}>
@@ -372,7 +375,7 @@ export function SelectField({
 }
 
 const styles = StyleSheet.create({
-  content: { padding: 16, paddingBottom: 96, gap: 16 },
+  content: { padding: 16, gap: 16 },
   card:    { borderWidth: 1, borderRadius: 16, padding: 16, gap: 10, marginBottom: 14 },
   input:   { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13, fontSize: 15 },
   button:      { minHeight: 50, borderWidth: 1, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20, paddingVertical: 13 },

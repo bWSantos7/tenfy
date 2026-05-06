@@ -378,7 +378,7 @@ export function TournamentDetailScreen({ route, navigation }: Props) {
       {detail.categories.length === 0 ? (
         <EmptyState title="Nenhuma categoria encontrada." />
       ) : (
-        <View>
+        <View style={{ gap: 4 }}>
           {visibleCategories.map((c) => (
             <Card key={c.id}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -407,16 +407,18 @@ export function TournamentDetailScreen({ route, navigation }: Props) {
       {detail.links?.length > 0 && (
         <View>
           <SectionHeader title="Links" />
-          {detail.links.map((link) => (
-            <Card key={link.id} style={{ marginBottom: 8 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                <AppText variant="body" style={{ fontWeight: '600' }}>{link.label || link.link_type}</AppText>
-                <Pressable onPress={() => Linking.openURL(link.url)}>
-                  <Ionicons name="open-outline" size={18} color={colors.accentNeon} />
-                </Pressable>
-              </View>
-            </Card>
-          ))}
+          <View style={{ gap: 4 }}>
+            {detail.links.map((link) => (
+              <Card key={link.id}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <AppText variant="body" style={{ fontWeight: '600' }}>{link.label || link.link_type}</AppText>
+                  <Pressable onPress={() => Linking.openURL(link.url)}>
+                    <Ionicons name="open-outline" size={18} color={colors.accentNeon} />
+                  </Pressable>
+                </View>
+              </Card>
+            ))}
+          </View>
         </View>
       )}
 
@@ -424,14 +426,16 @@ export function TournamentDetailScreen({ route, navigation }: Props) {
       {history.length > 0 && (
         <View>
           <SectionHeader title="Histórico de alterações" />
-          {history.slice(0, 5).map((event: any) => (
-            <Card key={event.id} style={{ marginBottom: 8 }}>
-              <AppText variant="body" style={{ fontWeight: '700' }}>{formatChangeEventTitle(event.event_type)}</AppText>
-              {formatChangeEventDetails(event).map((line) => (
-                <AppText key={line} variant="muted">• {line}</AppText>
-              ))}
-            </Card>
-          ))}
+          <View style={{ gap: 4 }}>
+            {history.slice(0, 5).map((event: any) => (
+              <Card key={event.id}>
+                <AppText variant="body" style={{ fontWeight: '700' }}>{formatChangeEventTitle(event.event_type)}</AppText>
+                {formatChangeEventDetails(event).map((line) => (
+                  <AppText key={line} variant="muted">• {line}</AppText>
+                ))}
+              </Card>
+            ))}
+          </View>
         </View>
       )}
 

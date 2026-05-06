@@ -344,13 +344,15 @@ export function TournamentsScreen({ route }: Props) {
     [federations],
   );
 
-  // Header for FlatList (search + filter chips + advanced panel)
-  const ListHeader = (
+  // Header for FlatList — must be a component function (not a JSX element)
+  // so FlatList re-renders it when any filter state changes.
+  function ListHeaderComponent() {
+    return (
     <View>
       <Input value={query} onChangeText={setQuery} placeholder="Buscar por nome, cidade, circuito..." />
 
       {/* Advanced filters toggle row */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, marginBottom: 8 }}>
         <Pressable
           onPress={() => setShowAdvanced((v) => !v)}
           style={{
@@ -507,7 +509,8 @@ export function TournamentsScreen({ route }: Props) {
         </View>
       ) : null}
     </View>
-  );
+    );
+  }
 
   const year = calMonth.getFullYear();
   const month = calMonth.getMonth();
@@ -550,7 +553,8 @@ export function TournamentsScreen({ route }: Props) {
             data={loading ? [] : items}
             keyExtractor={keyExtractor}
             renderItem={renderItem}
-            ListHeaderComponent={ListHeader}
+            ListHeaderComponent={ListHeaderComponent}
+            ItemSeparatorComponent={() => <View style={{ height: 2 }} />}
             ListEmptyComponent={
               loading
                 ? <TournamentListSkeleton count={6} />
@@ -597,7 +601,7 @@ export function TournamentsScreen({ route }: Props) {
         </>
       ) : (
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 96 }}>
-          {ListHeader}
+          <ListHeaderComponent />
 
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
             <Pressable onPress={() => { setCalMonth(new Date(year, month - 1, 1)); setSelectedDate(null); }} style={{ padding: 8 }}>

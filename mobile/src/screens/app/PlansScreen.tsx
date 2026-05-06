@@ -56,8 +56,8 @@ function PlanCard({
 
       <AppText variant="section" style={{ marginBottom: 4 }}>{plan.name}</AppText>
 
-      <View style={{ flexDirection: 'row', alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 8 }}>
-        <AppText style={{ fontSize: 30, lineHeight: 38, fontWeight: '800', color: colors.accentNeon, includeFontPadding: false }}>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-end', flexWrap: 'wrap', marginTop: 4, marginBottom: 8 }}>
+        <AppText style={{ fontSize: 30, lineHeight: 44, fontWeight: '800', color: colors.accentNeon }}>
           {formatPrice(price)}
         </AppText>
         {parseFloat(price) > 0 && (

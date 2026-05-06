@@ -412,7 +412,6 @@ def connector_status(request):
 
     for key in sorted(registered_connectors().keys()):
         ds = sources.get(key)
-        cb_open = bool(cache.get(f'asaas:cb:open'))  # reuse pattern for ingestion if added later
         # Per-connector circuit breaker keys
         failures_key = f'connector:failures:{key}'
         open_key = f'connector:open:{key}'

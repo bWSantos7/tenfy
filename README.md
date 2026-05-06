@@ -453,21 +453,29 @@ python manage.py test apps.ingestion
 python manage.py test apps.billing
 python manage.py test apps.accounts
 python manage.py test apps.eligibility
+python manage.py test apps.players
+python manage.py test apps.tournaments
+python manage.py test apps.admin_panel
+python manage.py test apps.alerts
 ```
 
-Mobile:
+Mobile (TypeScript):
 
 ```bash
 cd mobile
 npx tsc --noEmit
 ```
 
-Frontend:
+Frontend (TypeScript + build):
 
 ```bash
 cd frontend
+node_modules/.bin/tsc --noEmit
 npm run build
 ```
+
+> **Nota:** `python manage.py test` requer Python 3.11+ e PostgreSQL configurados.
+> Em ambiente Windows sem Python no PATH, use WSL, Railway CLI (`railway run`) ou CI/CD.
 
 ---
 

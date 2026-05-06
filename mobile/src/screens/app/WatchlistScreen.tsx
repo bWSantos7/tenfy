@@ -138,7 +138,7 @@ export function WatchlistScreen(_: Props) {
               { icon: 'calendar', label: 'Total', value: summary.total, color: colors.accentNeon },
               { icon: 'time-outline', label: 'Próximos', value: summary.upcoming, color: colors.accentBlue },
               { icon: 'checkmark-done-outline', label: 'Passados', value: summary.past, color: colors.textMuted },
-              { icon: 'ticket-outline', label: 'Inscrições', value: summary.active_registrations, color: '#f59e0b' },
+              { icon: 'ticket-outline', label: 'Inscrições', value: summary.active_registrations, color: colors.statusClosing },
             ].map((stat) => (
               <View
                 key={stat.label}
@@ -155,9 +155,9 @@ export function WatchlistScreen(_: Props) {
 
       {/* Conflict warning */}
       {conflicts.size > 0 && (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#f59e0b18', borderRadius: 14, padding: 12, borderWidth: 1, borderColor: '#f59e0b44', marginBottom: 4 }}>
-          <Ionicons name="warning-outline" size={18} color="#f59e0b" />
-          <AppText variant="caption" style={{ flex: 1, color: '#f59e0b' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: `${colors.statusClosing}18`, borderRadius: 14, padding: 12, borderWidth: 1, borderColor: `${colors.statusClosing}44`, marginBottom: 4 }}>
+          <Ionicons name="warning-outline" size={18} color={colors.statusClosing} />
+          <AppText variant="caption" style={{ flex: 1, color: colors.statusClosing }}>
             {`${conflicts.size} torneio${conflicts.size > 1 ? 's' : ''} com datas sobrepostas na sua agenda.`}
           </AppText>
         </View>
@@ -183,8 +183,8 @@ export function WatchlistScreen(_: Props) {
           <View key={item.id}>
             {conflicts.has(item.id) && (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: -4, paddingHorizontal: 4 }}>
-                <Ionicons name="warning" size={12} color="#f59e0b" />
-                <AppText variant="caption" style={{ color: '#f59e0b', fontSize: 10 }}>Conflito de datas</AppText>
+                <Ionicons name="warning" size={12} color={colors.statusClosing} />
+                <AppText variant="caption" style={{ color: colors.statusClosing, fontSize: 10 }}>Conflito de datas</AppText>
               </View>
             )}
             <View style={{ position: 'relative' }}>
@@ -196,10 +196,10 @@ export function WatchlistScreen(_: Props) {
               <Pressable
                 onPress={() => handleRemove(item)}
                 disabled={removing === item.id}
-                style={{ position: 'absolute', right: 10, bottom: 18, width: 44, height: 44, backgroundColor: 'rgba(239,68,68,0.15)', borderRadius: 12, borderWidth: 1, borderColor: 'rgba(239,68,68,0.3)', alignItems: 'center', justifyContent: 'center' }}
+                style={{ position: 'absolute', right: 10, bottom: 18, width: 44, height: 44, backgroundColor: `${colors.danger}26`, borderRadius: 12, borderWidth: 1, borderColor: `${colors.danger}4D`, alignItems: 'center', justifyContent: 'center' }}
                 hitSlop={10}
               >
-                <Ionicons name={removing === item.id ? 'hourglass-outline' : 'trash-outline'} size={18} color="#ef4444" />
+                <Ionicons name={removing === item.id ? 'hourglass-outline' : 'trash-outline'} size={18} color={colors.danger} />
               </Pressable>
             </View>
           </View>

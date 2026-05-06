@@ -16,13 +16,17 @@ import api from '../../services/api';
 type Props = BottomTabScreenProps<MainTabParamList, 'Alerts'>;
 type PrefsTab = 'alerts' | 'prefs';
 
-const KIND_CONFIG: Record<string, { icon: string; color: string; label: string }> = {
-  deadline:  { icon: 'alarm-outline',         color: '#f59e0b', label: 'Prazo' },
-  change:    { icon: 'create-outline',         color: '#3b82f6', label: 'Alteração' },
-  draws:     { icon: 'git-branch-outline',     color: '#8b5cf6', label: 'Chaves' },
-  canceled:  { icon: 'close-circle-outline',   color: '#ef4444', label: 'Cancelado' },
-  other:     { icon: 'notifications-outline',  color: '#6b7280', label: 'Outro' },
-};
+type ThemeColors = ReturnType<typeof import('../../contexts/ThemeContext').useTheme>['colors'];
+
+function getKindConfig(c: ThemeColors): Record<string, { icon: string; color: string; label: string }> {
+  return {
+    deadline:  { icon: 'alarm-outline',         color: c.statusClosing, label: 'Prazo' },
+    change:    { icon: 'create-outline',         color: c.accentBlue,    label: 'Alteração' },
+    draws:     { icon: 'git-branch-outline',     color: c.statusProgress, label: 'Chaves' },
+    canceled:  { icon: 'close-circle-outline',   color: c.danger,        label: 'Cancelado' },
+    other:     { icon: 'notifications-outline',  color: c.statusClosed,  label: 'Outro' },
+  };
+}
 
 interface AlertPrefs {
   in_app_enabled: boolean;
@@ -80,7 +84,11 @@ export function AlertsScreen(_: Props) {
     try {
       const res = await api.get<AlertPrefs>('/api/alerts/preferences/');
       setPrefs(res.data);
-    } catch {}
+    } catch (err) {
+      // Non-critical: prefs load failure should not block alert viewing.
+      // Log for debugging without showing a disruptive error to the user.
+      console.warn('[AlertsScreen] loadPrefs failed:', err);
+    }
   }
 
   async function readOne(id: number) {
@@ -119,6 +127,7 @@ export function AlertsScreen(_: Props) {
   }
 
   const unreadCount = alerts.filter((a) => a.status !== 'read').length;
+  const KIND_CONFIG = getKindConfig(colors);
 
   return (
     <Screen onRefresh={onRefresh} refreshing={refreshing}>
@@ -168,7 +177,7 @@ export function AlertsScreen(_: Props) {
             />
           ) : (
             alerts.map((alert) => {
-              const cfg = KIND_CONFIG[alert.kind] ?? KIND_CONFIG.other;
+              const cfg = KIND_CONFIG[alert.kind] ?? KIND_CONFIG['other'];
               const isUnread = alert.status !== 'read';
               return (
                 <Pressable

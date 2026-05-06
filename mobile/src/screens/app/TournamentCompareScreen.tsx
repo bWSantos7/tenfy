@@ -103,12 +103,12 @@ export function TournamentCompareScreen() {
 
       {/* Conflict warning */}
       {conflicts.length > 0 && (
-        <View style={[styles.conflictBanner, { backgroundColor: '#7c2d12', borderColor: '#ea580c' }]}>
-          <Ionicons name="warning-outline" size={16} color="#fb923c" />
+        <View style={[styles.conflictBanner, { backgroundColor: `${colors.danger}20`, borderColor: colors.danger }]}>
+          <Ionicons name="warning-outline" size={16} color={colors.statusClosing} />
           <View style={{ flex: 1, marginLeft: 8 }}>
-            <Text style={{ color: '#fb923c', fontWeight: '700', fontSize: 13 }}>Conflito de datas detectado</Text>
+            <Text style={{ color: colors.statusClosing, fontWeight: '700', fontSize: 13 }}>Conflito de datas detectado</Text>
             {conflicts.map((c, i) => (
-              <Text key={i} style={{ color: '#fed7aa', fontSize: 12, marginTop: 2 }}>
+              <Text key={i} style={{ color: colors.textSecondary, fontSize: 12, marginTop: 2 }}>
                 "{c.edition_a.title}" e "{c.edition_b.title}" têm datas sobrepostas.
               </Text>
             ))}

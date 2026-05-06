@@ -131,9 +131,10 @@ export function TournamentsScreen({ route }: Props) {
   const [compareMode, setCompareMode] = useState(false);
   const [compareIds, setCompareIds] = useState<number[]>([]);
 
-  function buildFilters(): TournamentFilters {
+  const appliedFilters = useMemo<TournamentFilters>(() => {
     const f: TournamentFilters = {};
-    if (query) f.q = query;
+    const trimmedQuery = query.trim();
+    if (trimmedQuery) f.q = trimmedQuery;
     if (statusFilter) f.status = statusFilter;
     if (circuitFilter) f.circuit = circuitFilter;
     if (federationFilter) f.organization = federationFilter;
@@ -146,31 +147,27 @@ export function TournamentsScreen({ route }: Props) {
     if (surfaceFilter) f.surface = surfaceFilter;
     if (nearMe && primaryProfileId) f.near_profile = primaryProfileId;
     return f;
-  }
+  }, [
+    query, statusFilter, circuitFilter, federationFilter, categoryFilter,
+    stateFilter, cityFilter, fromDate, toDate, modalityFilter, surfaceFilter,
+    nearMe, primaryProfileId,
+  ]);
 
   const activeFilterCount = useMemo(() => {
-    let n = 0;
-    if (statusFilter) n++;
-    if (circuitFilter) n++;
-    if (federationFilter) n++;
-    if (categoryFilter) n++;
-    if (stateFilter) n++;
-    if (cityFilter) n++;
-    if (fromDate) n++;
-    if (toDate) n++;
-    if (modalityFilter) n++;
-    if (surfaceFilter) n++;
-    if (nearMe) n++;
-    return n;
-  }, [
-    statusFilter, circuitFilter, federationFilter, categoryFilter,
+    const filterKeys = Object.keys(appliedFilters).filter((key) => key !== 'q');
+    return filterKeys.length;
+  }, [appliedFilters]);
+
+  const hasAnyFilter = useMemo(() => Object.keys(appliedFilters).length > 0, [appliedFilters]);
+  const hasAnyInput = useMemo(() => !!(
+    query || statusFilter || circuitFilter || federationFilter || categoryFilter
+    || stateFilter || cityFilter || fromDate || toDate || modalityFilter
+    || surfaceFilter || nearMe
+  ), [
+    query, statusFilter, circuitFilter, federationFilter, categoryFilter,
     stateFilter, cityFilter, fromDate, toDate, modalityFilter, surfaceFilter,
     nearMe,
   ]);
-
-  const hasAnyFilter = useMemo(() => !!(
-    query || activeFilterCount > 0
-  ), [query, activeFilterCount]);
 
   async function loadList(page = 1) {
     const myVersion = ++reloadVersion.current;
@@ -184,7 +181,7 @@ export function TournamentsScreen({ route }: Props) {
     }
     try {
       const data = await listEditions({
-        ...buildFilters(),
+        ...appliedFilters,
         page,
         page_size: 20,
       });
@@ -213,7 +210,7 @@ export function TournamentsScreen({ route }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const months = await calendar(buildFilters());
+      const months = await calendar(appliedFilters);
       if (myVersion !== reloadVersion.current) return;
       const map: Record<string, TournamentEditionList[]> = {};
       months.forEach((m) => {
@@ -372,7 +369,7 @@ export function TournamentsScreen({ route }: Props) {
             </View>
           ) : null}
         </Pressable>
-        {hasAnyFilter ? (
+        {hasAnyInput ? (
           <Pressable onPress={clearFilters} style={{ marginLeft: 'auto', paddingHorizontal: 8, paddingVertical: 8 }}>
             <AppText variant="caption" style={{ color: colors.accentBlue, fontWeight: '600' }}>Limpar</AppText>
           </Pressable>
@@ -580,7 +577,7 @@ export function TournamentsScreen({ route }: Props) {
             ListFooterComponent={loadingMore ? <TournamentListSkeleton count={2} /> : null}
             onEndReached={handleEndReached}
             onEndReachedThreshold={0.4}
-            contentContainerStyle={{ paddingBottom: 16 }}
+            contentContainerStyle={{ paddingBottom: 96 }}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             // Performance tuning for 3000 users / large lists
@@ -599,7 +596,7 @@ export function TournamentsScreen({ route }: Props) {
           )}
         </>
       ) : (
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 16 }}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 96 }}>
           {ListHeader}
 
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>

@@ -21,24 +21,28 @@ import { extractApiError } from '../../services/api';
 
 type Props = NativeStackScreenProps<MainStackParamList, 'TournamentDetail'>;
 
-const STATUS_COLORS: Record<string, string> = {
-  open: '#39ff14',
-  closing_soon: '#f59e0b',
-  closed: '#ef4444',
-  registration_open: '#39ff14',
-  registration_closed: '#ef4444',
-  in_progress: '#3b82f6',
-  finished: '#6b7280',
-  canceled: '#ef4444',
-  draw_published: '#8b5cf6',
-};
+function getStatusColors(colors: ReturnType<typeof import('../../contexts/ThemeContext').useTheme>['colors']): Record<string, string> {
+  return {
+    open: colors.statusOpen,
+    closing_soon: colors.statusClosing,
+    closed: colors.danger,
+    registration_open: colors.statusOpen,
+    registration_closed: colors.danger,
+    in_progress: colors.accentBlue,
+    finished: colors.statusFinished,
+    canceled: colors.danger,
+    draw_published: colors.statusProgress,
+  };
+}
 
-const REG_STATUS_CONFIG: Record<string, { color: string; icon: string }> = {
-  confirmed: { color: '#39ff14', icon: 'checkmark-circle' },
-  waiting_list: { color: '#f59e0b', icon: 'time' },
-  pending_payment: { color: '#3b82f6', icon: 'card' },
-  withdrawn: { color: '#6b7280', icon: 'close-circle' },
-};
+function getRegStatusConfig(colors: ReturnType<typeof import('../../contexts/ThemeContext').useTheme>['colors']): Record<string, { color: string; icon: string }> {
+  return {
+    confirmed: { color: colors.statusOpen, icon: 'checkmark-circle' },
+    waiting_list: { color: colors.statusClosing, icon: 'time' },
+    pending_payment: { color: colors.accentBlue, icon: 'card' },
+    withdrawn: { color: colors.statusClosed, icon: 'close-circle' },
+  };
+}
 
 export function TournamentDetailScreen({ route, navigation }: Props) {
   const { colors } = useTheme();
@@ -142,6 +146,8 @@ export function TournamentDetailScreen({ route, navigation }: Props) {
     );
   }
 
+  const STATUS_COLORS = getStatusColors(colors);
+  const REG_STATUS_CONFIG = getRegStatusConfig(colors);
   const statusColor = detail ? (STATUS_COLORS[detail.status] ?? colors.textMuted) : colors.textMuted;
   const statusLabel = detail ? (STATUS_LABELS[detail.status] ?? detail.status) : '';
 
@@ -169,7 +175,7 @@ export function TournamentDetailScreen({ route, navigation }: Props) {
           <AppText variant="body" style={{ fontWeight: '600' }}>Erro</AppText>
         </View>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', gap: 16 }}>
-          <Ionicons name="alert-circle-outline" size={48} color="#ef4444" />
+          <Ionicons name="alert-circle-outline" size={48} color={colors.danger} />
           <AppText variant="body" style={{ textAlign: 'center', fontWeight: '600' }}>Não foi possível carregar o torneio</AppText>
           <AppText variant="muted" style={{ textAlign: 'center' }}>{error ?? 'Torneio não encontrado.'}</AppText>
           <Button title="Tentar novamente" onPress={load} />
@@ -282,7 +288,7 @@ export function TournamentDetailScreen({ route, navigation }: Props) {
                   #{myReg.slot_position}
                 </AppText>
                 {myReg.max_participants ? (
-                  <AppText variant="caption" style={{ color: myReg.in_draw ? colors.accentNeon : '#ef4444', textAlign: 'center' }}>
+                  <AppText variant="caption" style={{ color: myReg.in_draw ? colors.accentNeon : colors.danger, textAlign: 'center' }}>
                     {myReg.in_draw ? 'Na chave' : `Fora (limite ${myReg.max_participants})`}
                   </AppText>
                 ) : null}
@@ -293,10 +299,10 @@ export function TournamentDetailScreen({ route, navigation }: Props) {
               <Ionicons
                 name={myReg.payment_status === 'paid' || myReg.payment_status === 'waived' ? 'checkmark-circle' : 'time'}
                 size={22}
-                color={myReg.payment_status === 'paid' || myReg.payment_status === 'waived' ? colors.accentNeon : '#f59e0b'}
+                color={myReg.payment_status === 'paid' || myReg.payment_status === 'waived' ? colors.accentNeon : colors.statusClosing}
                 style={{ marginVertical: 2 }}
               />
-              <AppText variant="caption" style={{ color: myReg.payment_status === 'paid' || myReg.payment_status === 'waived' ? colors.accentNeon : '#f59e0b', fontWeight: '600' }}>
+              <AppText variant="caption" style={{ color: myReg.payment_status === 'paid' || myReg.payment_status === 'waived' ? colors.accentNeon : colors.statusClosing, fontWeight: '600' }}>
                 {myReg.payment_status_label}
               </AppText>
             </View>
@@ -326,15 +332,15 @@ export function TournamentDetailScreen({ route, navigation }: Props) {
             const isCompatible = status === 'compatible';
             const isUnknown = status === 'unknown';
             const iconName = isCompatible ? 'checkmark-circle' : isUnknown ? 'help-circle' : 'close-circle';
-            const iconColor = isCompatible ? colors.accentNeon : isUnknown ? '#f59e0b' : '#ef4444';
+            const iconColor = isCompatible ? colors.accentNeon : isUnknown ? colors.statusClosing : colors.danger;
             return (
               <Card key={item.tournament_category_id} style={{ marginBottom: 10 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                   <Ionicons name={iconName} size={16} color={iconColor} />
                   <AppText variant="body" style={{ fontWeight: '700', flex: 1 }}>{item.source_text}</AppText>
                   {isUnknown && (
-                    <View style={{ backgroundColor: '#f59e0b22', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 }}>
-                      <AppText variant="caption" style={{ color: '#f59e0b', fontSize: 10, fontWeight: '600' }}>Indeterminado</AppText>
+                    <View style={{ backgroundColor: `${colors.statusClosing}22`, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 }}>
+                      <AppText variant="caption" style={{ color: colors.statusClosing, fontSize: 10, fontWeight: '600' }}>Indeterminado</AppText>
                     </View>
                   )}
                 </View>
@@ -342,7 +348,7 @@ export function TournamentDetailScreen({ route, navigation }: Props) {
                   <AppText key={reason} variant="muted" style={{ marginLeft: 24 }}>• {translateReason(reason)}</AppText>
                 ))}
                 {isUnknown && !item.result?.reasons?.length ? (
-                  <AppText variant="muted" style={{ marginLeft: 24, color: '#f59e0b' }}>• Regra oficial não encontrada para esta categoria</AppText>
+                  <AppText variant="muted" style={{ marginLeft: 24, color: colors.statusClosing }}>• Regra oficial não encontrada para esta categoria</AppText>
                 ) : null}
                 {item.result?.ranking_check && item.result.ranking_check !== 'not_applicable' ? (
                   <AppText
@@ -352,7 +358,7 @@ export function TournamentDetailScreen({ route, navigation }: Props) {
                       color: item.result.ranking_check === 'within_cutoff'
                         ? colors.accentNeon
                         : item.result.ranking_check === 'beyond_cutoff'
-                        ? '#f59e0b'
+                        ? colors.statusClosing
                         : colors.textMuted,
                     }}
                   >
@@ -445,7 +451,7 @@ function RegistrationModal({ visible, onClose, detail, colors, onSuccess }: {
   visible: boolean;
   onClose: () => void;
   detail: TournamentEditionDetail;
-  colors: any;
+  colors: ReturnType<typeof import('../../contexts/ThemeContext').useTheme>['colors'];
   onSuccess: (reg: TournamentRegistration) => void;
 }) {
   const [categoryId, setCategoryId] = useState<string>('');

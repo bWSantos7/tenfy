@@ -13,7 +13,9 @@ import { User } from '../../types';
 import { LEVEL_LABELS, TENNIS_CLASS_LABELS } from '../../utils/format';
 import { AppText, Button, Card, Checkbox, Input, Screen, SelectField } from '../../components/ui';
 
-function passwordStrength(pwd: string): { score: number; label: string; color: string } {
+type AppColors = ReturnType<typeof import('../../contexts/ThemeContext').useTheme>['colors'];
+
+function passwordStrength(pwd: string, c: AppColors): { score: number; label: string; color: string } {
   if (!pwd) return { score: 0, label: '', color: 'transparent' };
   let score = 0;
   if (pwd.length >= 8)  score++;
@@ -21,10 +23,10 @@ function passwordStrength(pwd: string): { score: number; label: string; color: s
   if (/[A-Z]/.test(pwd)) score++;
   if (/[0-9]/.test(pwd)) score++;
   if (/[^A-Za-z0-9]/.test(pwd)) score++;
-  if (score <= 1) return { score, label: 'Fraca', color: '#ef4444' };
-  if (score <= 2) return { score, label: 'Razoavel', color: '#f59e0b' };
-  if (score <= 3) return { score, label: 'Boa', color: '#3b82f6' };
-  return { score, label: 'Forte', color: '#39ff14' };
+  if (score <= 1) return { score, label: 'Fraca',    color: c.danger };
+  if (score <= 2) return { score, label: 'Razoável', color: c.statusClosing };
+  if (score <= 3) return { score, label: 'Boa',      color: c.accentBlue };
+  return { score, label: 'Forte', color: c.statusOpen };
 }
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Register'>;
@@ -211,7 +213,7 @@ export function RegisterScreen({ navigation }: Props) {
         {step === 'form' ? (
           <>
             <AppText variant="muted" style={{ marginBottom: 4 }}>
-              Campos marcados com <AppText variant="muted" style={{ color: '#ef4444', fontWeight: '700' }}>*</AppText> sao obrigatorios.
+              Campos marcados com <AppText variant="muted" style={{ color: colors.danger, fontWeight: '700' }}>*</AppText> sao obrigatorios.
             </AppText>
 
             <Input label="Nome completo" required value={form.full_name} onChangeText={(v) => setForm({ ...form, full_name: v })} autoCapitalize="words" placeholder="Ex: Maria Silva" />
@@ -219,12 +221,12 @@ export function RegisterScreen({ navigation }: Props) {
             <Input label="Celular" required value={form.phone} onChangeText={(v) => setForm({ ...form, phone: v.replace(/\D/g, '') })} keyboardType="phone-pad" placeholder="11999999999" />
             <Input label="Senha" required value={form.password} onChangeText={(v) => setForm({ ...form, password: v })} secureTextEntry placeholder="Minimo 8 caracteres" />
             {form.password.length > 0 && (() => {
-              const { score, label, color } = passwordStrength(form.password);
+              const { score, label, color } = passwordStrength(form.password, colors);
               return (
                 <View style={{ marginTop: -8, marginBottom: 4, gap: 4 }}>
                   <View style={{ flexDirection: 'row', gap: 4 }}>
                     {[1,2,3,4,5].map((i) => (
-                      <View key={i} style={{ flex: 1, height: 4, borderRadius: 2, backgroundColor: i <= score ? color : '#374151' }} />
+                      <View key={i} style={{ flex: 1, height: 4, borderRadius: 2, backgroundColor: i <= score ? color : colors.borderSubtle }} />
                     ))}
                   </View>
                   <AppText variant="caption" style={{ color, fontSize: 11 }}>{label}</AppText>

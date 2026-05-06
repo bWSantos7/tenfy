@@ -84,7 +84,7 @@ class PlanFeature(TimestampedModel):
     """Associates a Feature with a Plan, with an optional usage limit."""
     plan    = models.ForeignKey(Plan, on_delete=models.CASCADE, related_name='plan_features')
     feature = models.ForeignKey(Feature, on_delete=models.CASCADE, related_name='plan_features')
-    # None = unlimited; numeric = cap (e.g. max 5 registrations/month for Free)
+    # None = unlimited; numeric = cap (e.g. max 5 registrations/month for limited plans)
     limit   = models.PositiveIntegerField(null=True, blank=True, help_text='NULL = unlimited')
     notes   = models.CharField(max_length=200, blank=True)
 

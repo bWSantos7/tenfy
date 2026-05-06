@@ -14,6 +14,15 @@ from apps.tournaments.models import Tournament, TournamentEdition, Venue
 User = get_user_model()
 
 
+def _response_items(response):
+    data = response.data
+    if isinstance(data, dict) and 'results' in data:
+        return data['results']
+    if isinstance(data, list):
+        return data
+    raise AssertionError(f'Unexpected response shape: {type(data)}')
+
+
 def _setup_cosat_tournament(db):
     """Create minimal COSAT tournament fixture. Returns TournamentEdition."""
     org, _ = Organization.objects.get_or_create(
@@ -66,7 +75,7 @@ class TournamentFilterCosatTestCase(TestCase):
         """GET /api/tournaments/editions/?circuit=COSAT returns COSAT tournament."""
         res = self.client.get('/api/tournaments/editions/', {'circuit': 'COSAT'})
         self.assertEqual(res.status_code, 200)
-        ids = [e['id'] for e in (res.data.get('results') or res.data)]
+        ids = [e['id'] for e in _response_items(res)]
         self.assertIn(self.edition.id, ids,
                       'COSAT tournament must appear when circuit=COSAT filter applied')
 
@@ -74,7 +83,7 @@ class TournamentFilterCosatTestCase(TestCase):
         """GET /api/tournaments/editions/?q=cosat finds tournament by circuit."""
         res = self.client.get('/api/tournaments/editions/', {'q': 'cosat'})
         self.assertEqual(res.status_code, 200)
-        ids = [e['id'] for e in (res.data.get('results') or res.data)]
+        ids = [e['id'] for e in _response_items(res)]
         self.assertIn(self.edition.id, ids,
                       'Text search for "cosat" must find COSAT tournament via circuit field')
 
@@ -100,7 +109,7 @@ class TournamentFilterCosatTestCase(TestCase):
         self.edition.save(update_fields=['is_youth'])
         res = self.client.get('/api/tournaments/editions/', {'circuit': 'COSAT'})
         self.assertEqual(res.status_code, 200)
-        ids = [e['id'] for e in (res.data.get('results') or res.data)]
+        ids = [e['id'] for e in _response_items(res)]
         self.assertNotIn(self.edition.id, ids,
                          'is_youth=False must be excluded unless youth_only=false')
 
@@ -111,7 +120,7 @@ class TournamentFilterCosatTestCase(TestCase):
         res = self.client.get('/api/tournaments/editions/',
                               {'circuit': 'COSAT', 'youth_only': 'false'})
         self.assertEqual(res.status_code, 200)
-        ids = [e['id'] for e in (res.data.get('results') or res.data)]
+        ids = [e['id'] for e in _response_items(res)]
         self.assertIn(self.edition.id, ids)
 
     def test_calendar_cache_varies_by_filter_params(self):
@@ -167,13 +176,11 @@ class TournamentFilterCosatTestCase(TestCase):
         profile = PlayerProfile.objects.create(
             user=self.user,
             display_name='Filter Player',
-            home_state='SP',
-            home_city='Sao Paulo',
             travel_radius_km=100,
         )
 
         res = self.client.get('/api/tournaments/editions/', {'near_profile': profile.id})
 
         self.assertEqual(res.status_code, 200)
-        ids = [e['id'] for e in (res.data.get('results') or res.data)]
+        ids = [e['id'] for e in _response_items(res)]
         self.assertNotIn(self.edition.id, ids)

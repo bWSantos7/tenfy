@@ -149,7 +149,12 @@ def subscription_checkout(request):
 
     resp_data = SubscriptionSerializer(sub).data
     if asaas_result:
-        resp_data['asaas'] = asaas_result
+        # Only expose safe fields — never raw card data or internal Asaas tokens
+        resp_data['asaas'] = {
+            k: v for k, v in asaas_result.items()
+            if k not in _SENSITIVE_PAYMENT_FIELDS
+            and k not in ('creditCardToken', 'token', 'accessToken')
+        }
     if pix_qr:
         resp_data['pix'] = {
             'qr_code_image': pix_qr.get('encodedImage', ''),
@@ -543,9 +548,8 @@ def _get_or_create_individual_subscription(user):
         try:
             individual = Plan.objects.get(slug=Plan.SLUG_INDIVIDUAL)
         except Plan.DoesNotExist:
-            individual = Plan.objects.filter(is_active=True).order_by('price_monthly').first()
-            if not individual:
-                raise
+            logger.error('CRITICAL: Seed de planos não executado. Plan.SLUG_INDIVIDUAL não encontrado.')
+            raise Exception('Erro interno: Configuração de planos incompleta.')
 
         return Subscription.objects.create(
             user=user,

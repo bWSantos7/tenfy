@@ -12,3 +12,6 @@ web-build/
 google-service-account.json
 ios/
 android/
+*.env
+*.env.backup.local
+!.env.example

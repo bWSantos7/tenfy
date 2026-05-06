@@ -186,7 +186,7 @@ export function HomeScreen(_: Props) {
       <View>
         <SectionHeader title="Explorar por circuito" subtitle="Selecione um circuito para ver torneios" />
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-          {CIRCUITS.map((c) => (
+          {getCircuits(colors).map((c) => (
             <Pressable
               key={c.key}
               onPress={() => navigation.navigate('Tabs', { screen: 'Tournaments', params: { circuit: c.key } } as never)}
@@ -201,11 +201,15 @@ export function HomeScreen(_: Props) {
   );
 }
 
-const CIRCUITS = [
-  { key: 'FPT',   label: 'FPT',   color: '#39ff14' },
-  { key: 'CBT',   label: 'CBT',   color: '#3b82f6' },
-  { key: 'COSAT', label: 'COSAT', color: '#f59e0b' },
-  { key: 'ITF',   label: 'ITF',   color: '#8b5cf6' },
-  { key: 'UTR',   label: 'UTR',   color: '#ef4444' },
-  { key: 'FCT',   label: 'FCT',   color: '#06b6d4' },
-];
+// Categorical palette for circuit badges — mapped to theme tokens where possible.
+// FCT uses a fixed cyan brand color with no semantic equivalent in the palette.
+function getCircuits(c: ReturnType<typeof import('../../contexts/ThemeContext').useTheme>['colors']) {
+  return [
+    { key: 'FPT',   label: 'FPT',   color: c.statusOpen },
+    { key: 'CBT',   label: 'CBT',   color: c.accentBlue },
+    { key: 'COSAT', label: 'COSAT', color: c.statusClosing },
+    { key: 'ITF',   label: 'ITF',   color: c.statusProgress },
+    { key: 'UTR',   label: 'UTR',   color: c.danger },
+    { key: 'FCT',   label: 'FCT',   color: '#06B6D4' }, // brand cyan — no palette equivalent
+  ];
+}

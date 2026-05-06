@@ -1096,8 +1096,22 @@ class ParseInscriptionDateTestCase(TestCase):
 
 # ── Celery task: sync_cosat_from_mongo_task ───────────────────────────────────
 
+@override_settings(CACHES={
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'sync-cosat-task-tests',
+    },
+})
 class SyncCosatTaskTestCase(TestCase):
     """Tests for the periodic sync_cosat_from_mongo_task Celery task (TAREFA 8)."""
+
+    def setUp(self):
+        from django.core.cache import cache
+        cache.delete('sync_cosat:lock')
+
+    def tearDown(self):
+        from django.core.cache import cache
+        cache.delete('sync_cosat:lock')
 
     @override_settings(COSAT_MONGO_ENABLED=False)
     def test_task_skipped_when_disabled(self):

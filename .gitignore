@@ -25,6 +25,9 @@ staticfiles/
 
 # Environment variables
 .env
+*.env
+*.env.backup.local
+!.env.example
 .env.local
 .env.production
 .env.development
@@ -38,6 +41,7 @@ yarn-error.log*
 dist/
 build/
 coverage/
+*.tsbuildinfo
 
 # IDE
 .idea/
@@ -56,6 +60,7 @@ logs/*.log
 *.pyc
 .claude
 .tools/
+.contexto/
 
 # Local exports / temp files
 cbt-targets.json
@@ -77,3 +82,6 @@ Sync*.json
 .tools/
 
 escopo_contrato.pdf
+contexto/
+*.pdf
+ai-team/

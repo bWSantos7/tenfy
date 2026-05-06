@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Alert, TouchableOpacity, View } from 'react-native';
+import { Alert, Linking, TouchableOpacity, View } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
 import { MainStackParamList } from '../../navigation/types';
 import { checkout, CheckoutPayload } from '../../services/billing';
 import { tokenizeCard, getAsaasCustomerId } from '../../services/asaas';
@@ -15,10 +16,10 @@ type Nav = NativeStackNavigationProp<MainStackParamList>;
 
 type PaymentMethod = 'pix' | 'credit_card' | 'debit_card';
 
-const METHOD_CONFIG: Record<PaymentMethod, { label: string; icon: string; description: string }> = {
-  pix:         { label: 'Pix',               icon: '⚡', description: 'Aprovação instantânea' },
-  credit_card: { label: 'Cartão de crédito', icon: '💳', description: 'Parcelamento disponível' },
-  debit_card:  { label: 'Cartão de débito',  icon: '🏦', description: 'Débito imediato' },
+const METHOD_CONFIG: Record<PaymentMethod, { label: string; ionicon: string; description: string }> = {
+  pix:         { label: 'Pix',               ionicon: 'flash-outline',      description: 'Aprovação instantânea' },
+  credit_card: { label: 'Cartão de crédito', ionicon: 'card-outline',        description: 'Parcelamento disponível' },
+  debit_card:  { label: 'Cartão de débito',  ionicon: 'business-outline',    description: 'Débito imediato' },
 };
 
 function formatCardNumber(value: string): string {
@@ -157,6 +158,7 @@ export function CheckoutScreen() {
       <AppText variant="title">Finalizar assinatura</AppText>
 
       {/* Summary */}
+      {/* O fundo é accentBlue (azul escuro). Portanto, os textos são intencionalmente brancos (#FFF/rgba) para garantir contraste em ambos os temas (light/dark). */}
       <View style={{ backgroundColor: colors.accentBlue, borderRadius: 14, padding: 20 }}>
         <AppText variant="caption" style={{ color: 'rgba(255,255,255,0.8)', marginBottom: 4 }}>
           {plan.name}
@@ -188,7 +190,7 @@ export function CheckoutScreen() {
                 borderWidth: 1, borderColor: selected ? colors.accentBlue : colors.borderSubtle,
               }}
             >
-              <AppText style={{ fontSize: 22, marginRight: 12 }}>{cfg.icon}</AppText>
+              <Ionicons name={cfg.ionicon as any} size={22} color={selected ? colors.accentBlue : colors.textMuted} style={{ marginRight: 12 }} />
               <View style={{ flex: 1 }}>
                 <AppText variant="body" style={{ fontWeight: '600' }}>{cfg.label}</AppText>
                 <AppText variant="caption">{cfg.description}</AppText>
@@ -261,9 +263,21 @@ export function CheckoutScreen() {
         </Card>
       )}
 
-      <AppText variant="caption" style={{ textAlign: 'center', lineHeight: 16 }}>
-        Ao confirmar, você concorda com os Termos de Uso. Você pode cancelar a qualquer momento.
-      </AppText>
+      <View style={{ alignItems: 'center', gap: 4 }}>
+        <AppText variant="caption" style={{ textAlign: 'center', lineHeight: 16 }}>
+          Ao confirmar, você concorda com os Termos de Uso. Você pode cancelar a qualquer momento.
+        </AppText>
+        <TouchableOpacity onPress={() => {
+          Linking.canOpenURL('https://www.tennis.app.br/termos').then(supported => {
+            if (supported) Linking.openURL('https://www.tennis.app.br/termos');
+            else Alert.alert('Erro', 'Não foi possível abrir o link.');
+          }).catch(() => Alert.alert('Erro', 'Não foi possível abrir o link.'));
+        }}>
+          <AppText variant="caption" style={{ color: colors.accentNeon, textDecorationLine: 'underline' }}>
+            Ler Termos de Uso e Política de Privacidade (LGPD)
+          </AppText>
+        </TouchableOpacity>
+      </View>
 
       <Button title="Confirmar assinatura" onPress={handleConfirm} loading={loading} />
       <Button title="Voltar" variant="ghost" onPress={() => navigation.goBack()} />

@@ -38,7 +38,7 @@ function PlanCard({
 
   return (
     <Card style={[
-      { marginBottom: 16 },
+      { marginBottom: 18, padding: 18 },
       isHighlighted && { borderColor: colors.accentNeon, borderWidth: 2 },
       isCurrent      && { backgroundColor: `${colors.accentNeon}14` },
     ]}>
@@ -56,19 +56,19 @@ function PlanCard({
 
       <AppText variant="section" style={{ marginBottom: 4 }}>{plan.name}</AppText>
 
-      <View style={{ flexDirection: 'row', alignItems: 'baseline', marginBottom: 6 }}>
-        <AppText style={{ fontSize: 26, fontWeight: '800', color: colors.accentNeon }}>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 8 }}>
+        <AppText style={{ fontSize: 30, lineHeight: 38, fontWeight: '800', color: colors.accentNeon, includeFontPadding: false }}>
           {formatPrice(price)}
         </AppText>
         {parseFloat(price) > 0 && (
-          <AppText variant="muted" style={{ marginLeft: 2 }}>
+          <AppText variant="muted" style={{ marginLeft: 4, marginBottom: 4, lineHeight: 18 }}>
             {' /'}{billingPeriod === 'yearly' ? 'ano' : 'mês'}
           </AppText>
         )}
       </View>
 
       {plan.description ? (
-        <AppText variant="muted" style={{ marginBottom: 12 }}>{plan.description}</AppText>
+        <AppText variant="muted" style={{ marginBottom: 14, lineHeight: 19 }}>{plan.description}</AppText>
       ) : null}
 
       <View style={{ marginBottom: 16 }}>
@@ -89,6 +89,7 @@ function PlanCard({
         variant={isCurrent ? 'secondary' : 'primary'}
         disabled={isCurrent}
         onPress={() => onSelect(plan)}
+        style={{ marginTop: 2 }}
       />
     </Card>
   );

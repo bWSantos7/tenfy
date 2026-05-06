@@ -74,7 +74,7 @@ export function TournamentCard({
       onPress={handlePress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
-      style={{ marginBottom: 10 }}
+      style={{ marginBottom: 14 }}
     >
       <Animated.View
         style={[

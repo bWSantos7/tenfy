@@ -12,6 +12,7 @@ import {
 import api, { extractApiError } from '../services/api';
 import { TournamentEditionList } from '../types';
 import { TournamentCard } from '../components/TournamentCard';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -127,12 +128,12 @@ export const AdminPanelPage: React.FC = () => {
         ))}
       </div>
 
-      {tab === 'dashboard'  && <DashboardTab />}
-      {tab === 'stats'      && <StatsTab />}
-      {tab === 'users'      && <UsersTab />}
-      {tab === 'sources'    && <SourcesTab />}
-      {tab === 'connectors' && <ConnectorsTab />}
-      {tab === 'editions'   && <EditionsAdminTab />}
+      {tab === 'dashboard'  && <ErrorBoundary><DashboardTab /></ErrorBoundary>}
+      {tab === 'stats'      && <ErrorBoundary><StatsTab /></ErrorBoundary>}
+      {tab === 'users'      && <ErrorBoundary><UsersTab /></ErrorBoundary>}
+      {tab === 'sources'    && <ErrorBoundary><SourcesTab /></ErrorBoundary>}
+      {tab === 'connectors' && <ErrorBoundary><ConnectorsTab /></ErrorBoundary>}
+      {tab === 'editions'   && <ErrorBoundary><EditionsAdminTab /></ErrorBoundary>}
     </div>
   );
 };
@@ -227,7 +228,15 @@ const DashboardTab: React.FC = () => {
 
 // ─── Stats tab ────────────────────────────────────────────────────────────────
 
-const CHART_COLORS = ['#39ff14', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6'];
+// Chart colors — must use hex values; Recharts does not resolve CSS custom properties.
+// Values are kept in sync with tailwind.config.js design tokens.
+const CHART_COLORS = [
+  '#00FF88', // accent.neon   → status-open
+  '#00B2FF', // accent.blue
+  '#FFB020', // status.closing
+  '#FF5A5A', // status.canceled
+  '#A463F2', // status.progress
+];
 
 const StatsTab: React.FC = () => {
   const [data, setData] = useState<AdminStats | null>(null);
@@ -318,7 +327,7 @@ const StatsTab: React.FC = () => {
               type="monotone"
               dataKey="registrations"
               name="Cadastros"
-              stroke="#39ff14"
+              stroke="#00FF88"
               strokeWidth={2}
               dot={false}
               activeDot={{ r: 4 }}
@@ -354,7 +363,7 @@ const StatsTab: React.FC = () => {
               <XAxis dataKey="status" tick={{ fontSize: 9, fill: 'rgb(var(--text-muted))' }} tickFormatter={(v: string) => EDITION_STATUS_LABELS[v] ?? UNKNOWN_STATUS_LABEL} />
               <YAxis tick={{ fontSize: 10, fill: 'rgb(var(--text-muted))' }} allowDecimals={false} />
               <Tooltip contentStyle={tooltipStyle} />
-              <Bar dataKey="count" name="Torneios" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="count" name="Torneios" fill="#00B2FF" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -367,7 +376,7 @@ const StatsTab: React.FC = () => {
               <XAxis type="number" tick={{ fontSize: 10, fill: 'rgb(var(--text-muted))' }} allowDecimals={false} />
               <YAxis type="category" dataKey="status" tick={{ fontSize: 10, fill: 'rgb(var(--text-muted))' }} width={80} tickFormatter={(v: string) => EDITION_STATUS_LABELS[v] ?? UNKNOWN_STATUS_LABEL} />
               <Tooltip contentStyle={tooltipStyle} />
-              <Bar dataKey="count" name="Itens" fill="#f59e0b" radius={[0, 4, 4, 0]} />
+              <Bar dataKey="count" name="Itens" fill="#FFB020" radius={[0, 4, 4, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>

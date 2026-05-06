@@ -12,32 +12,39 @@ import { fmtDateTime } from '../../utils/format';
 
 type Props = NativeStackScreenProps<MainStackParamList, 'RegistrationList'>;
 
-// Status display config — covers all possible backend values
-const STATUS_CONFIG: Record<string, { color: string; icon: string; label: string; detail?: string }> = {
-  confirmed:       { color: '#39ff14', icon: 'checkmark-circle', label: 'Confirmado na chave' },
-  waiting_list:    { color: '#f59e0b', icon: 'time',             label: 'Lista de espera' },
-  pending_payment: { color: '#3b82f6', icon: 'card-outline',     label: 'Aguardando pagamento' },
-  // COSAT and international sources: payment not tracked — show as "Inscrito"
-  registered:      { color: '#6b7280', icon: 'person-add-outline', label: 'Inscrito' },
-  removed: {
-    color: '#ef4444',
-    icon: 'close-circle',
-    label: 'Removido',
-    detail: 'Atleta removido por critério de ranking da federação. Um atleta com ranking superior se inscreveu após o preenchimento das vagas.',
-  },
-};
+// Status display config — all possible backend values
+type ThemeColors = ReturnType<typeof import('../../contexts/ThemeContext').useTheme>['colors'];
 
-const PAYMENT_COLORS: Record<string, string> = {
-  paid:    '#39ff14',
-  pending: '#f59e0b',
-  unknown: '#6b7280',
-};
+function getStatusConfig(c: ThemeColors): Record<string, { color: string; icon: string; label: string; detail?: string }> {
+  return {
+    confirmed:       { color: c.statusOpen,    icon: 'checkmark-circle',   label: 'Confirmado na chave' },
+    waiting_list:    { color: c.statusClosing, icon: 'time',               label: 'Lista de espera' },
+    pending_payment: { color: c.accentBlue,    icon: 'card-outline',       label: 'Aguardando pagamento' },
+    registered:      { color: c.statusClosed,  icon: 'person-add-outline', label: 'Inscrito' },
+    removed: {
+      color: c.danger,
+      icon: 'close-circle',
+      label: 'Removido',
+      detail: 'Atleta removido por critério de ranking da federação. Um atleta com ranking superior se inscreveu após o preenchimento das vagas.',
+    },
+  };
+}
 
-const CONFIDENCE_CONFIG: Record<string, { icon: string; color: string; label: string }> = {
-  high:   { icon: 'shield-checkmark-outline', color: '#39ff14', label: 'Fonte oficial' },
-  medium: { icon: 'information-circle-outline', color: '#f59e0b', label: 'Fonte pública' },
-  low:    { icon: 'alert-circle-outline',       color: '#ef4444', label: 'Dado inferido' },
-};
+function getPaymentColors(c: ThemeColors): Record<string, string> {
+  return {
+    paid:    c.statusOpen,
+    pending: c.statusClosing,
+    unknown: c.statusClosed,
+  };
+}
+
+function getConfidenceConfig(c: ThemeColors): Record<string, { icon: string; color: string; label: string }> {
+  return {
+    high:   { icon: 'shield-checkmark-outline',    color: c.statusOpen,    label: 'Fonte oficial' },
+    medium: { icon: 'information-circle-outline',  color: c.statusClosing, label: 'Fonte pública' },
+    low:    { icon: 'alert-circle-outline',         color: c.danger,        label: 'Dado inferido' },
+  };
+}
 
 const STALE_HOURS = 24;
 
@@ -177,7 +184,7 @@ function CategorySection({
   cat: FederationCategoryGroup;
   expanded: boolean;
   onToggle: () => void;
-  colors: any;
+  colors: ThemeColors;
 }) {
   const { summary } = cat;
   const totalSlots = summary.total_slots ?? cat.max_participants;
@@ -222,9 +229,9 @@ function CategorySection({
         ) : (
           [
             { label: `${summary.total} inscrito${summary.total !== 1 ? 's' : ''}`, color: colors.textMuted },
-            { label: `${summary.in_draw} na chave`, color: '#39ff14' },
-            { label: `${summary.paid} pago${summary.paid !== 1 ? 's' : ''}`, color: '#3b82f6' },
-            { label: `${summary.pending} pendente${summary.pending !== 1 ? 's' : ''}`, color: '#f59e0b' },
+            { label: `${summary.in_draw} na chave`,                                 color: colors.statusOpen },
+            { label: `${summary.paid} pago${summary.paid !== 1 ? 's' : ''}`,        color: colors.accentBlue },
+            { label: `${summary.pending} pendente${summary.pending !== 1 ? 's' : ''}`, color: colors.statusClosing },
           ].map((pill) => (
             <View key={pill.label} style={{ backgroundColor: `${pill.color}18`, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, borderWidth: 1, borderColor: `${pill.color}40` }}>
               <AppText variant="caption" style={{ color: pill.color, fontWeight: '600', fontSize: 11 }}>{pill.label}</AppText>
@@ -245,9 +252,12 @@ function CategorySection({
   );
 }
 
-function EntryRow({ entry, maxP, colors }: { entry: FederationEntry; maxP: number | null; colors: any }) {
-  const sc = STATUS_CONFIG[entry.status] ?? { color: '#6b7280', icon: 'help-circle-outline', label: 'Status não disponível' };
-  const payColor = PAYMENT_COLORS[entry.payment_status] ?? '#6b7280';
+function EntryRow({ entry, maxP, colors }: { entry: FederationEntry; maxP: number | null; colors: ThemeColors }) {
+  const STATUS_CONFIG = getStatusConfig(colors);
+  const PAYMENT_COLORS = getPaymentColors(colors);
+  const CONFIDENCE_CONFIG = getConfidenceConfig(colors);
+  const sc = STATUS_CONFIG[entry.status] ?? { color: colors.statusClosed, icon: 'help-circle-outline', label: 'Status não disponível' };
+  const payColor = PAYMENT_COLORS[entry.payment_status] ?? colors.statusClosed;
   const confCfg = CONFIDENCE_CONFIG[entry.confidence] ?? CONFIDENCE_CONFIG.medium;
   const isRemoved = entry.status === 'removed';
   // COSAT: payment is not tracked — hide payment badge to avoid misleading "Não informado"
@@ -265,7 +275,7 @@ function EntryRow({ entry, maxP, colors }: { entry: FederationEntry; maxP: numbe
       <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
         {/* Slot position */}
         <View style={{ width: 36, alignItems: 'center', paddingTop: 2 }}>
-          <AppText variant="caption" style={{ fontWeight: '700', fontSize: 14, color: isRemoved ? sc.color : (entry.in_draw ? '#39ff14' : colors.textMuted) }}>
+          <AppText variant="caption" style={{ fontWeight: '700', fontSize: 14, color: isRemoved ? sc.color : (entry.in_draw ? colors.statusOpen : colors.textMuted) }}>
             {entry.slot_position != null ? `#${entry.slot_position}` : '—'}
           </AppText>
         </View>
@@ -327,9 +337,18 @@ function EntryRow({ entry, maxP, colors }: { entry: FederationEntry; maxP: numbe
         </View>
       </View>
 
-      {/* Source URL link */}
       {entry.source_url ? (
-        <Pressable onPress={() => Linking.openURL(entry.source_url)} style={{ marginTop: 6, marginLeft: 44, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+        <Pressable onPress={() => {
+          const raw = entry.source_url as string;
+          if (raw.trim().startsWith('http://') || raw.trim().startsWith('https://')) {
+            Linking.canOpenURL(raw).then(supported => {
+              if (supported) Linking.openURL(raw).catch(() => Toast.show({ type: 'error', text1: 'Não foi possível abrir o link' }));
+              else Toast.show({ type: 'error', text1: 'Não foi possível abrir o link' });
+            }).catch(() => Toast.show({ type: 'error', text1: 'Não foi possível abrir o link' }));
+          } else {
+            Toast.show({ type: 'error', text1: 'Link inválido' });
+          }
+        }} style={{ marginTop: 6, marginLeft: 44, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
           <Ionicons name="open-outline" size={11} color={colors.accentBlue} />
           <AppText variant="muted" style={{ fontSize: 10, color: colors.accentBlue }}>Ver na fonte oficial</AppText>
         </Pressable>

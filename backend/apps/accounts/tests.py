@@ -5,6 +5,8 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
+
+from apps.billing.models import Plan, Subscription
 from .models import ParentChild
 
 User = get_user_model()
@@ -132,6 +134,17 @@ class ParentChildTestCase(TestCase):
             password='testpass123',
             full_name='Parent User',
             role=User.ROLE_PARENT,
+        )
+        self.familia = Plan.objects.create(
+            name='Familia',
+            slug=Plan.SLUG_FAMILIA,
+            max_members=5,
+            is_active=True,
+        )
+        Subscription.objects.create(
+            user=self.parent,
+            plan=self.familia,
+            status=Subscription.STATUS_ACTIVE,
         )
 
     def test_parent_can_create_child_account(self):

@@ -21,13 +21,17 @@ const USER_STATUS_LABELS: Record<string, string> = {
   withdrawn: 'Desistiu',
   completed: 'Concluído',
 };
-const USER_STATUS_COLORS: Record<string, string> = {
-  none: '#6b7280',
-  intended: '#3b82f6',
-  registered_declared: '#39ff14',
-  withdrawn: '#ef4444',
-  completed: '#8b5cf6',
-};
+type ThemeColors = ReturnType<typeof import('../../contexts/ThemeContext').useTheme>['colors'];
+
+function getUserStatusColors(c: ThemeColors): Record<string, string> {
+  return {
+    none:                c.statusClosed,
+    intended:           c.accentBlue,
+    registered_declared: c.statusOpen,
+    withdrawn:          c.danger,
+    completed:          c.statusProgress,
+  };
+}
 
 export function CoachScreen(_: Props) {
   const { colors } = useTheme();
@@ -180,9 +184,9 @@ export function CoachScreen(_: Props) {
                     </Pressable>
                     <Pressable
                       onPress={() => onRemove(link)}
-                      style={{ padding: 8, backgroundColor: '#ef444415', borderRadius: 10, borderWidth: 1, borderColor: '#ef444430' }}
+                      style={{ padding: 8, backgroundColor: `${colors.danger}15`, borderRadius: 10, borderWidth: 1, borderColor: `${colors.danger}30` }}
                     >
-                      <Ionicons name="trash-outline" size={16} color="#ef4444" />
+                      <Ionicons name="trash-outline" size={16} color={colors.danger} />
                     </Pressable>
                   </View>
                 </Card>
@@ -197,7 +201,7 @@ export function CoachScreen(_: Props) {
                       wlData.watchlist.map((item: WatchlistItem) => {
                         const ed = item.edition_detail;
                         const userStatus = item.user_status ?? 'none';
-                        const statusColor = USER_STATUS_COLORS[userStatus] ?? colors.textMuted;
+                        const statusColor = getUserStatusColors(colors)[userStatus] ?? colors.textMuted;
                         return (
                           <Pressable
                             key={item.id}

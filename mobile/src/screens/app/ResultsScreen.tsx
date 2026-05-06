@@ -21,9 +21,10 @@ function ResultCard({ item, onPress }: { item: WatchlistItem; onPress: () => voi
 
   const positionColor = () => {
     if (!r.position) return colors.textMuted;
-    if (r.position === 1) return '#FFD700';
-    if (r.position === 2) return '#C0C0C0';
-    if (r.position === 3) return '#CD7F32';
+    // Conventional Olympic medal colors — intentionally fixed (no semantic theme equivalent).
+    if (r.position === 1) return '#FFD700'; // gold
+    if (r.position === 2) return '#C0C0C0'; // silver
+    if (r.position === 3) return '#CD7F32'; // bronze
     return colors.accentNeon;
   };
 

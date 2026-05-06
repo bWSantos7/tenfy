@@ -70,12 +70,7 @@ const ROLE_LABELS: Record<string, string> = {
   admin: 'Admin',
 };
 
-const STATUS_COLORS: Record<string, string> = {
-  success: '#39ff14',
-  failed: '#ef4444',
-  partial: '#f59e0b',
-  running: '#3b82f6',
-};
+// STATUS_COLORS is computed inside components that have access to `colors` from useTheme.
 
 const STATUS_LABELS: Record<string, string> = {
   unknown:       'Desconhecido',
@@ -156,6 +151,12 @@ export function AdminPanelScreen({ navigation }: Props) {
 
 function DashboardTab() {
   const { colors } = useTheme();
+  const STATUS_COLORS: Record<string, string> = {
+    success: colors.statusOpen,
+    failed: colors.danger,
+    partial: colors.statusClosing,
+    running: colors.accentBlue,
+  };
   const [dash, setDash] = useState<Dashboard | null>(null);
   const [logs, setLogs] = useState<ExecutionLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -261,11 +262,11 @@ function DashboardTab() {
               )}
               <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
                 {log.editions_found > 0 && <AppText variant="muted" style={{ fontSize: 10 }}>encontrados: {log.editions_found}</AppText>}
-                {log.editions_created > 0 && <AppText variant="muted" style={{ fontSize: 10, color: '#39ff14' }}>+{log.editions_created} novos</AppText>}
-                {log.editions_updated > 0 && <AppText variant="muted" style={{ fontSize: 10, color: '#3b82f6' }}>~{log.editions_updated} atualizados</AppText>}
+                {log.editions_created > 0 && <AppText variant="muted" style={{ fontSize: 10, color: colors.statusOpen }}>+{log.editions_created} novos</AppText>}
+                {log.editions_updated > 0 && <AppText variant="muted" style={{ fontSize: 10, color: colors.accentBlue }}>~{log.editions_updated} atualizados</AppText>}
               </View>
               {log.error ? (
-                <AppText variant="muted" style={{ fontSize: 10, color: '#ef4444', marginTop: 4 }} numberOfLines={3}>
+                <AppText variant="muted" style={{ fontSize: 10, color: colors.danger, marginTop: 4 }} numberOfLines={3}>
                   {log.error}
                 </AppText>
               ) : null}
@@ -349,7 +350,7 @@ function StatsTab() {
       <Card>
         <AppText variant="body" style={{ fontWeight: '600', marginBottom: 12 }}>Usuários por perfil</AppText>
         {data.users_by_role.map((r, i) => {
-          const barColors = ['#39ff14', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6'];
+          const barColors = [colors.statusOpen, colors.accentBlue, colors.statusClosing, colors.danger, colors.statusProgress];
           return (
             <View key={r.role} style={{ marginBottom: 8 }}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
@@ -460,7 +461,7 @@ function UsersTab() {
                   <AppText variant="body" style={{ fontWeight: '600', fontSize: 13 }}>{u.full_name || '—'}</AppText>
                   {u.is_superuser && <View style={{ backgroundColor: `${colors.accentNeon}20`, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}><AppText variant="muted" style={{ fontSize: 10, color: colors.accentNeon }}>Super</AppText></View>}
                   {u.is_staff && !u.is_superuser && <View style={{ backgroundColor: `${colors.accentBlue}20`, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}><AppText variant="muted" style={{ fontSize: 10, color: colors.accentBlue }}>Staff</AppText></View>}
-                  {!u.is_active && <View style={{ backgroundColor: '#ef444420', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}><AppText variant="muted" style={{ fontSize: 10, color: '#ef4444' }}>Inativo</AppText></View>}
+                  {!u.is_active && <View style={{ backgroundColor: `${colors.danger}20`, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}><AppText variant="muted" style={{ fontSize: 10, color: colors.danger }}>Inativo</AppText></View>}
                 </View>
                 <AppText variant="muted" style={{ fontSize: 11 }}>{u.email}</AppText>
                 <AppText variant="muted" style={{ fontSize: 11 }}>{ROLE_LABELS[u.role] ?? u.role}</AppText>
@@ -471,7 +472,7 @@ function UsersTab() {
                 </Pressable>
                 {!u.is_superuser && (
                   <Pressable onPress={() => handleDelete(u)} style={{ padding: 6, borderRadius: 8, backgroundColor: colors.bgElevated }}>
-                    <Ionicons name="trash-outline" size={16} color="#ef4444" />
+                    <Ionicons name="trash-outline" size={16} color={colors.danger} />
                   </Pressable>
                 )}
               </View>
@@ -594,7 +595,7 @@ function EditUserModal({ user, onClose, onSaved }: { user: AdminUser; onClose: (
         <View style={{ backgroundColor: colors.bgElevated, borderRadius: 10, padding: 10, marginBottom: 16, gap: 4 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
             <AppText variant="muted" style={{ fontSize: 11 }}>E-mail verificado</AppText>
-            <Ionicons name={user.email_verified ? 'checkmark-circle' : 'close-circle'} size={14} color={user.email_verified ? '#39ff14' : '#ef4444'} />
+            <Ionicons name={user.email_verified ? 'checkmark-circle' : 'close-circle'} size={14} color={user.email_verified ? colors.statusOpen : colors.danger} />
           </View>
           {user.created_at && (
             <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
@@ -709,10 +710,10 @@ function ConnectorsTab() {
 
       {/* Blocked connectors */}
       {blocked.length > 0 && (
-        <View style={{ backgroundColor: '#ef444418', borderRadius: 14, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: '#ef444444' }}>
+        <View style={{ backgroundColor: `${colors.danger}18`, borderRadius: 14, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: `${colors.danger}44` }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-            <Ionicons name="warning" size={18} color="#ef4444" />
-            <AppText variant="body" style={{ fontWeight: '700', color: '#ef4444' }}>
+            <Ionicons name="warning" size={18} color={colors.danger} />
+            <AppText variant="body" style={{ fontWeight: '700', color: colors.danger }}>
               {blocked.length} conector{blocked.length > 1 ? 'es' : ''} bloqueado{blocked.length > 1 ? 's' : ''}
             </AppText>
           </View>
@@ -748,7 +749,7 @@ function ConnectorsTab() {
         </Card>
       ) : healthy.map((c) => (
         <View key={c.connector_key} style={{ backgroundColor: colors.bgCard, borderRadius: 12, padding: 12, marginBottom: 8, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: c.enabled ? '#39ff14' : '#6b7280' }} />
+          <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: c.enabled ? colors.statusOpen : colors.statusClosed }} />
           <View style={{ flex: 1 }}>
             <AppText variant="body" style={{ fontWeight: '600', fontSize: 13 }}>{c.organization}</AppText>
             <AppText variant="muted" style={{ fontSize: 10 }}>{c.connector_key} • {c.last_run_status || 'nunca executado'}</AppText>
@@ -891,8 +892,8 @@ function ReviewTab() {
   if (!data) return <EmptyState title="Nenhum dado disponível." />;
 
   const sections: { key: keyof ReviewSection; label: string; color: string }[] = [
-    { key: 'low_confidence', label: 'Baixa qualidade dos dados', color: '#ef4444' },
-    { key: 'missing_official_url', label: 'Sem link oficial', color: '#f59e0b' },
+    { key: 'low_confidence', label: 'Baixa qualidade dos dados', color: colors.danger },
+    { key: 'missing_official_url', label: 'Sem link oficial', color: colors.statusClosing },
     { key: 'recently_changed', label: 'Recentemente alterados', color: colors.accentBlue },
   ];
 
@@ -1044,11 +1045,12 @@ function SourcesTab() {
 
 // ─── StatCard ─────────────────────────────────────────────────────────────────
 
-function StatCard({ label, value, accent, warn, colors }: { label: string; value: number | string; accent?: boolean; warn?: boolean; colors: any }) {
+type ThemeColors = ReturnType<typeof import('../../contexts/ThemeContext').useTheme>['colors'];
+function StatCard({ label, value, accent, warn, colors }: { label: string; value: number | string; accent?: boolean; warn?: boolean; colors: ThemeColors }) {
   return (
     <View style={{ width: '47%', backgroundColor: colors.bgCard, borderRadius: 16, padding: 12 }}>
       <AppText variant="muted" style={{ fontSize: 10, textTransform: 'uppercase', marginBottom: 4 }}>{label}</AppText>
-      <AppText variant="body" style={{ fontSize: 20, fontWeight: '700', color: accent ? colors.accentNeon : warn ? '#f59e0b' : colors.textPrimary }}>{value}</AppText>
+      <AppText variant="body" style={{ fontSize: 20, fontWeight: '700', color: accent ? colors.accentNeon : warn ? colors.statusClosing : colors.textPrimary }}>{value}</AppText>
     </View>
   );
 }

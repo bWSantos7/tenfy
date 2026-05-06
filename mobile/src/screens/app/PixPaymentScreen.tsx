@@ -45,7 +45,10 @@ export function PixPaymentScreen() {
           ]);
         }
       } catch {
-        if (mounted) setPaymentState('error');
+        if (mounted) {
+          setPaymentState('error');
+          clearInterval(pollRef.current!);
+        }
       }
     }, POLL_INTERVAL);
 

@@ -13,19 +13,25 @@ import { extractApiError } from '../../services/api';
 
 type Props = NativeStackScreenProps<MainStackParamList, 'MyRegistrations'>;
 
-const STATUS_CONFIG: Record<RegistrationStatus, { color: string; icon: string; bg: string }> = {
-  confirmed: { color: '#39ff14', icon: 'checkmark-circle', bg: '#39ff1420' },
-  waiting_list: { color: '#f59e0b', icon: 'time', bg: '#f59e0b20' },
-  pending_payment: { color: '#3b82f6', icon: 'card', bg: '#3b82f620' },
-  withdrawn: { color: '#6b7280', icon: 'close-circle', bg: '#6b728020' },
-};
+type ThemeColors = ReturnType<typeof import('../../contexts/ThemeContext').useTheme>['colors'];
 
-const PAYMENT_COLORS: Record<string, string> = {
-  paid: '#39ff14',
-  waived: '#39ff14',
-  pending: '#f59e0b',
-  refunded: '#6b7280',
-};
+function getStatusConfig(c: ThemeColors): Record<string, { color: string; icon: string; bg: string }> {
+  return {
+    confirmed:       { color: c.statusOpen,    icon: 'checkmark-circle', bg: `${c.statusOpen}20` },
+    waiting_list:    { color: c.statusClosing, icon: 'time',             bg: `${c.statusClosing}20` },
+    pending_payment: { color: c.accentBlue,    icon: 'card',             bg: `${c.accentBlue}20` },
+    withdrawn:       { color: c.statusClosed,  icon: 'close-circle',     bg: `${c.statusClosed}20` },
+  };
+}
+
+function getPaymentColors(c: ThemeColors): Record<string, string> {
+  return {
+    paid:     c.statusOpen,
+    waived:   c.statusOpen,
+    pending:  c.statusClosing,
+    refunded: c.statusClosed,
+  };
+}
 
 export function MyRegistrationsScreen({ navigation }: Props) {
   const { colors } = useTheme();
@@ -139,12 +145,14 @@ export function MyRegistrationsScreen({ navigation }: Props) {
 
 function RegistrationCard({ reg, colors, onPress, onWithdraw, withdrawing }: {
   reg: TournamentRegistration;
-  colors: any;
+  colors: ThemeColors;
   onPress: () => void;
   onWithdraw?: () => void;
   withdrawing?: boolean;
 }) {
-  const sc = STATUS_CONFIG[reg.registration_status] ?? STATUS_CONFIG.pending_payment;
+  const STATUS_CONFIG = getStatusConfig(colors);
+  const PAYMENT_COLORS = getPaymentColors(colors);
+  const sc = STATUS_CONFIG[reg.registration_status] ?? STATUS_CONFIG['pending_payment'];
   const payColor = PAYMENT_COLORS[reg.payment_status] ?? colors.textMuted;
 
   return (
@@ -185,7 +193,7 @@ function RegistrationCard({ reg, colors, onPress, onWithdraw, withdrawing }: {
                 #{reg.slot_position}
               </AppText>
               {reg.max_participants ? (
-                <AppText variant="caption" style={{ color: reg.in_draw ? colors.accentNeon : '#ef4444' }}>
+                <AppText variant="caption" style={{ color: reg.in_draw ? colors.accentNeon : colors.danger }}>
                   {reg.in_draw ? `Dentro da chave (${reg.max_participants} vagas)` : `Fora da chave (limite: ${reg.max_participants})`}
                 </AppText>
               ) : null}

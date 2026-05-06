@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   FlatList,
   ListRenderItem,
@@ -8,6 +8,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { BottomTabBarHeightContext } from '@react-navigation/bottom-tabs';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -95,6 +97,9 @@ const SURFACE_OPTIONS: { value: string; label: string }[] = [
 export function TournamentsScreen({ route }: Props) {
   const { colors } = useTheme();
   const navigation = useNavigation<StackNav>();
+  const insets = useSafeAreaInsets();
+  const tabBarHeight = useContext(BottomTabBarHeightContext) ?? 0;
+  const flatListPadding = tabBarHeight > 0 ? Math.max(tabBarHeight - insets.bottom + 12, 20) : 20;
 
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [loading, setLoading] = useState(true);
@@ -581,7 +586,7 @@ export function TournamentsScreen({ route }: Props) {
             ListFooterComponent={loadingMore ? <TournamentListSkeleton count={2} /> : null}
             onEndReached={handleEndReached}
             onEndReachedThreshold={0.4}
-            contentContainerStyle={{ paddingBottom: 96 }}
+            contentContainerStyle={{ paddingBottom: flatListPadding }}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             // Performance tuning for 3000 users / large lists

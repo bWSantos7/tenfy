@@ -1,5 +1,6 @@
 import React, { useRef, useMemo, useState, useContext } from 'react';
 import { BottomTabBarHeightContext } from '@react-navigation/bottom-tabs';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ActivityIndicator, Animated, FlatList,
   Modal, Pressable, RefreshControl, ScrollView,
@@ -24,8 +25,10 @@ export function Screen({
   refreshing?: boolean;
 }) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const tabBarHeight = useContext(BottomTabBarHeightContext) ?? 0;
-  const bottomPad = tabBarHeight > 0 ? tabBarHeight + 12 : 24;
+  // tabBarHeight includes safe area; SafeAreaView already consumes insets.bottom → deduct it
+  const bottomPad = tabBarHeight > 0 ? Math.max(tabBarHeight - insets.bottom + 12, 20) : 20;
   const content = scroll ? (
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.bgBase }}

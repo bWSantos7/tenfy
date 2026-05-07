@@ -1,4 +1,4 @@
-# Tennis Hub
+# Tenfy
 
 **Tennis Hub** é uma plataforma centrada no jogador para agregar torneios de tênis no Brasil, consolidando calendário, regras de inscrição, categorias, elegibilidade, listas de inscritos, rankings e alertas em um único ecossistema.
 

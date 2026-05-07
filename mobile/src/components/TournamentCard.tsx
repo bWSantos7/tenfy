@@ -7,6 +7,8 @@ import { AppText } from './ui';
 import { STATUS_LABELS, fmtBRL, fmtDateRange } from '../utils/format';
 import { haptic } from '../hooks/useHaptic';
 
+const _VENUE_EMAIL_RE = /[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/;
+
 function getStatusStyle(status: TournamentStatus, colors: ReturnType<typeof useTheme>['colors']) {
   switch (status) {
     case 'open':            return { color: colors.statusOpen,     icon: 'checkmark-circle' as const };
@@ -54,7 +56,8 @@ export function TournamentCard({
   const scale = useRef(new Animated.Value(1)).current;
   const status = edition.dynamic_status || edition.status;
   const { color: statusColor, icon: statusIcon } = getStatusStyle(status, colors);
-  const location = [edition.venue_city, edition.venue_state].filter(Boolean).join(' · ');
+  const safeCity = (edition.venue_city && !_VENUE_EMAIL_RE.test(edition.venue_city)) ? edition.venue_city : '';
+  const location = [safeCity, edition.venue_state].filter(Boolean).join(' · ');
   const daysUntil = getDaysUntil(edition.entry_close_at);
   const showDeadline = daysUntil !== null && daysUntil >= 0 && ['open', 'closing_soon'].includes(status);
 
@@ -90,13 +93,10 @@ export function TournamentCard({
         <View style={styles.topRow}>
           <View style={{ flex: 1 }}>
             <View style={styles.orgRow}>
-              <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: statusColor }} />
-              <AppText variant="caption" style={{ color: colors.accentBlue, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: statusColor, flexShrink: 0 }} />
+              <AppText variant="caption" numberOfLines={1} style={{ color: colors.accentBlue, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, flexShrink: 1 }}>
                 {edition.organization_short || edition.organization_name}
               </AppText>
-              {edition.circuit ? (
-                <AppText variant="caption" style={{ color: colors.textMuted }}> · {edition.circuit}</AppText>
-              ) : null}
             </View>
             <AppText variant="body" style={styles.title} numberOfLines={2}>{edition.title}</AppText>
           </View>
@@ -176,6 +176,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 5,
     marginBottom: 4,
+    overflow: 'hidden',
   },
   title: {
     fontWeight: '700',

@@ -123,18 +123,25 @@ export function AdminPanelScreen({ navigation }: Props) {
         </View>
       </View>
 
-      <View style={{ flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.borderSubtle, marginBottom: 8 }}>
-        {tabs.map((t) => (
-          <Pressable
-            key={t.key}
-            onPress={() => setTab(t.key)}
-            style={{ paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 2, borderBottomColor: tab === t.key ? colors.accentNeon : 'transparent', marginBottom: -1 }}
-          >
-            <AppText variant="caption" style={{ color: tab === t.key ? colors.accentNeon : colors.textMuted, fontWeight: tab === t.key ? '700' : '400' }}>
-              {t.label}
-            </AppText>
-          </Pressable>
-        ))}
+      <View style={{ borderBottomWidth: 1, borderBottomColor: colors.borderSubtle, marginBottom: 8 }}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ flexDirection: 'row' }}
+          style={{ marginBottom: -1 }}
+        >
+          {tabs.map((t) => (
+            <Pressable
+              key={t.key}
+              onPress={() => setTab(t.key)}
+              style={{ paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 2, borderBottomColor: tab === t.key ? colors.accentNeon : 'transparent' }}
+            >
+              <AppText variant="caption" style={{ color: tab === t.key ? colors.accentNeon : colors.textMuted, fontWeight: tab === t.key ? '700' : '400' }}>
+                {t.label}
+              </AppText>
+            </Pressable>
+          ))}
+        </ScrollView>
       </View>
 
       {tab === 'dashboard'  && <DashboardTab />}

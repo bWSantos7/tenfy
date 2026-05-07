@@ -98,6 +98,13 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
         data = super().validate(attrs)
         data['user'] = UserSerializer(self.user).data
+        # Include subscription status so the frontend can gate access immediately
+        # without making a separate API call after login.
+        try:
+            sub = self.user.subscription
+            data['subscription_status'] = sub.status
+        except Exception:
+            data['subscription_status'] = 'none'
         return data
 
 

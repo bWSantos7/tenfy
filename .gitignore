@@ -41,6 +41,7 @@ yarn-error.log*
 .pnp.*
 dist/
 build/
+builds/
 coverage/
 *.tsbuildinfo
 

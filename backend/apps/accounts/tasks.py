@@ -8,14 +8,14 @@ from django.core.mail import EmailMultiAlternatives
 
 logger = logging.getLogger('apps.accounts')
 
-APP_NAME   = 'Tennis Hub'
-APP_SLOGAN = 'Seu hub de torneios de tênis no Brasil'
-BRAND      = '#39ff14'
-BRAND_DARK = '#2bcc0f'
-BG         = '#0A0A0A'
-CARD       = '#141414'
-BORDER     = '#252525'
-TEXT       = '#F3F4F6'
+APP_NAME   = 'Tenfy'
+APP_SLOGAN = 'Plataforma de Tênis'
+BRAND      = '#C6EF21'
+BRAND_DARK = '#a8cc10'
+BG         = '#0A1330'
+CARD       = '#1D232D'
+BORDER     = '#2a3040'
+TEXT       = '#F6F7FA'
 MUTED      = '#9CA3AF'
 SUBTLE     = '#4B5563'
 DANGER     = '#ef4444'
@@ -90,8 +90,7 @@ def _html(title: str, content: str, preview: str = '') -> str:
     <!-- Logo -->
     <div class="header">
       <div class="logo">
-        <span class="logo-icon">🎾</span>
-        <span class="logo-name">{APP_NAME}</span>
+        <span class="logo-name" style="font-size:24px;font-weight:900;letter-spacing:-1px;">{APP_NAME}</span>
       </div>
     </div>
 
@@ -102,7 +101,7 @@ def _html(title: str, content: str, preview: str = '') -> str:
 
     <!-- Footer -->
     <div class="footer">
-      <p class="footer-logo">🎾 {APP_NAME}</p>
+      <p class="footer-logo">{APP_NAME}</p>
       <p>{APP_SLOGAN}</p>
       <p><a href="{frontend}">{frontend}</a></p>
       <hr style="border:none;border-top:1px solid {BORDER};margin:16px 0"/>
@@ -134,7 +133,7 @@ def send_otp_email(self, user_id: int, email: str, full_name: str, code: str, su
             'subject': f'[{APP_NAME}] Verifique seu e-mail',
             'preview': f'Seu código de verificação é {code} — válido por 10 minutos.',
             'title': 'Verifique seu e-mail ✉️',
-            'subtitle': f'Olá, <strong style="color:{TEXT}">{name}</strong>! Para ativar sua conta no Tennis Hub, insira o código abaixo no aplicativo.',
+            'subtitle': f'Olá, <strong style="color:{TEXT}">{name}</strong>! Para ativar sua conta no {APP_NAME}, insira o código abaixo no aplicativo.',
         },
         'resend': {
             'subject': f'[{APP_NAME}] Novo código de verificação',
@@ -161,7 +160,7 @@ def send_otp_email(self, user_id: int, email: str, full_name: str, code: str, su
       </div>
 
       <div class="info">
-        <p>💡 Abra o <strong>Tennis Hub</strong> e insira este código na tela de verificação.</p>
+        <p>💡 Abra o <strong>{APP_NAME}</strong> e insira este código na tela de verificação.</p>
       </div>
 
       <hr class="divider"/>

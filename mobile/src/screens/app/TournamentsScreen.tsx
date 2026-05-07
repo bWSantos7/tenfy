@@ -45,8 +45,6 @@ interface FilterHeaderProps {
   onClearFilters: () => void;
   statusFilter: string;
   onStatusChange: (v: string) => void;
-  circuitFilter: string;
-  onCircuitChange: (v: string) => void;
   federationFilter: number | undefined;
   onFederationChange: (v: string) => void;
   organizationOptions: { value: string; label: string }[];
@@ -67,6 +65,7 @@ interface FilterHeaderProps {
   nearMe: boolean;
   onNearMeToggle: () => void;
   primaryProfileId: number | null;
+  primaryProfile: PlayerProfile | null;
 }
 
 function FilterHeader({
@@ -74,7 +73,6 @@ function FilterHeader({
   showAdvanced, onToggleAdvanced,
   activeFilterCount, hasAnyInput, onClearFilters,
   statusFilter, onStatusChange,
-  circuitFilter, onCircuitChange,
   federationFilter, onFederationChange,
   organizationOptions,
   categoryFilter, onCategoryChange,
@@ -86,6 +84,7 @@ function FilterHeader({
   surfaceFilter, onSurfaceChange,
   nearMe, onNearMeToggle,
   primaryProfileId,
+  primaryProfile,
 }: FilterHeaderProps) {
   const { colors } = useTheme();
   return (
@@ -120,29 +119,22 @@ function FilterHeader({
 
       {showAdvanced ? (
         <View style={{ gap: 10, padding: 12, marginBottom: 10, borderRadius: 12, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.borderSubtle }}>
-          <View style={{ flexDirection: 'row', gap: 10 }}>
-            <View style={{ flex: 1 }}>
-              <SelectField label="Status" value={statusFilter} options={STATUS_FILTERS} onSelect={onStatusChange} placeholder="Todos" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <SelectField label="Circuito" value={circuitFilter} options={CIRCUIT_FILTERS} onSelect={onCircuitChange} placeholder="Todos" />
-            </View>
-          </View>
+          <SelectField label="Status" value={statusFilter} options={STATUS_FILTERS} onSelect={onStatusChange} placeholder="Todos" />
 
           <SelectField
-            label="Organização"
+            label="Organização / Federação"
             value={federationFilter ? String(federationFilter) : ''}
             options={organizationOptions}
             onSelect={onFederationChange}
             placeholder="Todas"
-            searchable
           />
 
-          <Input
-            label="Categoria"
+          <SelectField
+            label="Categoria (por idade)"
             value={categoryFilter}
-            onChangeText={onCategoryChange}
-            placeholder="Ex.: 16M, GA, Sub-12"
+            options={AGE_CATEGORY_OPTIONS}
+            onSelect={onCategoryChange}
+            placeholder="Todas as idades"
           />
 
           <View style={{ flexDirection: 'row', gap: 10 }}>
@@ -150,7 +142,7 @@ function FilterHeader({
               <SelectField label="UF" value={stateFilter} options={STATE_OPTIONS} onSelect={onStateChange} placeholder="Todas" searchable />
             </View>
             <View style={{ flex: 1.4 }}>
-              <Input label="Cidade" value={cityFilter} onChangeText={onCityChange} placeholder="Ex.: São Paulo" autoCapitalize="words" />
+              <SelectField label="Cidade" value={cityFilter} options={CITY_OPTIONS} onSelect={onCityChange} placeholder="Todas" searchable />
             </View>
           </View>
 
@@ -181,23 +173,36 @@ function FilterHeader({
           </View>
 
           {primaryProfileId ? (
-            <Pressable
-              onPress={onNearMeToggle}
-              style={{
-                flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-                paddingHorizontal: 14, paddingVertical: 12, borderRadius: 12,
-                backgroundColor: nearMe ? `${colors.accentNeon}22` : colors.bgBase,
-                borderWidth: 1, borderColor: nearMe ? colors.accentNeon : colors.borderSubtle,
-              }}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Ionicons name="location-outline" size={16} color={nearMe ? colors.accentNeon : colors.textSecondary} />
-                <AppText variant="caption" style={{ color: nearMe ? colors.accentNeon : colors.textSecondary, fontWeight: '600' }}>
-                  Perto de mim
-                </AppText>
-              </View>
-              <Ionicons name={nearMe ? 'toggle' : 'toggle-outline'} size={28} color={nearMe ? colors.accentNeon : colors.textMuted} />
-            </Pressable>
+            <View>
+              <Pressable
+                onPress={onNearMeToggle}
+                style={{
+                  flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                  paddingHorizontal: 14, paddingVertical: 12, borderRadius: 12,
+                  backgroundColor: nearMe ? `${colors.accentNeon}22` : colors.bgBase,
+                  borderWidth: 1, borderColor: nearMe ? colors.accentNeon : colors.borderSubtle,
+                }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                  <Ionicons name="location-outline" size={16} color={nearMe ? colors.accentNeon : colors.textSecondary} />
+                  <View style={{ flex: 1 }}>
+                    <AppText variant="caption" style={{ color: nearMe ? colors.accentNeon : colors.textSecondary, fontWeight: '600' }}>
+                      Perto de mim
+                    </AppText>
+                    {primaryProfile?.home_city ? (
+                      <AppText variant="muted" style={{ fontSize: 10, marginTop: 1 }}>
+                        {primaryProfile.home_city}{primaryProfile.home_state ? `/${primaryProfile.home_state}` : ''} • raio {primaryProfile.travel_radius_km ?? 100} km
+                      </AppText>
+                    ) : (
+                      <AppText variant="muted" style={{ fontSize: 10, marginTop: 1, color: colors.statusClosing }}>
+                        Configure sua cidade no perfil para usar este filtro
+                      </AppText>
+                    )}
+                  </View>
+                </View>
+                <Ionicons name={nearMe ? 'toggle' : 'toggle-outline'} size={28} color={nearMe ? colors.accentNeon : colors.textMuted} />
+              </Pressable>
+            </View>
           ) : null}
         </View>
       ) : null}
@@ -238,13 +243,66 @@ const STATUS_FILTERS = [
   { value: 'canceled', label: 'Cancelados' },
 ];
 
-const CIRCUIT_FILTERS = [
-  { value: '', label: 'Todos' },
-  { value: 'CBT',   label: 'CBT' },
-  { value: 'FPT',   label: 'FPT' },
-  { value: 'COSAT', label: 'COSAT' },
-  { value: 'ITF',   label: 'ITF' },
-  { value: 'UTR',   label: 'UTR' },
+const AGE_CATEGORY_OPTIONS: { value: string; label: string }[] = [
+  { value: '', label: 'Todas as idades' },
+  { value: '10', label: '10 anos' },
+  { value: '12', label: '12 anos' },
+  { value: '14', label: '14 anos' },
+  { value: '16', label: '16 anos' },
+  { value: '18', label: '18 anos' },
+  { value: 'junior', label: 'Juvenil' },
+  { value: 'adulto', label: 'Adulto' },
+  { value: '40', label: 'Masters 40+' },
+  { value: '50', label: 'Masters 50+' },
+];
+
+const CITY_OPTIONS: { value: string; label: string }[] = [
+  { value: '', label: 'Todas as cidades' },
+  ...([
+    // SP
+    'São Paulo','Campinas','Santos','Guarulhos','São Bernardo do Campo','Santo André',
+    'Osasco','Ribeirão Preto','São José dos Campos','Sorocaba','Mogi das Cruzes',
+    'Diadema','Jundiaí','Piracicaba','Bauru','São José do Rio Preto',
+    'Franca','Presidente Prudente','Marília','Limeira','Taubaté',
+    'Araraquara','Indaiatuba','Americana','Santa Bárbara d\'Oeste',
+    // RJ
+    'Rio de Janeiro','Niterói','Duque de Caxias','Nova Iguaçu','São Gonçalo',
+    'Belford Roxo','Campos dos Goytacazes','Petrópolis','Volta Redonda','Macaé',
+    // MG
+    'Belo Horizonte','Uberlândia','Contagem','Juiz de Fora','Montes Claros',
+    'Betim','Ribeirão das Neves','Uberaba','Governador Valadares','Ipatinga',
+    'Sete Lagoas','Poços de Caldas','Divinópolis','Muriaé','Varginha',
+    // RS
+    'Porto Alegre','Caxias do Sul','Canoas','Pelotas','Santa Maria',
+    'Gravataí','Novo Hamburgo','São Leopoldo','Rio Grande','Passo Fundo',
+    'Viamão','Alvorada','Uruguaiana','Cachoeirinha',
+    // SC
+    'Florianópolis','Joinville','Blumenau','São José','Criciúma',
+    'Chapecó','Itajaí','Jaraguá do Sul','Palhoça','Balneário Camboriú',
+    // PR
+    'Curitiba','Londrina','Maringá','Ponta Grossa','Cascavel',
+    'São José dos Pinhais','Foz do Iguaçu','Colombo','Guarapuava','Paranaguá',
+    // BA
+    'Salvador','Feira de Santana','Vitória da Conquista','Camaçari','Itabuna',
+    'Ilhéus','Lauro de Freitas','Juazeiro','Teixeira de Freitas',
+    // PE
+    'Recife','Olinda','Caruaru','Petrolina','Jaboatão dos Guararapes',
+    'Paulista','Cabo de Santo Agostinho','Camaragibe',
+    // CE
+    'Fortaleza','Caucaia','Juazeiro do Norte','Maracanaú','Sobral',
+    'Crato','Itapipoca','Maranguape',
+    // DF / GO
+    'Brasília','Goiânia','Aparecida de Goiânia','Anápolis','Rio Verde',
+    'Águas Lindas de Goiás',
+    // AM / PA
+    'Manaus','Belém','Ananindeua','Santarém','Castanhal','Marabá',
+    // RN / PB / AL / SE / MA / PI
+    'Natal','João Pessoa','Campina Grande','Maceió','Aracaju',
+    'São Luís','Imperatriz','Teresina',
+    // ES / MS / MT / RO / TO
+    'Vitória','Vila Velha','Cariacica','Serra','Campo Grande','Dourados',
+    'Cuiabá','Várzea Grande','Porto Velho','Palmas',
+  ].sort().filter((c, i, arr) => arr.indexOf(c) === i).map((c) => ({ value: c, label: c }))),
 ];
 
 const STATE_OPTIONS: { value: string; label: string }[] = [
@@ -275,7 +333,7 @@ export function TournamentsScreen({ route }: Props) {
   const navigation = useNavigation<StackNav>();
   const insets = useSafeAreaInsets();
   const tabBarHeight = useContext(BottomTabBarHeightContext) ?? 0;
-  const flatListPadding = tabBarHeight > 0 ? Math.max(tabBarHeight - insets.bottom + 12, 20) : 20;
+  const flatListPadding = tabBarHeight > 0 ? tabBarHeight + 8 : insets.bottom + 16;
 
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [loading, setLoading] = useState(true);
@@ -288,7 +346,6 @@ export function TournamentsScreen({ route }: Props) {
   // Filters
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [circuitFilter, setCircuitFilter] = useState('');
   const [federations, setFederations] = useState<Organization[]>([]);
   const [federationFilter, setFederationFilter] = useState<number | undefined>(route.params?.organization);
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -300,6 +357,7 @@ export function TournamentsScreen({ route }: Props) {
   const [surfaceFilter, setSurfaceFilter] = useState('');
   const [nearMe, setNearMe] = useState(false);
   const [primaryProfileId, setPrimaryProfileId] = useState<number | null>(null);
+  const [primaryProfile, setPrimaryProfile] = useState<PlayerProfile | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   // Calendar UI state
@@ -317,7 +375,6 @@ export function TournamentsScreen({ route }: Props) {
     const trimmedQuery = query.trim();
     if (trimmedQuery) f.q = trimmedQuery;
     if (statusFilter) f.status = statusFilter;
-    if (circuitFilter) f.circuit = circuitFilter;
     if (federationFilter) f.organization = federationFilter;
     if (categoryFilter) f.category = categoryFilter;
     if (stateFilter) f.state = stateFilter;
@@ -329,7 +386,7 @@ export function TournamentsScreen({ route }: Props) {
     if (nearMe && primaryProfileId) f.near_profile = primaryProfileId;
     return f;
   }, [
-    query, statusFilter, circuitFilter, federationFilter, categoryFilter,
+    query, statusFilter, federationFilter, categoryFilter,
     stateFilter, cityFilter, fromDate, toDate, modalityFilter, surfaceFilter,
     nearMe, primaryProfileId,
   ]);
@@ -341,11 +398,11 @@ export function TournamentsScreen({ route }: Props) {
 
   const hasAnyFilter = useMemo(() => Object.keys(appliedFilters).length > 0, [appliedFilters]);
   const hasAnyInput = useMemo(() => !!(
-    query || statusFilter || circuitFilter || federationFilter || categoryFilter
+    query || statusFilter || federationFilter || categoryFilter
     || stateFilter || cityFilter || fromDate || toDate || modalityFilter
     || surfaceFilter || nearMe
   ), [
-    query, statusFilter, circuitFilter, federationFilter, categoryFilter,
+    query, statusFilter, federationFilter, categoryFilter,
     stateFilter, cityFilter, fromDate, toDate, modalityFilter, surfaceFilter,
     nearMe,
   ]);
@@ -418,7 +475,10 @@ export function TournamentsScreen({ route }: Props) {
     listProfiles()
       .then((profiles) => {
         const primary = pickBestProfile(profiles as PlayerProfile[]);
-        if (primary) setPrimaryProfileId(primary.id);
+        if (primary) {
+          setPrimaryProfileId(primary.id);
+          setPrimaryProfile(primary);
+        }
       })
       .catch(() => {});
   }, []);
@@ -433,7 +493,7 @@ export function TournamentsScreen({ route }: Props) {
   // Reload list/calendar whenever any filter or view mode changes (debounced for free-text fields)
   useEffect(() => {
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
-    const isTextFilter = !!(query || categoryFilter || cityFilter || fromDate || toDate);
+    const isTextFilter = !!(query || fromDate || toDate);
     const delay = isTextFilter ? 400 : 0;
     debounceTimer.current = setTimeout(() => {
       if (viewMode === 'list') loadList(1);
@@ -444,21 +504,19 @@ export function TournamentsScreen({ route }: Props) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    viewMode, query, statusFilter, circuitFilter, federationFilter, categoryFilter,
+    viewMode, query, statusFilter, federationFilter, categoryFilter,
     stateFilter, cityFilter, fromDate, toDate, modalityFilter, surfaceFilter,
     nearMe, primaryProfileId,
   ]);
 
   // Apply incoming route params (deep-link / cross-screen navigation)
   useEffect(() => {
-    if (route.params?.circuit) setCircuitFilter(route.params.circuit);
     if (route.params?.organization) setFederationFilter(route.params.organization);
-  }, [route.params?.circuit, route.params?.organization]);
+  }, [route.params?.organization]);
 
   function clearFilters() {
     setQuery('');
     setStatusFilter('');
-    setCircuitFilter('');
     setFederationFilter(undefined);
     setCategoryFilter('');
     setStateFilter('');
@@ -537,7 +595,6 @@ export function TournamentsScreen({ route }: Props) {
     showAdvanced, onToggleAdvanced: handleToggleAdvanced,
     activeFilterCount, hasAnyInput, onClearFilters: clearFilters,
     statusFilter, onStatusChange: setStatusFilter,
-    circuitFilter, onCircuitChange: setCircuitFilter,
     federationFilter, onFederationChange: handleFederationChange,
     organizationOptions,
     categoryFilter, onCategoryChange: setCategoryFilter,
@@ -549,6 +606,7 @@ export function TournamentsScreen({ route }: Props) {
     surfaceFilter, onSurfaceChange: setSurfaceFilter,
     nearMe, onNearMeToggle: handleNearMeToggle,
     primaryProfileId,
+    primaryProfile,
   };
 
   const year = calMonth.getFullYear();
@@ -561,7 +619,7 @@ export function TournamentsScreen({ route }: Props) {
   return (
     <Screen scroll={false}>
       {/* Header */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, paddingHorizontal: 16 }}>
         <View>
           <AppText variant="title">Torneios</AppText>
           <AppText variant="caption" style={{ color: colors.textMuted }}>Torneios infantojuvenis agregados</AppText>
@@ -578,7 +636,7 @@ export function TournamentsScreen({ route }: Props) {
               style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 9, backgroundColor: viewMode === 'list' ? colors.accentNeon : 'transparent' }}>
               <Ionicons name="list" size={18} color={viewMode === 'list' ? colors.bgBase : colors.textMuted} />
             </Pressable>
-            <Pressable onPress={() => setViewMode('calendar')}
+            <Pressable onPress={() => { setViewMode('calendar'); setShowAdvanced(false); setSelectedDate(null); }}
               style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 9, backgroundColor: viewMode === 'calendar' ? colors.accentNeon : 'transparent' }}>
               <Ionicons name="calendar" size={18} color={viewMode === 'calendar' ? colors.bgBase : colors.textMuted} />
             </Pressable>
@@ -620,7 +678,7 @@ export function TournamentsScreen({ route }: Props) {
             ListFooterComponent={loadingMore ? <TournamentListSkeleton count={2} /> : null}
             onEndReached={handleEndReached}
             onEndReachedThreshold={0.4}
-            contentContainerStyle={{ paddingBottom: flatListPadding }}
+            contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: flatListPadding }}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             // Performance tuning for 3000 users / large lists
@@ -639,7 +697,7 @@ export function TournamentsScreen({ route }: Props) {
           )}
         </>
       ) : (
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 96 }}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 96 }}>
           <FilterHeader {...filterHeaderProps} />
 
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>

@@ -24,9 +24,14 @@ export async function fetchPlans(): Promise<Plan[]> {
   return res.data;
 }
 
-export async function fetchSubscription(): Promise<Subscription> {
-  const res = await api.get('/api/billing/subscription/');
-  return res.data;
+export async function fetchSubscription(): Promise<Subscription | null> {
+  try {
+    const res = await api.get('/api/billing/subscription/');
+    return res.data;
+  } catch (err: any) {
+    if (err?.response?.status === 404) return null;
+    throw err;
+  }
 }
 
 export async function checkout(payload: CheckoutPayload): Promise<CheckoutResponse> {

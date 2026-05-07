@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { Alert, Pressable, View } from 'react-native';
+import { Alert, ActivityIndicator, Pressable, View } from 'react-native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -10,8 +10,17 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { AppText, Button, Card, EmptyState, LoadingBlock, Screen, SectionHeader } from '../../components/ui';
 import { haptic } from '../../hooks/useHaptic';
 import { TournamentCard } from '../../components/TournamentCard';
-import { listWatchlist, watchlistSummary, removeWatchlist } from '../../services/data';
+import { listWatchlist, watchlistSummary, removeWatchlist, updateWatch } from '../../services/data';
 import { WatchlistItem } from '../../types';
+
+const TODAY = new Date().toISOString().slice(0, 10);
+
+function isPast(item: WatchlistItem): boolean {
+  const ed = item.edition_detail;
+  const endDate = ed.end_date || ed.start_date;
+  if (!endDate) return false;
+  return endDate < TODAY;
+}
 
 function detectConflicts(items: WatchlistItem[]): Set<number> {
   const conflicting = new Set<number>();
@@ -48,7 +57,9 @@ export function WatchlistScreen(_: Props) {
   const [summary, setSummary] = useState<any>(null);
   const [conflicts, setConflicts] = useState<Set<number>>(new Set());
   const [removing, setRemoving] = useState<number | null>(null);
+  const [marking, setMarking] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showPast, setShowPast] = useState(false);
 
   async function fetchAll(): Promise<void> {
     const [wl, sm] = await Promise.all([listWatchlist(), watchlistSummary()]);
@@ -127,6 +138,86 @@ export function WatchlistScreen(_: Props) {
     );
   }
 
+  async function handleMarkInscrito(item: WatchlistItem) {
+    haptic.light();
+    setMarking(item.id);
+    try {
+      const updated = await updateWatch(item.id, { user_status: 'registered_declared' });
+      setItems((prev) => prev.map((i) => i.id === item.id ? { ...i, ...updated } : i));
+      setSummary((prev: any) => prev ? { ...prev, active_registrations: (prev.active_registrations ?? 0) + 1 } : prev);
+      Toast.show({ type: 'success', text1: 'Marcado como inscrito!' });
+    } catch {
+      Toast.show({ type: 'error', text1: 'Erro ao marcar como inscrito.' });
+    } finally {
+      setMarking(null);
+    }
+  }
+
+  const activeItems = items.filter((i) => !isPast(i));
+  const pastItems   = items.filter((i) => isPast(i));
+
+  function renderItem(item: WatchlistItem) {
+    const isInscrito = item.user_status === 'registered_declared';
+    return (
+      <View key={item.id}>
+        {conflicts.has(item.id) && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: -4, paddingHorizontal: 4 }}>
+            <Ionicons name="warning" size={12} color={colors.statusClosing} />
+            <AppText variant="caption" style={{ color: colors.statusClosing, fontSize: 10 }}>Conflito de datas</AppText>
+          </View>
+        )}
+        <View>
+          <TournamentCard
+            edition={item.edition_detail}
+            onPress={() => navigation.navigate('TournamentDetail', { id: item.edition_detail.id, edition: item.edition_detail })}
+          />
+          {/* Action row — below card */}
+          <View style={{
+            flexDirection: 'row', alignItems: 'center', gap: 8,
+            marginTop: -12, marginBottom: 4,
+            paddingHorizontal: 14, paddingTop: 10, paddingBottom: 8,
+            backgroundColor: colors.bgElevated,
+            borderBottomLeftRadius: 14, borderBottomRightRadius: 14,
+            borderWidth: 1, borderTopWidth: 0,
+            borderColor: colors.borderSubtle,
+          }}>
+            {/* Inscrito button */}
+            <Pressable
+              onPress={() => !isInscrito && handleMarkInscrito(item)}
+              disabled={marking === item.id}
+              style={{
+                flex: 1,
+                flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+                paddingVertical: 7,
+                backgroundColor: isInscrito ? `${colors.statusOpen}18` : `${colors.accentNeon}18`,
+                borderRadius: 10, borderWidth: 1,
+                borderColor: isInscrito ? `${colors.statusOpen}44` : `${colors.accentNeon}44`,
+              }}
+              hitSlop={4}
+            >
+              {marking === item.id
+                ? <ActivityIndicator size="small" color={colors.accentNeon} />
+                : <Ionicons name={isInscrito ? 'checkmark-circle' : 'add-circle-outline'} size={16} color={isInscrito ? colors.statusOpen : colors.accentNeon} />
+              }
+              <AppText variant="caption" style={{ color: isInscrito ? colors.statusOpen : colors.accentNeon, fontWeight: '700', fontSize: 12 }}>
+                Inscrito
+              </AppText>
+            </Pressable>
+            {/* Remove button */}
+            <Pressable
+              onPress={() => handleRemove(item)}
+              disabled={removing === item.id}
+              style={{ width: 40, height: 36, backgroundColor: `${colors.danger}18`, borderRadius: 10, borderWidth: 1, borderColor: `${colors.danger}44`, alignItems: 'center', justifyContent: 'center' }}
+              hitSlop={4}
+            >
+              <Ionicons name={removing === item.id ? 'hourglass-outline' : 'trash-outline'} size={17} color={colors.danger} />
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <Screen onRefresh={onRefresh} refreshing={refreshing}>
       <SectionHeader title="Agenda" subtitle="Seus torneios acompanhados" />
@@ -153,7 +244,6 @@ export function WatchlistScreen(_: Props) {
         </Card>
       ) : null}
 
-      {/* Conflict warning */}
       {conflicts.size > 0 && (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: `${colors.statusClosing}18`, borderRadius: 14, padding: 12, borderWidth: 1, borderColor: `${colors.statusClosing}44`, marginBottom: 4 }}>
           <Ionicons name="warning-outline" size={18} color={colors.statusClosing} />
@@ -179,31 +269,29 @@ export function WatchlistScreen(_: Props) {
           subtitle="Procure um torneio na lista e toque em adicionar à agenda para começar a acompanhar."
         />
       ) : (
-        items.map((item) => (
-          <View key={item.id}>
-            {conflicts.has(item.id) && (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: -4, paddingHorizontal: 4 }}>
-                <Ionicons name="warning" size={12} color={colors.statusClosing} />
-                <AppText variant="caption" style={{ color: colors.statusClosing, fontSize: 10 }}>Conflito de datas</AppText>
-              </View>
-            )}
-            <View style={{ position: 'relative' }}>
-              <TournamentCard
-                edition={item.edition_detail}
-                onPress={() => navigation.navigate('TournamentDetail', { id: item.edition_detail.id, edition: item.edition_detail })}
-              />
-              {/* Remove from agenda button */}
+        <>
+          {/* Upcoming / active */}
+          {activeItems.length > 0 && (
+            <>
+              <SectionHeader title="Próximos" subtitle={`${activeItems.length} torneio${activeItems.length > 1 ? 's' : ''}`} />
+              {activeItems.map(renderItem)}
+            </>
+          )}
+
+          {/* Past tournaments */}
+          {pastItems.length > 0 && (
+            <>
               <Pressable
-                onPress={() => handleRemove(item)}
-                disabled={removing === item.id}
-                style={{ position: 'absolute', right: 10, bottom: 18, width: 44, height: 44, backgroundColor: `${colors.danger}26`, borderRadius: 12, borderWidth: 1, borderColor: `${colors.danger}4D`, alignItems: 'center', justifyContent: 'center' }}
-                hitSlop={10}
+                onPress={() => setShowPast((v) => !v)}
+                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10 }}
               >
-                <Ionicons name={removing === item.id ? 'hourglass-outline' : 'trash-outline'} size={18} color={colors.danger} />
+                <SectionHeader title="Passados" subtitle={`${pastItems.length} torneio${pastItems.length > 1 ? 's' : ''}`} />
+                <Ionicons name={showPast ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textMuted} />
               </Pressable>
-            </View>
-          </View>
-        ))
+              {showPast && pastItems.map(renderItem)}
+            </>
+          )}
+        </>
       )}
     </Screen>
   );

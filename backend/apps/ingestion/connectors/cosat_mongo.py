@@ -361,7 +361,9 @@ def _normalize_tournament(doc: dict) -> Optional[dict]:
         return None
 
     source_url = (doc.get('url') or '').strip()
-    organization = (doc.get('organization') or 'COSAT').strip()
+    organization = _strip_emails((doc.get('organization') or 'COSAT').strip())
+    if not organization:
+        organization = 'COSAT'
     location = (doc.get('location') or '').strip()
     country = (doc.get('country') or 'BR').strip()
 
@@ -793,15 +795,23 @@ def _parse_date_range(date_range: str, year_hint: int = 0):
 # Supports all field name conventions from the COSAT crawler schema.
 _INSCRIPTION_OPEN_FIELDS = [
     'Inscrição_Inicio',
+    'Inscricao_Inicio', 'InscricaoInicio',
     'registration_open_at', 'entry_open_at',
     'registrationOpen', 'registration_open',
+    'inscriptionOpen', 'inscriptionStart',
     'Entry open', 'Entries open', 'Registration open',
+    'registrationFrom', 'registration_from',
+    'inscricao_inicio', 'inscrição_inicio',
 ]
 _INSCRIPTION_CLOSE_FIELDS = [
     'Inscrição_Fim',
+    'Inscricao_Fim', 'InscricaoFim',
     'registration_close_at', 'entry_close_at',
     'registrationClose', 'registration_close',
+    'inscriptionClose', 'inscriptionEnd',
     'Entry close', 'Entries close', 'Registration close',
+    'registrationTo', 'registration_to', 'registrationDeadline',
+    'inscricao_fim', 'inscrição_fim',
 ]
 
 # Withdrawal deadline is NOT a registration open/close date — it is the deadline
@@ -897,6 +907,14 @@ def _parse_inscription_dates(doc: dict, year_hint: int = 0):
     return open_date, close_date
 
 
+_EMAIL_RE = re.compile(r'[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}')
+
+
+def _strip_emails(text: str) -> str:
+    """Remove email addresses from a string — they must not appear in venue/address fields."""
+    return _EMAIL_RE.sub('', text).strip(' ,;/')
+
+
 def _parse_location(location: str, country: str):
     """
     Extract (city, state_or_country_code) from a location string.
@@ -906,6 +924,10 @@ def _parse_location(location: str, country: str):
       "São Paulo"        → ("São Paulo", "BR")
       ""                 → ("", "")
     """
+    if not location:
+        return '', ''
+    # Strip emails that may appear in location strings from COSAT data
+    location = _strip_emails(location)
     if not location:
         return '', ''
     parts = [p.strip() for p in location.split(',')]

@@ -229,12 +229,18 @@ export function TournamentDetailScreen({ route, navigation }: Props) {
               <AppText variant="caption">Prazo final de inscrição: {fmtDateMaybeTime(detail.entry_close_at)}</AppText>
             </View>
           )}
-          {(detail.venue_city || detail.venue_state) && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Ionicons name="location-outline" size={14} color={colors.textMuted} />
-              <AppText variant="caption">Local: {[detail.venue_city, detail.venue_state].filter(Boolean).join(' / ')}</AppText>
-            </View>
-          )}
+          {(() => {
+            const _emailRe = /[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/;
+            const safeCity = (detail.venue_city && !_emailRe.test(detail.venue_city)) ? detail.venue_city : '';
+            const locationStr = [safeCity, detail.venue_state].filter(Boolean).join(' / ');
+            if (!locationStr) return null;
+            return (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="location-outline" size={14} color={colors.textMuted} />
+                <AppText variant="caption">Local: {locationStr}</AppText>
+              </View>
+            );
+          })()}
           {detail.surface && detail.surface !== 'unknown' && (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Ionicons name="tennisball-outline" size={14} color={colors.textMuted} />

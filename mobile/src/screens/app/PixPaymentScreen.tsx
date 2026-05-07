@@ -8,6 +8,7 @@ import {
   View,
 } from 'react-native';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { MainStackParamList } from '../../navigation/types';
@@ -25,35 +26,46 @@ export function PixPaymentScreen() {
   const { pixData } = route.params;
   const { colors } = useTheme();
 
+  const { refresh: refreshAuth } = useAuth();
   const [checking, setChecking] = useState(false);
   const [copied, setCopied] = useState(false);
   const [paymentState, setPaymentState] = useState<'waiting' | 'confirmed' | 'expired' | 'error'>('waiting');
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollRef    = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Guard against concurrent polling requests (prevents overlapping async calls)
+  const isPolling  = useRef(false);
 
   useEffect(() => {
     let mounted = true;
 
     pollRef.current = setInterval(async () => {
-      if (!mounted) return;
+      if (!mounted || isPolling.current) return;
+      isPolling.current = true;
       try {
         const sub = await fetchSubscription();
-        if (mounted && sub.status === 'active') {
+        if (!mounted) return;
+        if (sub?.status === 'active') {
           setPaymentState('confirmed');
           clearInterval(pollRef.current!);
+          // Refresh AuthContext so subscriptionStatus updates → GatedTabs sees 'active'
+          await refreshAuth().catch(() => {});
           Alert.alert('Pagamento confirmado!', 'Sua assinatura está ativa.', [
             { text: 'OK', onPress: () => { if (mounted) navigation.replace('Subscription'); } },
           ]);
         }
       } catch {
+        // Network error — stop polling to avoid hammering the server
         if (mounted) {
           setPaymentState('error');
           clearInterval(pollRef.current!);
         }
+      } finally {
+        isPolling.current = false;
       }
     }, POLL_INTERVAL);
 
     return () => {
       mounted = false;
+      isPolling.current = false;
       if (pollRef.current) clearInterval(pollRef.current);
     };
   }, []);
@@ -76,8 +88,9 @@ export function PixPaymentScreen() {
     setChecking(true);
     try {
       const sub = await fetchSubscription();
-      if (sub.status === 'active') {
+      if (sub?.status === 'active') {
         setPaymentState('confirmed');
+        await refreshAuth().catch(() => {});
         navigation.replace('Subscription');
       } else {
         setPaymentState('waiting');

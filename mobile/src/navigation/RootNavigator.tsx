@@ -1,6 +1,13 @@
 import React from 'react';
+import { Pressable, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
+import { AppText, Button } from '../components/ui';
 import { AuthStackParamList, MainStackParamList } from './types';
 import { LoginScreen } from '../screens/auth/LoginScreen';
 import { RegisterScreen } from '../screens/auth/RegisterScreen';
@@ -21,6 +28,70 @@ import { TournamentCompareScreen } from '../screens/app/TournamentCompareScreen'
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
 const MainStack = createNativeStackNavigator<MainStackParamList>();
 
+/**
+ * GatedTabs replaces MainTabs as the root "Tabs" screen.
+ *
+ * Payment gate: if the user chose a paid plan but payment is not yet confirmed
+ * (subscriptionStatus === 'pending'), we block access to the normal tabs and
+ * redirect to the payment flow. Once the webhook fires and subscription becomes
+ * 'active', AuthContext.refresh() updates subscriptionStatus and tabs unlock.
+ *
+ * Free users (no subscription → subscriptionStatus === 'none') always pass through.
+ */
+function GatedTabs() {
+  const { subscriptionStatus, logout } = useAuth();
+  const { colors } = useTheme();
+  const navigation = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
+
+  if (subscriptionStatus === 'pending') {
+    return (
+      <SafeAreaView
+        style={{ flex: 1, backgroundColor: colors.bgBase }}
+        edges={['top', 'left', 'right', 'bottom']}
+      >
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 28 }}>
+          <View style={{
+            width: 80, height: 80, borderRadius: 40,
+            backgroundColor: `${colors.accentNeon}18`,
+            borderWidth: 2, borderColor: `${colors.accentNeon}44`,
+            alignItems: 'center', justifyContent: 'center', marginBottom: 24,
+          }}>
+            <Ionicons name="card-outline" size={36} color={colors.accentNeon} />
+          </View>
+
+          <AppText variant="title" style={{ textAlign: 'center', marginBottom: 8 }}>
+            Pagamento pendente
+          </AppText>
+          <AppText variant="muted" style={{ textAlign: 'center', lineHeight: 22, marginBottom: 32 }}>
+            Seu plano foi selecionado, mas o pagamento ainda não foi confirmado.
+            Conclua o pagamento para ativar sua assinatura e acessar todos os recursos.
+          </AppText>
+
+          <View style={{ width: '100%', gap: 12 }}>
+            <Button
+              title="Ir para pagamento"
+              onPress={() => navigation.navigate('Plans')}
+            />
+            <Button
+              title="Minha assinatura"
+              variant="secondary"
+              onPress={() => navigation.navigate('Subscription')}
+            />
+          </View>
+
+          <Pressable onPress={logout} style={{ marginTop: 24, padding: 8 }}>
+            <AppText variant="caption" style={{ color: colors.textMuted, textDecorationLine: 'underline' }}>
+              Sair da conta
+            </AppText>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  return <MainTabs />;
+}
+
 export function RootNavigator() {
   const { isAuthenticated } = useAuth();
 
@@ -36,7 +107,7 @@ export function RootNavigator() {
 
   return (
     <MainStack.Navigator screenOptions={{ headerShown: false }}>
-      <MainStack.Screen name="Tabs" component={MainTabs} />
+      <MainStack.Screen name="Tabs" component={GatedTabs} />
       <MainStack.Screen name="TournamentDetail" component={TournamentDetailScreen} />
       <MainStack.Screen name="Onboarding" component={OnboardingScreen} />
       <MainStack.Screen name="Coach" component={CoachScreen} />

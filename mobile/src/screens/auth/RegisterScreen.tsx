@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Linking, Pressable, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Linking, Pressable, Share, View } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { createProfile } from '../../services/data';
 import { extractApiError } from '../../services/api';
 import { createChildAccount, register, sendEmailOtp, verifyEmailOtp } from '../../services/auth';
+import { checkout, fetchPlans, Plan } from '../../services/billing';
 import { User } from '../../types';
 import { LEVEL_LABELS, TENNIS_CLASS_LABELS } from '../../utils/format';
 import { AppText, Button, Card, Checkbox, Input, Screen, SelectField } from '../../components/ui';
@@ -30,13 +31,16 @@ function passwordStrength(pwd: string, c: AppColors): { score: number; label: st
 }
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Register'>;
-type Step = 'form' | 'otp' | 'profile' | 'child';
+type Step = 'plan' | 'form' | 'otp' | 'payment' | 'profile' | 'dependent';
+type PlanSlug = 'free' | 'individual' | 'familia';
 
-const GENDER_OPTIONS = [{ value: 'M', label: 'Masculino' }, { value: 'F', label: 'Feminino' }];
-const ROLE_OPTIONS = [
-  { value: 'player', label: 'Jogador(a)' },
-  { value: 'parent', label: 'Responsavel / Pai ou Mae' },
-];
+// Hardcoded fallback shown while API loads or if it fails
+const PLAN_FALLBACK: Record<string, { label: string; price: string; description: string; icon: string }> = {
+  free:       { label: 'Free',       price: 'Grátis',        description: 'Acesso básico. Consulte e explore torneios.', icon: 'search-outline' },
+  individual: { label: 'Individual', price: 'R$ 19,90/mês',  description: 'Alertas, agenda, filtros avançados e suporte prioritário.', icon: 'person-outline' },
+  familia:    { label: 'Família',    price: 'R$ 34,90/mês',  description: 'Até 4 perfis. Gerencie toda a família em uma conta.', icon: 'people-outline' },
+};
+
 const UF_OPTIONS = [
   { value: 'AC', label: 'AC - Acre' }, { value: 'AL', label: 'AL - Alagoas' },
   { value: 'AP', label: 'AP - Amapa' }, { value: 'AM', label: 'AM - Amazonas' },
@@ -63,21 +67,34 @@ const RADIUS_OPTIONS = [
   { value: '200', label: '200 km' }, { value: '300', label: '300 km' },
   { value: '500', label: '500 km' }, { value: '1000', label: 'Todo o Brasil' },
 ];
+const GENDER_OPTIONS = [{ value: 'M', label: 'Masculino' }, { value: 'F', label: 'Feminino' }];
 
 export function RegisterScreen({ navigation }: Props) {
   const { colors } = useTheme();
   const { setUser } = useAuth();
-  const [step, setStep] = useState<Step>('form');
+
+  // ── Plan selection state ─────────────────────────────────────────────────────
+  const [planSlug, setPlanSlug]       = useState<PlanSlug>('individual');
+  const [apiPlans, setApiPlans]       = useState<Plan[]>([]);
+  const [loadingPlans, setLoadingPlans] = useState(true);
+
+  // Plan object from API for Individual/Família (used for checkout)
+  const selectedApiPlan = apiPlans.find((p) => p.slug === planSlug) ?? null;
+
+  // ── Registration state ───────────────────────────────────────────────────────
+  const [step, setStep]               = useState<Step>('plan');
   const [registeredUser, setRegisteredUser] = useState<User | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [resending, setResending] = useState(false);
+  const [submitting, setSubmitting]   = useState(false);
+  const [resending, setResending]     = useState(false);
+
   const [form, setForm] = useState({
     full_name: '',
     email: '',
     phone: '',
     password: '',
     password_confirm: '',
-    role: 'player',
+    // role determined by plan: free/individual → player, familia → player or parent
+    isResponsible: false,   // for Família only: am I the account responsible?
     accept_terms: false,
     marketing_consent: false,
   });
@@ -92,17 +109,35 @@ export function RegisterScreen({ navigation }: Props) {
     competitive_level: 'amateur',
     tennis_class: '',
   });
-  const [childForm, setChildForm] = useState({
+  const [dependentForm, setDependentForm] = useState({
     full_name: '',
     email: '',
     phone: '',
     password: '',
     password_confirm: '',
   });
-  const [cities, setCities] = useState<{ value: string; label: string }[]>([]);
+  const [cities, setCities]     = useState<{ value: string; label: string }[]>([]);
   const [loadingCities, setLoadingCities] = useState(false);
 
-  useEffect(() => { if (step === 'profile') loadCities(profile.home_state); }, [profile.home_state, step]);
+  // ── Payment state ────────────────────────────────────────────────────────────
+  const [paymentLoading, setPaymentLoading] = useState(false);
+  const [pixCode, setPixCode]     = useState('');
+  const [pixQR, setPixQR]         = useState('');
+  const [pixCopied, setPixCopied] = useState(false);
+  const copyTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Load plans from API (public endpoint — no auth needed) ───────────────────
+  useEffect(() => {
+    fetchPlans()
+      .then(setApiPlans)
+      .catch(() => {})
+      .finally(() => setLoadingPlans(false));
+  }, []);
+
+  // ── Load cities when state changes ───────────────────────────────────────────
+  useEffect(() => {
+    if (step === 'profile') loadCities(profile.home_state);
+  }, [profile.home_state, step]);
 
   async function loadCities(uf: string) {
     if (!uf) return;
@@ -115,26 +150,36 @@ export function RegisterScreen({ navigation }: Props) {
     finally { setLoadingCities(false); }
   }
 
+  // Derived role from plan + isResponsible flag
+  const role = (planSlug === 'familia' && form.isResponsible) ? 'parent' : 'player';
+
+  // ── Step handlers ─────────────────────────────────────────────────────────────
+
   async function onRegister() {
     if (!form.full_name.trim()) return Toast.show({ type: 'error', text1: 'Informe seu nome completo' });
-    if (!form.email.trim()) return Toast.show({ type: 'error', text1: 'Informe seu e-mail' });
-    if (!form.phone.trim()) return Toast.show({ type: 'error', text1: 'Informe seu celular' });
-    if (!form.password) return Toast.show({ type: 'error', text1: 'Defina uma senha' });
-    if (form.password.length < 8) return Toast.show({ type: 'error', text1: 'A senha precisa ter no minimo 8 caracteres' });
+    if (!form.email.trim())     return Toast.show({ type: 'error', text1: 'Informe seu e-mail' });
+    if (!form.phone.trim())     return Toast.show({ type: 'error', text1: 'Informe seu celular' });
+    if (!form.password)         return Toast.show({ type: 'error', text1: 'Defina uma senha' });
+    if (form.password.length < 8) return Toast.show({ type: 'error', text1: 'Senha precisa ter no minimo 8 caracteres' });
     if (form.password !== form.password_confirm) return Toast.show({ type: 'error', text1: 'As senhas nao conferem' });
-    if (!form.accept_terms) return Toast.show({ type: 'error', text1: 'Aceite os termos para continuar' });
+    if (!form.accept_terms)     return Toast.show({ type: 'error', text1: 'Aceite os termos para continuar' });
     setSubmitting(true);
     try {
-      const data = await register({ ...form });
+      const data = await register({
+        full_name: form.full_name,
+        email: form.email,
+        phone: form.phone,
+        password: form.password,
+        password_confirm: form.password_confirm,
+        role,
+        accept_terms: form.accept_terms,
+        marketing_consent: form.marketing_consent,
+      });
       setRegisteredUser(data.user);
       setProfile((p) => ({ ...p, display_name: form.full_name }));
       setStep('otp');
       if (data.email_otp_sent === false) {
-        Toast.show({
-          type: 'info',
-          text1: 'Conta criada',
-          text2: 'Nao conseguimos enviar o codigo agora. Tente reenviar em instantes.',
-        });
+        Toast.show({ type: 'info', text1: 'Conta criada', text2: 'Nao conseguimos enviar o codigo agora. Tente reenviar em instantes.' });
       } else {
         Toast.show({ type: 'success', text1: 'Conta criada! Verifique seu e-mail.' });
       }
@@ -147,11 +192,56 @@ export function RegisterScreen({ navigation }: Props) {
     setSubmitting(true);
     try {
       await verifyEmailOtp(emailCode.trim());
-      setStep(form.role === 'parent' ? 'child' : 'profile');
       Toast.show({ type: 'success', text1: 'E-mail verificado!' });
+      if (planSlug === 'free') {
+        // Free: skip payment, go to profile
+        setStep('profile');
+      } else {
+        // Paid: show payment step and immediately start checkout
+        setStep('payment');
+        startCheckout();
+      }
     } catch (err) {
       Toast.show({ type: 'error', text1: 'Erro na verificacao', text2: extractApiError(err) });
     } finally { setSubmitting(false); }
+  }
+
+  async function startCheckout() {
+    if (!selectedApiPlan) {
+      // API plans not loaded yet — proceed without payment
+      Toast.show({ type: 'info', text1: 'Planos indisponíveis agora. Configure sua assinatura em Minha assinatura.' });
+      setStep('profile');
+      return;
+    }
+    setPaymentLoading(true);
+    try {
+      const result = await checkout({
+        plan_slug: planSlug as 'individual' | 'familia',
+        billing_period: 'monthly',
+        payment_method: 'pix',
+      });
+      if (result.pix?.copia_e_cola) {
+        setPixCode(result.pix.copia_e_cola);
+        setPixQR(result.pix.qr_code_image ?? '');
+      } else {
+        // Asaas not configured or no PIX code — let user proceed
+        Toast.show({ type: 'info', text1: 'Assinatura criada. Conclua o pagamento em Minha assinatura.' });
+        proceedAfterPayment();
+      }
+    } catch (err) {
+      Toast.show({ type: 'error', text1: 'Erro ao criar assinatura', text2: extractApiError(err) });
+      // Allow proceeding even if checkout fails (don't block registration)
+    } finally {
+      setPaymentLoading(false);
+    }
+  }
+
+  function proceedAfterPayment() {
+    if (role === 'parent') {
+      setStep('dependent');
+    } else {
+      setStep('profile');
+    }
   }
 
   async function onFinish() {
@@ -175,25 +265,25 @@ export function RegisterScreen({ navigation }: Props) {
     } finally { setSubmitting(false); }
   }
 
-  async function onCreateChild() {
-    if (!childForm.full_name.trim()) return Toast.show({ type: 'error', text1: 'Informe o nome completo do filho' });
-    if (!childForm.email.trim()) return Toast.show({ type: 'error', text1: 'Informe o e-mail do filho' });
-    if (!childForm.password) return Toast.show({ type: 'error', text1: 'Defina uma senha para o filho' });
-    if (childForm.password.length < 8) return Toast.show({ type: 'error', text1: 'A senha precisa ter no minimo 8 caracteres' });
-    if (childForm.password !== childForm.password_confirm) return Toast.show({ type: 'error', text1: 'As senhas do filho nao conferem' });
+  async function onCreateDependent() {
+    if (!dependentForm.full_name.trim()) return Toast.show({ type: 'error', text1: 'Informe o nome completo do dependente' });
+    if (!dependentForm.email.trim())     return Toast.show({ type: 'error', text1: 'Informe o e-mail do dependente' });
+    if (!dependentForm.password)         return Toast.show({ type: 'error', text1: 'Defina uma senha para o dependente' });
+    if (dependentForm.password.length < 8) return Toast.show({ type: 'error', text1: 'A senha precisa ter no minimo 8 caracteres' });
+    if (dependentForm.password !== dependentForm.password_confirm) return Toast.show({ type: 'error', text1: 'As senhas do dependente nao conferem' });
     setSubmitting(true);
     try {
       await createChildAccount({
-        full_name: childForm.full_name.trim(),
-        email: childForm.email.trim(),
-        phone: childForm.phone.trim(),
-        password: childForm.password,
-        password_confirm: childForm.password_confirm,
+        full_name: dependentForm.full_name.trim(),
+        email: dependentForm.email.trim(),
+        phone: dependentForm.phone.trim(),
+        password: dependentForm.password,
+        password_confirm: dependentForm.password_confirm,
       });
       if (registeredUser) setUser(registeredUser);
-      Toast.show({ type: 'success', text1: 'Filho cadastrado!', text2: 'Ele ja pode entrar e completar o perfil esportivo.' });
+      Toast.show({ type: 'success', text1: 'Dependente cadastrado!', text2: 'Ele ja pode entrar e completar o perfil esportivo.' });
     } catch (err) {
-      Toast.show({ type: 'error', text1: 'Erro ao cadastrar filho', text2: extractApiError(err) });
+      Toast.show({ type: 'error', text1: 'Erro ao cadastrar dependente', text2: extractApiError(err) });
     } finally { setSubmitting(false); }
   }
 
@@ -204,17 +294,130 @@ export function RegisterScreen({ navigation }: Props) {
     finally { setResending(false); }
   }
 
+  async function copyPixCode() {
+    if (!pixCode) return;
+    try {
+      await Share.share({ message: pixCode });
+      setPixCopied(true);
+      if (copyTimeout.current) clearTimeout(copyTimeout.current);
+      copyTimeout.current = setTimeout(() => setPixCopied(false), 3000);
+    } catch {
+      // User dismissed share sheet — no action needed
+    }
+  }
+
+  // ── Plan info helpers ─────────────────────────────────────────────────────────
+  function getPlanPrice(slug: PlanSlug): string {
+    if (slug === 'free') return 'Grátis';
+    const p = apiPlans.find((pl) => pl.slug === slug);
+    if (p) return `R$ ${parseFloat(p.price_monthly).toFixed(2).replace('.', ',')} / mês`;
+    return PLAN_FALLBACK[slug]?.price ?? '';
+  }
+
+  const PLAN_SLUGS: PlanSlug[] = ['free', 'individual', 'familia'];
+
   return (
     <Screen>
       <Card>
         <AppText variant="section">Criar conta</AppText>
 
-        {/* Step 1: Form */}
+        {/* ── Step: Plan selection ─────────────────────────────────────────── */}
+        {step === 'plan' ? (
+          <>
+            <AppText variant="muted" style={{ marginBottom: 12 }}>
+              Escolha o plano. Pode fazer upgrade depois.
+            </AppText>
+
+            {loadingPlans ? (
+              <View style={{ paddingVertical: 20, alignItems: 'center' }}>
+                <ActivityIndicator color={colors.accentNeon} />
+              </View>
+            ) : (
+              PLAN_SLUGS.map((slug) => {
+                const selected = planSlug === slug;
+                const info = PLAN_FALLBACK[slug];
+                const apiPlan = apiPlans.find((p) => p.slug === slug);
+                const price = getPlanPrice(slug);
+                return (
+                  <Pressable
+                    key={slug}
+                    onPress={() => setPlanSlug(slug)}
+                    style={{
+                      flexDirection: 'row', alignItems: 'flex-start', gap: 12,
+                      padding: 14, borderRadius: 14, marginBottom: 10,
+                      borderWidth: selected ? 2 : 1,
+                      borderColor: selected ? colors.accentNeon : colors.borderSubtle,
+                      backgroundColor: selected ? `${colors.accentNeon}10` : colors.bgBase,
+                    }}
+                  >
+                    <View style={{
+                      width: 40, height: 40, borderRadius: 20,
+                      backgroundColor: selected ? `${colors.accentNeon}22` : `${colors.borderSubtle}55`,
+                      alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                    }}>
+                      <Ionicons name={info.icon as any} size={20} color={selected ? colors.accentNeon : colors.textMuted} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <AppText variant="body" style={{ fontWeight: '700', color: selected ? colors.accentNeon : colors.textPrimary }}>
+                          {info.label}
+                        </AppText>
+                        <AppText style={{ fontSize: 14, fontWeight: '800', color: selected ? colors.accentNeon : colors.textSecondary }}>
+                          {price}
+                        </AppText>
+                        {slug === 'familia' ? (
+                          <View style={{ backgroundColor: `${colors.accentNeon}22`, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 }}>
+                            <AppText variant="caption" style={{ color: colors.accentNeon, fontWeight: '700', fontSize: 10 }}>
+                              {apiPlan?.highlight_label || 'POPULAR'}
+                            </AppText>
+                          </View>
+                        ) : null}
+                      </View>
+                      <AppText variant="muted" style={{ marginTop: 3, fontSize: 12 }}>{info.description}</AppText>
+                      {slug !== 'free' && apiPlan ? (
+                        <View style={{ marginTop: 4, gap: 2 }}>
+                          {apiPlan.features.slice(0, 3).map((f) => (
+                            <View key={f.code} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                              <Ionicons name="checkmark" size={11} color={colors.accentNeon} />
+                              <AppText variant="caption" style={{ fontSize: 10, color: colors.textMuted }}>{f.name}</AppText>
+                            </View>
+                          ))}
+                        </View>
+                      ) : null}
+                    </View>
+                    {selected ? (
+                      <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: colors.accentNeon, alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 }}>
+                        <Ionicons name="checkmark" size={13} color={colors.bgBase} />
+                      </View>
+                    ) : (
+                      <View style={{ width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: colors.borderSubtle, flexShrink: 0, marginTop: 2 }} />
+                    )}
+                  </Pressable>
+                );
+              })
+            )}
+
+            <Button title="Continuar" onPress={() => setStep('form')} disabled={loadingPlans} />
+          </>
+        ) : null}
+
+        {/* ── Step: Registration form ──────────────────────────────────────── */}
         {step === 'form' ? (
           <>
             <AppText variant="muted" style={{ marginBottom: 4 }}>
-              Campos marcados com <AppText variant="muted" style={{ color: colors.danger, fontWeight: '700' }}>*</AppText> sao obrigatorios.
+              Campos com <AppText variant="muted" style={{ color: colors.danger, fontWeight: '700' }}>*</AppText> são obrigatorios.
             </AppText>
+
+            {/* Show selected plan as a read-only badge */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10, borderRadius: 12, backgroundColor: `${colors.accentNeon}10`, borderWidth: 1, borderColor: `${colors.accentNeon}33`, marginBottom: 4 }}>
+              <Ionicons name={PLAN_FALLBACK[planSlug].icon as any} size={16} color={colors.accentNeon} />
+              <AppText variant="caption" style={{ color: colors.accentNeon, fontWeight: '700' }}>
+                Plano {PLAN_FALLBACK[planSlug].label} — {getPlanPrice(planSlug)}
+              </AppText>
+              <Pressable onPress={() => setStep('plan')} style={{ marginLeft: 'auto' }}>
+                <AppText variant="caption" style={{ color: colors.accentNeon, textDecorationLine: 'underline', fontSize: 11 }}>Trocar</AppText>
+              </Pressable>
+            </View>
 
             <Input label="Nome completo" required value={form.full_name} onChangeText={(v) => setForm({ ...form, full_name: v })} autoCapitalize="words" placeholder="Ex: Maria Silva" />
             <Input label="E-mail" required value={form.email} onChangeText={(v) => setForm({ ...form, email: v.trim() })} autoCapitalize="none" keyboardType="email-address" placeholder="seu@email.com" />
@@ -235,21 +438,27 @@ export function RegisterScreen({ navigation }: Props) {
             })()}
             <Input label="Confirme a senha" required value={form.password_confirm} onChangeText={(v) => setForm({ ...form, password_confirm: v })} secureTextEntry placeholder="Repita a senha" />
 
-            <SelectField
-              label="Tipo de conta"
-              required
-              value={form.role}
-              options={ROLE_OPTIONS}
-              onSelect={(v) => setForm({ ...form, role: v })}
-            />
+            {/* Família: show "I'm the responsible" toggle */}
+            {planSlug === 'familia' ? (
+              <Checkbox
+                value={form.isResponsible}
+                onValueChange={(v) => setForm({ ...form, isResponsible: v })}
+                label="Serei o responsável pelo plano Família"
+                sublabel={
+                  <AppText variant="caption" style={{ color: colors.textMuted, fontSize: 11 }}>
+                    Marque se vai gerenciar dependentes nesta conta.
+                  </AppText>
+                }
+              />
+            ) : null}
 
             <View style={{ gap: 12, borderTopWidth: 1, borderTopColor: colors.borderSubtle, paddingTop: 12 }}>
               <Checkbox
                 value={form.accept_terms}
                 onValueChange={(v) => setForm({ ...form, accept_terms: v })}
-                label="Aceito os Termos de Uso e a Politica de Privacidade (LGPD) *"
+                label="Aceito os Termos de Uso e Politica de Privacidade (LGPD) *"
                 sublabel={
-                  <Pressable onPress={() => Linking.openURL('https://www.tennis.app.br/termos')}>
+                  <Pressable onPress={() => Linking.openURL('https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2018/lei/l13709.htm')}>
                     <AppText variant="caption" style={{ color: colors.accentNeon, textDecorationLine: 'underline' }}>
                       Ler Termos e Politica de Privacidade
                     </AppText>
@@ -264,31 +473,98 @@ export function RegisterScreen({ navigation }: Props) {
             </View>
 
             <Button title="Criar conta" onPress={onRegister} loading={submitting} />
+            <Button title="Voltar" variant="ghost" onPress={() => setStep('plan')} />
           </>
         ) : null}
 
-        {/* Step 2: OTP */}
+        {/* ── Step: OTP verification ────────────────────────────────────────── */}
         {step === 'otp' ? (
           <>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Ionicons name="mail-outline" size={20} color={colors.accentNeon} />
               <AppText variant="body" style={{ fontWeight: '600' }}>Verificacao de e-mail</AppText>
             </View>
-            <AppText variant="muted">Enviamos um codigo de 6 digitos para <AppText variant="muted" style={{ fontWeight: '700' }}>{form.email}</AppText>. Digite-o abaixo.</AppText>
+            <AppText variant="muted">
+              Enviamos um codigo de 6 digitos para <AppText variant="muted" style={{ fontWeight: '700' }}>{form.email}</AppText>. Digite-o abaixo.
+            </AppText>
             <Input label="Codigo de verificacao" value={emailCode} onChangeText={setEmailCode} keyboardType="number-pad" placeholder="000000" />
             <Button title="Confirmar e-mail" onPress={onVerify} loading={submitting} />
             <Button title="Reenviar codigo" variant="secondary" onPress={resendOtp} loading={resending} />
           </>
         ) : null}
 
-        {/* Step 3: Profile */}
+        {/* ── Step: Payment (paid plans only) ──────────────────────────────── */}
+        {step === 'payment' ? (
+          <>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <Ionicons name="card-outline" size={20} color={colors.accentNeon} />
+              <AppText variant="body" style={{ fontWeight: '600' }}>
+                Ativar Plano {PLAN_FALLBACK[planSlug].label}
+              </AppText>
+            </View>
+
+            {paymentLoading ? (
+              <View style={{ paddingVertical: 24, alignItems: 'center', gap: 12 }}>
+                <ActivityIndicator size="large" color={colors.accentNeon} />
+                <AppText variant="muted">Gerando cobrança PIX...</AppText>
+              </View>
+            ) : pixCode ? (
+              <>
+                <AppText variant="muted" style={{ marginBottom: 12 }}>
+                  Escaneie o QR Code ou copie o código Pix abaixo para pagar {getPlanPrice(planSlug)}.
+                </AppText>
+
+                {/* PIX code display */}
+                <View style={{ backgroundColor: colors.bgCard, borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: colors.borderSubtle }}>
+                  <AppText variant="caption" style={{ color: colors.textMuted, marginBottom: 6 }}>Pix copia e cola:</AppText>
+                  <AppText variant="caption" numberOfLines={2} style={{ fontFamily: 'Poppins_400Regular', fontSize: 11, color: colors.textPrimary }}>
+                    {pixCode}
+                  </AppText>
+                  <Pressable
+                    onPress={copyPixCode}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, backgroundColor: `${colors.accentNeon}18`, borderRadius: 8, padding: 8, borderWidth: 1, borderColor: `${colors.accentNeon}33` }}
+                  >
+                    <Ionicons name={pixCopied ? 'checkmark-circle' : 'copy-outline'} size={16} color={colors.accentNeon} />
+                    <AppText variant="caption" style={{ color: colors.accentNeon, fontWeight: '700' }}>
+                      {pixCopied ? 'Copiado!' : 'Copiar código'}
+                    </AppText>
+                  </Pressable>
+                </View>
+
+                <View style={{ backgroundColor: `${colors.accentNeon}08`, borderRadius: 12, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: `${colors.accentNeon}22` }}>
+                  <AppText variant="caption" style={{ color: colors.textMuted, fontSize: 11 }}>
+                    Após o pagamento, o plano será ativado automaticamente. Clique em "Já paguei" para continuar.
+                  </AppText>
+                </View>
+
+                <Button title="Já paguei — continuar" onPress={proceedAfterPayment} />
+                <Button
+                  title="Pagar depois"
+                  variant="ghost"
+                  onPress={() => {
+                    if (registeredUser) setUser(registeredUser);
+                  }}
+                />
+              </>
+            ) : (
+              <>
+                <AppText variant="muted" style={{ marginBottom: 16 }}>
+                  Não foi possível gerar a cobrança agora. Complete o pagamento em "Minha assinatura" após entrar no app.
+                </AppText>
+                <Button title="Entrar no app" onPress={() => { if (registeredUser) setUser(registeredUser); }} />
+              </>
+            )}
+          </>
+        ) : null}
+
+        {/* ── Step: Profile setup ───────────────────────────────────────────── */}
         {step === 'profile' ? (
           <>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Ionicons name="person-add-outline" size={20} color={colors.accentNeon} />
               <AppText variant="body" style={{ fontWeight: '600' }}>Perfil esportivo</AppText>
             </View>
-            <AppText variant="muted">Preencha seus dados para encontrar torneios compativeis com voce. Pode pular e configurar depois.</AppText>
+            <AppText variant="muted">Preencha seus dados para encontrar torneios compativeis. Pode pular e configurar depois.</AppText>
 
             <Input label="Nome de exibicao" value={profile.display_name} onChangeText={(v) => setProfile({ ...profile, display_name: v })} autoCapitalize="words" />
             <Input label="Ano de nascimento" value={profile.birth_year} onChangeText={(v) => setProfile({ ...profile, birth_year: v.replace(/\D/g, '').slice(0, 4) })} keyboardType="number-pad" placeholder="Ex: 2008" />
@@ -304,30 +580,30 @@ export function RegisterScreen({ navigation }: Props) {
           </>
         ) : null}
 
-        {/* Step 3: Child account for parent/responsible */}
-        {step === 'child' ? (
+        {/* ── Step: Dependent creation (Família responsible only) ────────── */}
+        {step === 'dependent' ? (
           <>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Ionicons name="people-outline" size={20} color={colors.accentNeon} />
-              <AppText variant="body" style={{ fontWeight: '600' }}>Cadastrar filho</AppText>
+              <AppText variant="body" style={{ fontWeight: '600' }}>Cadastrar dependente</AppText>
             </View>
             <AppText variant="muted">
-              Crie a conta de jogador do seu filho. Depois ele podera entrar com este e-mail e senha para preencher as informacoes de competidor.
+              Crie a conta do seu dependente. Depois ele podera entrar com este e-mail e senha para preencher seu perfil esportivo.
             </AppText>
 
-            <Input label="Nome completo do filho" required value={childForm.full_name} onChangeText={(v) => setChildForm({ ...childForm, full_name: v })} autoCapitalize="words" placeholder="Ex: Pedro Silva" />
-            <Input label="E-mail do filho" required value={childForm.email} onChangeText={(v) => setChildForm({ ...childForm, email: v.trim() })} autoCapitalize="none" keyboardType="email-address" placeholder="filho@email.com" />
-            <Input label="Celular do filho" value={childForm.phone} onChangeText={(v) => setChildForm({ ...childForm, phone: v.replace(/\D/g, '') })} keyboardType="phone-pad" placeholder="Opcional" />
-            <Input label="Senha do filho" required value={childForm.password} onChangeText={(v) => setChildForm({ ...childForm, password: v })} secureTextEntry placeholder="Minimo 8 caracteres" />
-            <Input label="Confirme a senha do filho" required value={childForm.password_confirm} onChangeText={(v) => setChildForm({ ...childForm, password_confirm: v })} secureTextEntry placeholder="Repita a senha" />
+            <Input label="Nome completo do dependente" required value={dependentForm.full_name} onChangeText={(v) => setDependentForm({ ...dependentForm, full_name: v })} autoCapitalize="words" placeholder="Ex: Pedro Silva" />
+            <Input label="E-mail do dependente" required value={dependentForm.email} onChangeText={(v) => setDependentForm({ ...dependentForm, email: v.trim() })} autoCapitalize="none" keyboardType="email-address" placeholder="dependente@email.com" />
+            <Input label="Celular do dependente" value={dependentForm.phone} onChangeText={(v) => setDependentForm({ ...dependentForm, phone: v.replace(/\D/g, '') })} keyboardType="phone-pad" placeholder="Opcional" />
+            <Input label="Senha do dependente" required value={dependentForm.password} onChangeText={(v) => setDependentForm({ ...dependentForm, password: v })} secureTextEntry placeholder="Minimo 8 caracteres" />
+            <Input label="Confirme a senha" required value={dependentForm.password_confirm} onChangeText={(v) => setDependentForm({ ...dependentForm, password_confirm: v })} secureTextEntry placeholder="Repita a senha" />
 
-            <Button title="Cadastrar filho" onPress={onCreateChild} loading={submitting} />
+            <Button title="Cadastrar dependente" onPress={onCreateDependent} loading={submitting} />
             <Button title="Pular por enquanto" variant="ghost" onPress={() => { if (registeredUser) setUser(registeredUser); }} />
           </>
         ) : null}
       </Card>
 
-      {step === 'form' ? (
+      {(step === 'plan' || step === 'form') ? (
         <View style={{ alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 4 }}>
           <AppText variant="body" style={{ color: colors.textSecondary }}>Ja possui conta?</AppText>
           <Pressable onPress={() => navigation.navigate('Login')}>

@@ -256,19 +256,19 @@ export function ProfileScreen(_: Props) {
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
               <Ionicons name="people-outline" size={18} color={colors.accentNeon} />
-              <AppText variant="body" style={{ fontWeight: '700' }}>Meus filhos</AppText>
+              <AppText variant="body" style={{ fontWeight: '700' }}>Meus dependentes</AppText>
             </View>
             <Pressable
               onPress={() => navigation.navigate('Register' as never)}
               style={{ backgroundColor: `${colors.accentNeon}20`, borderWidth: 1, borderColor: `${colors.accentNeon}55`, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4, flexDirection: 'row', gap: 4, alignItems: 'center' }}
             >
               <Ionicons name="add" size={14} color={colors.accentNeon} />
-              <AppText variant="caption" style={{ color: colors.accentNeon, fontWeight: '700' }}>Adicionar filho</AppText>
+              <AppText variant="caption" style={{ color: colors.accentNeon, fontWeight: '700' }}>Adicionar dependente</AppText>
             </Pressable>
           </View>
           {children.length === 0 ? (
             <AppText variant="muted" style={{ textAlign: 'center', paddingVertical: 12 }}>
-              Nenhum filho cadastrado ainda. Adicione um filho para gerenciar o perfil dele.
+              Nenhum dependente cadastrado ainda. Adicione um dependente para gerenciar o perfil dele.
             </AppText>
           ) : children.map((link) => (
             <View key={link.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.borderSubtle }}>
@@ -292,7 +292,7 @@ export function ProfileScreen(_: Props) {
           <View>
             <AppText variant="section">Perfis esportivos</AppText>
             <AppText variant="caption" style={{ marginTop: 2 }}>
-              {isParent ? 'Perfis esportivos dos seus filhos' : isManagedChild ? 'Seu perfil esportivo' : 'Gerencie seus perfis de jogador'}
+              {isParent ? 'Perfis esportivos dos seus dependentes' : isManagedChild ? 'Seu perfil esportivo' : 'Gerencie seus perfis de jogador'}
             </AppText>
           </View>
           {!isParent && !isManagedChild ? (
@@ -315,8 +315,8 @@ export function ProfileScreen(_: Props) {
           />
         ) : profiles.length === 0 ? (
           <EmptyState
-            title={isParent ? 'Nenhum perfil esportivo dos filhos encontrado.' : isManagedChild ? 'Seu perfil esportivo ainda não foi preenchido.' : 'Nenhum perfil criado.'}
-            subtitle={isParent ? 'Peça ao seu filho para completar o perfil esportivo no app.' : isManagedChild ? 'Peça ao seu responsável para ajudar a completar seu perfil.' : 'Crie um perfil para ver torneios compatíveis, agenda e resultados.'}
+            title={isParent ? 'Nenhum perfil esportivo dos dependentes encontrado.' : isManagedChild ? 'Seu perfil esportivo ainda não foi preenchido.' : 'Nenhum perfil criado.'}
+            subtitle={isParent ? 'Peça ao seu dependente para completar o perfil esportivo no app.' : isManagedChild ? 'Peça ao seu responsável para ajudar a completar seu perfil.' : 'Crie um perfil para ver torneios compatíveis, agenda e resultados.'}
           />
         ) : profiles.map((p) =>
           editing?.id === p.id ? (

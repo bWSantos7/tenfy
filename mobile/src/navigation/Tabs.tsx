@@ -53,7 +53,7 @@ export function MainTabs() {
       <Tab.Screen name="Watchlist"   component={WatchlistScreen}   options={{ title: 'Agenda' }} />
       <Tab.Screen name="Results"     component={ResultsScreen}     options={{ title: 'Resultados' }} />
       {/* Alerts tab hidden from bottom bar — accessible via notification icon on HomeScreen header */}
-      <Tab.Screen name="Alerts"      component={AlertsScreen}      options={{ title: 'Alertas', tabBarButton: () => null }} />
+      <Tab.Screen name="Alerts"      component={AlertsScreen}      options={{ title: 'Alertas', tabBarButton: () => null, tabBarItemStyle: { display: 'none', width: 0, maxWidth: 0, minWidth: 0 } }} />
       <Tab.Screen name="Profile"     component={ProfileScreen}     options={{ title: 'Perfil' }} />
     </Tab.Navigator>
   );

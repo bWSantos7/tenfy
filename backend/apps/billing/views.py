@@ -72,9 +72,12 @@ def plans_list(request):
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def subscription_detail(request):
-    """Return the authenticated user's subscription. Creates pending Individual sub if none exists."""
-    sub = _get_or_create_individual_subscription(request.user)
-    return Response(SubscriptionSerializer(sub).data)
+    """Return the authenticated user's subscription. Returns 404 if none exists (no auto-create)."""
+    try:
+        sub = request.user.subscription
+        return Response(SubscriptionSerializer(sub).data)
+    except Subscription.DoesNotExist:
+        return Response({'has_subscription': False}, status=status.HTTP_404_NOT_FOUND)
 
 
 @api_view(['POST'])

@@ -51,9 +51,13 @@ export function HomeScreen(_: Props) {
       setRecent(((recentData.results || []) as TournamentEditionList[]).filter((ed) => !HIDDEN.includes(ed.dynamic_status || ed.status)).slice(0, 6));
       setUnreadCount((alerts || []).length);
       if (primary) {
-        const compatData = await compatibleForProfile(primary.id, { page_size: 8 }).catch(() => ({ results: [] as TournamentEditionList[] }));
+        const compatData = await compatibleForProfile(primary.id, { page_size: 20 }).catch(() => ({ results: [] as TournamentEditionList[] }));
         if (!active.current) return;
-        setCompat((compatData.results || []).slice(0, 8));
+        const ACTIVE_STATUSES = ['open', 'closing_soon', 'announced'];
+        const filtered = (compatData.results || [])
+          .filter((ed) => ACTIVE_STATUSES.includes(ed.dynamic_status || ed.status))
+          .slice(0, 8);
+        setCompat(filtered);
       }
       hasLoadedRef.current = true;
     } catch {
@@ -182,34 +186,7 @@ export function HomeScreen(_: Props) {
         }
       </View>
 
-      {/* Circuit Explorer — spec requirement: "Explorar por circuito" */}
-      <View>
-        <SectionHeader title="Explorar por circuito" subtitle="Selecione um circuito para ver torneios" />
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-          {getCircuits(colors).map((c) => (
-            <Pressable
-              key={c.key}
-              onPress={() => navigation.navigate('Tabs', { screen: 'Tournaments', params: { circuit: c.key } } as never)}
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 20, backgroundColor: `${c.color}18`, borderWidth: 1, borderColor: `${c.color}44` }}
-            >
-              <AppText variant="caption" style={{ color: c.color, fontWeight: '700', fontSize: 13 }}>{c.label}</AppText>
-            </Pressable>
-          ))}
-        </View>
-      </View>
     </Screen>
   );
 }
 
-// Categorical palette for circuit badges — mapped to theme tokens where possible.
-// FCT uses a fixed cyan brand color with no semantic equivalent in the palette.
-function getCircuits(c: ReturnType<typeof import('../../contexts/ThemeContext').useTheme>['colors']) {
-  return [
-    { key: 'FPT',   label: 'FPT',   color: c.statusOpen },
-    { key: 'CBT',   label: 'CBT',   color: c.accentBlue },
-    { key: 'COSAT', label: 'COSAT', color: c.statusClosing },
-    { key: 'ITF',   label: 'ITF',   color: c.statusProgress },
-    { key: 'UTR',   label: 'UTR',   color: c.danger },
-    { key: 'FCT',   label: 'FCT',   color: '#06B6D4' }, // brand cyan — no palette equivalent
-  ];
-}

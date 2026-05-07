@@ -4,33 +4,45 @@
 <meta charset="utf-8">
 <title>{{ alert.title }}</title>
 </head>
-<body style="margin:0;padding:0;background:#0D0D0D;color:#FFFFFF;font-family:Arial,Helvetica,sans-serif;">
-  <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:#0D0D0D;padding:24px 0;">
+<body style="margin:0;padding:0;background:#0A1330;color:#FFFFFF;font-family:Arial,Helvetica,sans-serif;">
+  <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:#0A1330;padding:24px 0;">
     <tr><td align="center">
       <table role="presentation" cellpadding="0" cellspacing="0" width="560"
-             style="background:#1F1F1F;border-radius:12px;padding:28px;">
+             style="background:#1D232D;border-radius:12px;padding:28px;">
         <tr><td>
-          <div style="font-size:12px;color:#00FF88;letter-spacing:2px;text-transform:uppercase;">Tennis Hub</div>
-          <h1 style="color:#FFFFFF;font-size:22px;margin:12px 0 16px;">{{ alert.title }}</h1>
-          <p style="color:#E6E6E6;line-height:1.55;white-space:pre-line;">{{ alert.body }}</p>
+          <!-- Tenfy header -->
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:20px;">
+            <div style="font-size:22px;font-weight:900;color:#C6EF21;letter-spacing:-0.5px;">tenfy</div>
+            <div style="width:6px;height:6px;border-radius:3px;background:#C6EF21;margin-top:2px;"></div>
+          </div>
+          <div style="width:100%;height:1px;background:#333;margin-bottom:20px;"></div>
+
+          <h1 style="color:#FFFFFF;font-size:22px;margin:0 0 16px;">{{ alert.title }}</h1>
+          <p style="color:#E6E6E6;line-height:1.55;white-space:pre-line;margin:0 0 20px;">{{ alert.body }}</p>
+
           {% if edition and edition.official_source_url %}
           <p style="margin-top:24px;">
             <a href="{{ edition.official_source_url }}"
-               style="background:#00FF88;color:#0D0D0D;padding:12px 20px;border-radius:8px;
+               style="background:#C6EF21;color:#0A1330;padding:12px 20px;border-radius:8px;
                       text-decoration:none;font-weight:bold;display:inline-block;">
               Abrir inscrição oficial
             </a>
           </p>
           {% endif %}
+
           {% if frontend_url %}
           <p style="margin-top:16px;">
-            <a href="{{ frontend_url }}" style="color:#00B2FF;font-size:14px;">Ver no Tennis Hub</a>
+            <a href="{{ frontend_url }}" style="color:#C6EF21;font-size:14px;">Ver no Tenfy</a>
           </p>
           {% endif %}
+
           <hr style="border:0;border-top:1px solid #333;margin:24px 0;">
-          <p style="color:#888;font-size:12px;">
-            Você recebeu este aviso porque está acompanhando este torneio. Ajuste suas preferências
-            em seu perfil ou ignore esta mensagem se não deseja mais recebê-la.
+          <p style="color:#888;font-size:12px;margin:0;">
+            Você recebeu este aviso porque está acompanhando este torneio no Tenfy.
+            Ajuste suas preferências em seu perfil ou ignore esta mensagem se não deseja mais recebê-la.
+          </p>
+          <p style="color:#555;font-size:11px;margin:12px 0 0;">
+            Tenfy — Plataforma de Tênis
           </p>
         </td></tr>
       </table>

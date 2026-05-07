@@ -10,13 +10,107 @@ import { Alert } from '../../types';
 import { listAlerts, markAlertRead, markAllAlertsRead } from '../../services/data';
 import { AppText, Button, Card, EmptyState, LoadingBlock, Screen } from '../../components/ui';
 import { haptic } from '../../hooks/useHaptic';
-import { fmtDateTime } from '../../utils/format';
 import api from '../../services/api';
 
 type Props = BottomTabScreenProps<MainTabParamList, 'Alerts'>;
 type PrefsTab = 'alerts' | 'prefs';
 
 type ThemeColors = ReturnType<typeof import('../../contexts/ThemeContext').useTheme>['colors'];
+
+const FIELD_MAP: Record<string, string> = {
+  entry_open_at:    'Inscrições abertas em',
+  entry_close_at:   'Prazo de inscrição',
+  start_date:       'Data de início',
+  end_date:         'Data de encerramento',
+  status:           'Status',
+  venue:            'Local',
+  venue_city:       'Cidade',
+  venue_state:      'Estado',
+  title:            'Título',
+  base_price_brl:   'Valor da inscrição',
+  surface:          'Superfície',
+  modality:         'Modalidade',
+  description:      'Descrição',
+  new:              'Novo valor',
+  old:              'Valor anterior',
+  before:           'Antes',
+  after:            'Depois',
+};
+
+const STATUS_LABELS_PT: Record<string, string> = {
+  open:              'Aberto',
+  closing_soon:      'Fechando em breve',
+  closed:            'Encerrado',
+  announced:         'Anunciado',
+  draws_published:   'Chaves publicadas',
+  in_progress:       'Em andamento',
+  finished:          'Finalizado',
+  canceled:          'Cancelado',
+};
+
+function fmtAlertDate(isoStr: string | null | undefined): string {
+  if (!isoStr) return '';
+  const date = new Date(isoStr);
+  const now  = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMin = Math.floor(diffMs / 60_000);
+  if (diffMin < 1)    return 'agora mesmo';
+  if (diffMin < 60)   return `há ${diffMin} min`;
+  const diffH = Math.floor(diffMin / 60);
+  if (diffH < 24)     return `há ${diffH}h`;
+  const diffD = Math.floor(diffH / 24);
+  if (diffD < 7)      return `há ${diffD} dia${diffD > 1 ? 's' : ''}`;
+  return date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
+}
+
+function formatAlertValue(key: string, value: string): string {
+  if (!value || value === 'None' || value === 'null') return '—';
+  if (key === 'status') return STATUS_LABELS_PT[value] ?? value;
+  if (key === 'base_price_brl') {
+    const n = parseFloat(value.replace(',', '.'));
+    if (!isNaN(n)) return `R$ ${n.toFixed(2).replace('.', ',')}`;
+  }
+  const isDatetimeKey = key.endsWith('_at');
+  const isDateKey = key.endsWith('_date');
+  const isChangeKey = key === 'old' || key === 'new' || key === 'before' || key === 'after';
+  if (isDatetimeKey || isDateKey || isChangeKey) {
+    try {
+      const d = new Date(value);
+      if (!isNaN(d.getTime())) {
+        // For _at fields or datetime strings (contain T+colon), show date + time
+        if (isDatetimeKey || (isChangeKey && value.includes('T') && value.includes(':'))) {
+          const dateStr = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+          const timeStr = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+          return `${dateStr} às ${timeStr}`;
+        }
+        return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
+      }
+    } catch { /* ignore */ }
+  }
+  return value;
+}
+
+function sanitizeAlertBody(body: string): string {
+  if (!body) return '';
+  const lines = body.split('\n');
+  const parts: string[] = [];
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const match = trimmed.match(/^([a-z_]+):\s*(.*)$/);
+    if (match) {
+      const [, key, raw] = match;
+      const label = FIELD_MAP[key];
+      if (label) {
+        parts.push(`${label}: ${formatAlertValue(key, raw.trim())}`);
+      }
+      // silently drop unknown technical keys (e.g. 'entry', 'close', raw field names)
+    } else {
+      parts.push(trimmed);
+    }
+  }
+  return parts.filter(Boolean).join('\n').trim();
+}
 
 function getKindConfig(c: ThemeColors): Record<string, { icon: string; color: string; label: string }> {
   return {
@@ -205,13 +299,15 @@ export function AlertsScreen(_: Props) {
                         )}
                       </View>
                       {alert.body ? (
-                        <AppText variant="caption" numberOfLines={2} style={{ marginBottom: 4 }}>{alert.body}</AppText>
+                        <AppText variant="caption" numberOfLines={3} style={{ marginBottom: 4 }}>
+                          {sanitizeAlertBody(alert.body)}
+                        </AppText>
                       ) : null}
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                         <View style={{ backgroundColor: `${cfg.color}15`, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
                           <AppText variant="muted" style={{ fontSize: 10, color: cfg.color }}>{cfg.label}</AppText>
                         </View>
-                        <AppText variant="muted" style={{ fontSize: 10 }}>{fmtDateTime(alert.created_at)}</AppText>
+                        <AppText variant="muted" style={{ fontSize: 10 }}>{fmtAlertDate(alert.created_at)}</AppText>
                       </View>
                     </View>
                   </View>

@@ -6,8 +6,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { MainStackParamList } from '../../navigation/types';
 import { useTheme } from '../../contexts/ThemeContext';
 import { AppText, Button, Card, EmptyState, LoadingBlock, Screen, SectionHeader } from '../../components/ui';
-import { TournamentRegistration, RegistrationStatus } from '../../types';
+import { TournamentRegistration, RegistrationStatus, WatchlistItem } from '../../types';
 import { myRegistrations, withdrawRegistration } from '../../services/registrations';
+import { listWatchlist } from '../../services/data';
 import { fmtDateRange } from '../../utils/format';
 import { extractApiError } from '../../services/api';
 
@@ -40,12 +41,15 @@ export function MyRegistrationsScreen({ navigation }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [registrations, setRegistrations] = useState<TournamentRegistration[]>([]);
   const [withdrawing, setWithdrawing] = useState<number | null>(null);
+  const [watchlistInscribed, setWatchlistInscribed] = useState<WatchlistItem[]>([]);
 
   async function load() {
     setLoading(true);
     setError(null);
     try {
-      setRegistrations(await myRegistrations());
+      const [regs, wl] = await Promise.all([myRegistrations(), listWatchlist()]);
+      setRegistrations(regs);
+      setWatchlistInscribed((wl as WatchlistItem[]).filter((i) => i.user_status === 'registered_declared'));
     } catch (err) {
       setError(extractApiError(err));
     } finally {
@@ -57,7 +61,9 @@ export function MyRegistrationsScreen({ navigation }: Props) {
     setRefreshing(true);
     setError(null);
     try {
-      setRegistrations(await myRegistrations());
+      const [regs, wl] = await Promise.all([myRegistrations(), listWatchlist()]);
+      setRegistrations(regs);
+      setWatchlistInscribed((wl as WatchlistItem[]).filter((i) => i.user_status === 'registered_declared'));
     } catch (err) {
       setError(extractApiError(err));
     } finally {
@@ -101,17 +107,55 @@ export function MyRegistrationsScreen({ navigation }: Props) {
           subtitle={error}
           action={<Button title="Tentar novamente" variant="ghost" onPress={load} />}
         />
-      ) : active.length === 0 && withdrawn.length === 0 ? (
+      ) : active.length === 0 && withdrawn.length === 0 && watchlistInscribed.length === 0 ? (
         <EmptyState
           icon="ticket-outline"
           title="Você ainda não tem inscrições"
-          subtitle="Quando se inscrever em um torneio, suas inscrições aparecerão aqui."
+          subtitle="Na Agenda, marque um torneio como 'Inscrito' para acompanhar aqui."
         />
       ) : (
         <>
+          {/* Watchlist-based inscriptions (declared by user) */}
+          {watchlistInscribed.length > 0 && (
+            <View>
+              <SectionHeader title="Inscrições declaradas" subtitle={`${watchlistInscribed.length} torneio${watchlistInscribed.length > 1 ? 's' : ''}`} />
+              {watchlistInscribed.map((item) => {
+                const ed = item.edition_detail;
+                return (
+                  <Pressable
+                    key={`wl-${item.id}`}
+                    onPress={() => navigation.navigate('TournamentDetail', { id: ed.id, edition: ed })}
+                    style={{ marginBottom: 10 }}
+                  >
+                    <Card>
+                      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
+                        <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: `${colors.accentNeon}20`, alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <Ionicons name="checkmark-circle" size={20} color={colors.accentNeon} />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <AppText variant="body" style={{ fontWeight: '700', fontSize: 14 }} numberOfLines={2}>{ed.title}</AppText>
+                          {ed.start_date ? (
+                            <AppText variant="caption" style={{ color: colors.textMuted, marginTop: 2 }}>
+                              {fmtDateRange(ed.start_date, ed.end_date)}
+                            </AppText>
+                          ) : null}
+                          <View style={{ marginTop: 4, backgroundColor: `${colors.accentNeon}18`, alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}>
+                            <AppText variant="caption" style={{ color: colors.accentNeon, fontWeight: '700', fontSize: 10 }}>Inscrito</AppText>
+                          </View>
+                        </View>
+                        <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+                      </View>
+                    </Card>
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
+
+          {/* Backend official registrations */}
           {active.length > 0 && (
             <View>
-              <SectionHeader title="Inscrições ativas" subtitle={`${active.length} inscrição${active.length > 1 ? 'ões' : ''}`} />
+              <SectionHeader title="Inscrições oficiais" subtitle={`${active.length} inscrição${active.length > 1 ? 'ões' : ''}`} />
               {active.map((reg) => (
                 <RegistrationCard
                   key={reg.id}

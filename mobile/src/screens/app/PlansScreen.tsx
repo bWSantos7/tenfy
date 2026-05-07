@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { TouchableOpacity, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
 import { MainStackParamList } from '../../navigation/types';
 import { checkout, fetchPlans, fetchSubscription, Plan, Subscription } from '../../services/billing';
 import { AppText, Button, Card, EmptyState, LoadingBlock, Screen } from '../../components/ui';
@@ -12,6 +13,11 @@ type Nav = NativeStackNavigationProp<MainStackParamList>;
 const PERIOD_LABELS: Record<string, string> = {
   monthly: 'Mensal',
   yearly:  'Anual',
+};
+
+const PLAN_ICONS: Record<string, string> = {
+  individual: 'person-outline',
+  familia:    'people-outline',
 };
 
 function formatPrice(price: string): string {
@@ -32,51 +38,73 @@ function PlanCard({
   onSelect: (plan: Plan) => void;
 }) {
   const { colors } = useTheme();
-  const isCurrent  = plan.slug === currentSlug;
-  const price      = billingPeriod === 'yearly' ? plan.price_yearly : plan.price_monthly;
+  const isCurrent     = plan.slug === currentSlug;
   const isHighlighted = Boolean(plan.highlight_label);
+  const price         = billingPeriod === 'yearly' ? plan.price_yearly : plan.price_monthly;
+  const icon          = PLAN_ICONS[plan.slug] ?? 'pricetag-outline';
 
   return (
     <Card style={[
-      { marginBottom: 18, padding: 18 },
+      { marginBottom: 18, padding: 20 },
       isHighlighted && { borderColor: colors.accentNeon, borderWidth: 2 },
-      isCurrent      && { backgroundColor: `${colors.accentNeon}14` },
+      isCurrent      && { backgroundColor: `${colors.accentNeon}0e` },
     ]}>
+      {/* Badge "Mais popular" */}
       {plan.highlight_label ? (
         <View style={{
           backgroundColor: colors.accentNeon, borderRadius: 20,
           paddingHorizontal: 10, paddingVertical: 3,
-          alignSelf: 'flex-start', marginBottom: 8,
+          alignSelf: 'flex-start', marginBottom: 12,
         }}>
-          <AppText variant="caption" style={{ color: colors.bgBase, fontWeight: '700' }}>
+          <AppText variant="caption" style={{ color: colors.bgBase, fontWeight: '700', fontSize: 11 }}>
             {plan.highlight_label}
           </AppText>
         </View>
       ) : null}
 
-      <AppText variant="section" style={{ marginBottom: 4 }}>{plan.name}</AppText>
+      {/* Icon + Plan name row */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+        <View style={{
+          width: 40, height: 40, borderRadius: 20,
+          backgroundColor: `${colors.accentNeon}18`,
+          alignItems: 'center', justifyContent: 'center',
+        }}>
+          <Ionicons name={icon as any} size={20} color={colors.accentNeon} />
+        </View>
+        <View>
+          <AppText variant="section">{plan.name}</AppText>
+          {/* "Até X perfis" subtitle for Família */}
+          {plan.slug === 'familia' && plan.max_members > 1 ? (
+            <AppText variant="caption" style={{ color: colors.textMuted, marginTop: 1 }}>
+              Até {plan.max_members} perfis na mesma conta
+            </AppText>
+          ) : null}
+        </View>
+      </View>
 
-      <View style={{ flexDirection: 'row', alignItems: 'flex-end', flexWrap: 'wrap', marginTop: 4, marginBottom: 8 }}>
-        <AppText style={{ fontSize: 30, lineHeight: 44, fontWeight: '800', color: colors.accentNeon }}>
+      {/* Price */}
+      <View style={{ flexDirection: 'row', alignItems: 'flex-end', marginBottom: 16 }}>
+        <AppText style={{ fontSize: 32, lineHeight: 40, fontWeight: '900', color: colors.accentNeon }}>
           {formatPrice(price)}
         </AppText>
         {parseFloat(price) > 0 && (
-          <AppText variant="muted" style={{ marginLeft: 4, marginBottom: 4, lineHeight: 18 }}>
+          <AppText variant="muted" style={{ marginLeft: 4, marginBottom: 5, fontSize: 13 }}>
             {' /'}{billingPeriod === 'yearly' ? 'ano' : 'mês'}
           </AppText>
         )}
       </View>
 
-      {plan.description ? (
-        <AppText variant="muted" style={{ marginBottom: 14, lineHeight: 19 }}>{plan.description}</AppText>
-      ) : null}
-
-      <View style={{ marginBottom: 16 }}>
+      {/* Feature list */}
+      <View style={{ marginBottom: 18, gap: 8 }}>
         {plan.features.map((f) => (
-          <View key={f.code} style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 5 }}>
-            <AppText style={{ color: colors.accentNeon, fontWeight: '700', marginRight: 6, fontSize: 14 }}>
-              ✓
-            </AppText>
+          <View key={f.code} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <View style={{
+              width: 18, height: 18, borderRadius: 9,
+              backgroundColor: `${colors.accentNeon}22`,
+              alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+            }}>
+              <Ionicons name="checkmark" size={11} color={colors.accentNeon} />
+            </View>
             <AppText variant="caption" style={{ flex: 1, lineHeight: 18 }}>
               {f.name}{f.limit != null ? ` (até ${f.limit})` : ''}
             </AppText>
@@ -85,11 +113,10 @@ function PlanCard({
       </View>
 
       <Button
-        title={isCurrent ? 'Plano atual' : 'Selecionar'}
+        title={isCurrent ? 'Plano atual' : 'Assinar agora'}
         variant={isCurrent ? 'secondary' : 'primary'}
         disabled={isCurrent}
         onPress={() => onSelect(plan)}
-        style={{ marginTop: 2 }}
       />
     </Card>
   );
@@ -98,12 +125,12 @@ function PlanCard({
 export function PlansScreen() {
   const navigation   = useNavigation<Nav>();
   const { colors }   = useTheme();
-  const [plans, setPlans]           = useState<Plan[]>([]);
-  const [subscription, setSubscription] = useState<Subscription | null>(null);
-  const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'yearly'>('monthly');
-  const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState<string | null>(null);
-  const [retryKey, setRetryKey] = useState(0);
+  const [plans, setPlans]                   = useState<Plan[]>([]);
+  const [subscription, setSubscription]     = useState<Subscription | null>(null);
+  const [billingPeriod, setBillingPeriod]   = useState<'monthly' | 'yearly'>('monthly');
+  const [loading, setLoading]               = useState(true);
+  const [error, setError]                   = useState<string | null>(null);
+  const [retryKey, setRetryKey]             = useState(0);
 
   useEffect(() => {
     setLoading(true);
@@ -168,38 +195,45 @@ export function PlansScreen() {
 
   return (
     <Screen>
-      <AppText variant="section" style={{ textAlign: 'center', marginBottom: 16 }}>
-        Escolha seu plano
+      <AppText variant="title" style={{ textAlign: 'center', marginBottom: 4 }}>
+        Nossos planos
+      </AppText>
+      <AppText variant="muted" style={{ textAlign: 'center', marginBottom: 20 }}>
+        Escolha o plano ideal para você e sua família
       </AppText>
 
       {/* Period toggle */}
       <View style={{
         flexDirection: 'row',
-        backgroundColor: colors.bgElevated,
-        borderRadius: 10,
-        marginBottom: 20,
-        padding: 2,
+        backgroundColor: colors.bgCard,
+        borderRadius: 12,
+        marginBottom: 24,
+        padding: 3,
+        borderWidth: 1,
+        borderColor: colors.borderSubtle,
       }}>
         {(['monthly', 'yearly'] as const).map((p) => (
           <TouchableOpacity
             key={p}
             style={[
-              { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 9 },
-              billingPeriod === p && { backgroundColor: colors.bgCard },
+              { flex: 1, paddingVertical: 9, alignItems: 'center', borderRadius: 10 },
+              billingPeriod === p && { backgroundColor: colors.accentNeon },
             ]}
             onPress={() => setBillingPeriod(p)}
           >
             <AppText style={{
               fontSize: 13,
-              fontWeight: billingPeriod === p ? '600' : '400',
-              color: billingPeriod === p ? colors.accentNeon : colors.textMuted,
+              fontWeight: '600',
+              color: billingPeriod === p ? colors.bgBase : colors.textMuted,
             }}>
               {PERIOD_LABELS[p]}
             </AppText>
             {p === 'yearly' && (
               <AppText style={{
-                fontSize: 11,
-                color: billingPeriod === p ? colors.accentNeon : colors.textMuted,
+                fontSize: 10,
+                fontWeight: '600',
+                color: billingPeriod === p ? colors.bgBase : colors.accentNeon,
+                marginTop: 1,
               }}>
                 2 meses grátis
               </AppText>

@@ -16,8 +16,10 @@ FEATURES = [
     ('profile_highlight',       'Destaque no perfil',             'Perfil destacado nos resultados de busca'),
     ('advanced_stats',          'Estatísticas avançadas',         'Acesso a estatísticas e análises detalhadas'),
     ('ranking_access',          'Acesso ao ranking',              'Visualizar rankings regionais e nacionais'),
-    ('unlimited_registrations', 'Inscrições ilimitadas',          'Sem limite de inscrições em torneios'),
-    ('advanced_filters',        'Filtros avançados',              'Filtros por nível, distância, tipo e mais'),
+    ('unlimited_registrations', 'Acesso completo aos torneios',   'Acesse e acompanhe todos os torneios disponíveis'),
+    ('advanced_filters',        'Filtros avançados e favoritos',  'Filtros por nível, distância, tipo e lista de favoritos'),
+    ('alerts_reminders',        'Alertas e lembretes',            'Receba alertas de prazo, chaves publicadas e alterações'),
+    ('priority_support',        'Suporte prioritário',            'Atendimento com prioridade via e-mail e chat'),
     ('match_priority',          'Prioridade em partidas',         'Prioridade na formação de duplas e partidas'),
     ('premium_tournaments',     'Torneios premium',               'Acesso a torneios exclusivos premium'),
     ('export_data',             'Exportar dados',                 'Exportar histórico e estatísticas em CSV/PDF'),
@@ -27,44 +29,42 @@ FEATURES = [
     ('family_members',          'Perfis de família',              'Adicionar dependentes ao plano Família'),
 ]
 
+# Individual plan features — exactly as shown in the product image
+_INDIVIDUAL_FEATURES = {
+    'unlimited_registrations': None,  # Acesso completo aos torneios
+    'advanced_filters':        None,  # Filtros avançados e favoritos
+    'alerts_reminders':        None,  # Alertas e lembretes
+    'priority_support':        None,  # Suporte prioritário
+}
+
+# Família includes all Individual features plus family member management
+_FAMILIA_FEATURES = {
+    **_INDIVIDUAL_FEATURES,
+    'family_members': None,           # Perfis de família (até 4 dependentes)
+}
+
 PLANS = [
     {
         'name': 'Individual',
         'slug': 'individual',
-        'price_monthly': '29.90',
-        'price_yearly':  '299.00',
+        'price_monthly': '19.90',
+        'price_yearly':  '199.00',
         'description': 'Para o atleta que quer centralizar seus torneios e evoluir no tênis.',
         'highlight_label': '',
         'display_order': 0,
         'max_members': 1,
-        'features': {
-            'ranking_access':          None,
-            'advanced_filters':        None,
-            'unlimited_registrations': None,
-            'advanced_stats':          None,
-            'export_data':             None,
-            'watchlist_unlimited':     None,
-        },
+        'features': _INDIVIDUAL_FEATURES,
     },
     {
         'name': 'Família',
         'slug': 'familia',
-        'price_monthly': '49.90',
-        'price_yearly':  '499.00',
-        'description': 'Para famílias que jogam tênis — até 5 perfis em uma única assinatura.',
+        'price_monthly': '34.90',
+        'price_yearly':  '349.00',
+        'description': 'Até 4 perfis na mesma conta.',
         'highlight_label': 'Mais popular',
         'display_order': 1,
-        'max_members': 5,
-        'features': {
-            'ranking_access':          None,
-            'advanced_filters':        None,
-            'unlimited_registrations': None,
-            'advanced_stats':          None,
-            'export_data':             None,
-            'watchlist_unlimited':     None,
-            'profile_highlight':       None,
-            'family_members':          None,
-        },
+        'max_members': 4,
+        'features': _FAMILIA_FEATURES,
     },
 ]
 

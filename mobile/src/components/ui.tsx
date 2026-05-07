@@ -27,8 +27,9 @@ export function Screen({
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const tabBarHeight = useContext(BottomTabBarHeightContext) ?? 0;
-  // tabBarHeight includes safe area; SafeAreaView already consumes insets.bottom → deduct it
-  const bottomPad = tabBarHeight > 0 ? Math.max(tabBarHeight - insets.bottom + 12, 20) : 20;
+  // For scrollable screens, pad the scroll content to clear the tab bar.
+  // For non-scroll screens (custom FlatLists etc.), children manage their own padding.
+  const bottomPad = tabBarHeight > 0 ? tabBarHeight + 8 : insets.bottom + 16;
   const content = scroll ? (
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.bgBase }}
@@ -50,10 +51,11 @@ export function Screen({
       {children}
     </ScrollView>
   ) : (
-    <View style={[styles.content, { flex: 1, backgroundColor: colors.bgBase, paddingBottom: bottomPad }]}>{children}</View>
+    // scroll=false: no extra paddingBottom — child FlatLists/ScrollViews manage their own
+    <View style={{ flex: 1, backgroundColor: colors.bgBase }}>{children}</View>
   );
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.bgBase }}>
+    <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bgBase }}>
       {content}
     </SafeAreaView>
   );

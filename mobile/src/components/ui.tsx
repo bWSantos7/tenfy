@@ -82,11 +82,11 @@ export function AppText({
 }) {
   const { colors } = useTheme();
   const map: Record<string, object> = {
-    title:   { fontSize: 26, fontWeight: '700', color: colors.textPrimary, letterSpacing: -0.5 },
-    section: { fontSize: 18, fontWeight: '700', color: colors.textPrimary },
-    body:    { fontSize: 14, color: colors.textPrimary, lineHeight: 20 },
-    muted:   { fontSize: 13, color: colors.textMuted },
-    caption: { fontSize: 12, color: colors.textSecondary },
+    title:   { fontSize: 26, fontFamily: 'Poppins_700Bold',     color: colors.textPrimary, letterSpacing: -0.3 },
+    section: { fontSize: 18, fontFamily: 'Poppins_600SemiBold', color: colors.textPrimary },
+    body:    { fontSize: 14, fontFamily: 'Poppins_400Regular',  color: colors.textPrimary, lineHeight: 22 },
+    muted:   { fontSize: 13, fontFamily: 'Poppins_400Regular',  color: colors.textMuted },
+    caption: { fontSize: 12, fontFamily: 'Poppins_500Medium',   color: colors.textSecondary },
   };
   return <Text style={[map[variant], style]} numberOfLines={numberOfLines}>{children}</Text>;
 }
@@ -209,7 +209,7 @@ export function Button({
       ]}>
         {loading
           ? <ActivityIndicator color={variant === 'primary' ? colors.bgBase : colors.accentNeon} />
-          : <Text style={{ color: palette.text, fontWeight: '700', fontSize: size === 'small' ? 13 : 15 }}>{title}</Text>
+          : <Text style={{ color: palette.text, fontFamily: 'Poppins_600SemiBold', fontSize: size === 'small' ? 13 : 15 }}>{title}</Text>
         }
       </Animated.View>
     </Pressable>
@@ -380,7 +380,7 @@ export function SelectField({
 const styles = StyleSheet.create({
   content: { padding: 16, gap: 16 },
   card:    { borderWidth: 1, borderRadius: 16, padding: 16, gap: 10, marginBottom: 14 },
-  input:   { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13, fontSize: 15 },
+  input:   { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13, fontSize: 15, fontFamily: 'Poppins_400Regular' },
   button:      { minHeight: 50, borderWidth: 1, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20, paddingVertical: 13 },
   buttonSmall: { minHeight: 32, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
 });

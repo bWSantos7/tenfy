@@ -25,17 +25,18 @@ export const AppLayout: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-bg-base flex flex-col">
-      <header className="sticky top-0 z-30 bg-bg-base/80 backdrop-blur-lg border-b border-border-subtle">
+      <header className="sticky top-0 z-30 bg-bg-card/90 backdrop-blur-lg border-b border-border-subtle shadow-sm">
         <div className="mx-auto max-w-5xl px-4 h-14 flex items-center justify-between">
-          <NavLink to="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-accent-neon flex items-center justify-center shadow-glow overflow-hidden">
-              <img src="/icons/logo.png" alt="Tennis Hub" className="w-6 h-6 object-contain" style={{ filter: 'brightness(0)' }} />
+          <NavLink to="/" className="flex items-center gap-2.5 group">
+            <div className="w-8 h-8 rounded-lg bg-accent-neon flex items-center justify-center shadow-glow overflow-hidden flex-shrink-0">
+              <img src="/icons/logo.png" alt="Tenfy" className="w-6 h-6 object-contain" />
             </div>
             <div>
-              <div className="text-sm font-bold leading-tight">Tennis Hub</div>
-              <div className="text-[10px] text-text-muted leading-tight">Tênis • Brasil</div>
+              <div className="text-sm font-bold leading-tight text-text-primary tracking-tight">Tenfy</div>
+              <div className="text-[10px] text-text-muted leading-tight">Calendário inteligente</div>
             </div>
           </NavLink>
+
           <div className="flex items-center gap-1">
             {user?.role === 'coach' && (
               <NavLink
@@ -68,9 +69,11 @@ export const AppLayout: React.FC = () => {
             <button
               onClick={toggleTheme}
               className="btn-ghost !px-2"
-              title={theme === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'}
+              title={theme === 'dark' ? 'Modo claro' : 'Modo escuro'}
             >
-              {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              {theme === 'dark'
+                ? <Sun className="w-4 h-4 text-accent-lime" />
+                : <Moon className="w-4 h-4" />}
             </button>
             <button
               onClick={handleLogout}
@@ -96,17 +99,19 @@ export const AppLayout: React.FC = () => {
               to={to}
               end={end}
               className={({ isActive }) =>
-                `flex flex-col items-center justify-center gap-0.5 text-[10px] transition-colors ${
+                `flex flex-col items-center justify-center gap-0.5 text-[10px] font-medium transition-colors ${
                   isActive
                     ? 'text-accent-neon'
-                    : 'text-text-muted hover:text-text-primary'
+                    : 'text-text-muted hover:text-text-secondary'
                 }`
               }
             >
               {({ isActive }) => (
                 <>
-                  <Icon className={`w-5 h-5 ${isActive ? 'drop-shadow-[0_0_4px_#00FF88]' : ''}`} />
-                  <span className="font-medium">{label}</span>
+                  <div className={`p-1 rounded-lg transition-colors ${isActive ? 'bg-accent-neon/10' : ''}`}>
+                    <Icon className="w-5 h-5" />
+                  </div>
+                  <span>{label}</span>
                 </>
               )}
             </NavLink>

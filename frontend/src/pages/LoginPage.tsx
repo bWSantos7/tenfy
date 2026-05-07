@@ -37,10 +37,10 @@ export const LoginPage: React.FC = () => {
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center mb-8">
           <div className="w-16 h-16 rounded-2xl bg-accent-neon flex items-center justify-center shadow-glow mb-4 overflow-hidden">
-            <img src="/icons/logo.png" alt="Tennis Hub" className="w-12 h-12 object-contain" style={{ filter: 'brightness(0)' }} />
+            <img src="/icons/logo.png" alt="Tenfy" className="w-12 h-12 object-contain" />
           </div>
-          <h1 className="text-2xl font-bold">Tennis Hub</h1>
-          <p className="text-text-muted text-sm mt-1">Seu hub de torneios de tênis</p>
+          <h1 className="text-2xl font-bold tracking-tight">Tenfy</h1>
+          <p className="text-text-muted text-sm mt-1">Seu calendário inteligente de torneios</p>
         </div>
 
         <form onSubmit={onSubmit} className="card space-y-4">

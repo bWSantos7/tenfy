@@ -26,6 +26,7 @@ staticfiles/
 # Environment variables
 .env
 *.env
+*.env.backup.*
 *.env.backup.local
 !.env.example
 .env.local
@@ -85,3 +86,6 @@ escopo_contrato.pdf
 contexto/
 *.pdf
 ai-team/
+design/
+scripts/
+

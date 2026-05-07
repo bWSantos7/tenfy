@@ -1,0 +1,464 @@
+[
+  {
+    "file": "app-icons/app-icon-compact-precise.png",
+    "category": "app-icons",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "app-icons/app-icon-dark-precise.png",
+    "category": "app-icons",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "app-icons/app-icon-dark-raw.png",
+    "category": "app-icons",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "app-icons/app-icon-light-precise.png",
+    "category": "app-icons",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "app-icons/app-icon-light-raw.png",
+    "category": "app-icons",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "app-icons/app-icon-neutral-raw.png",
+    "category": "app-icons",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "badges/badges-mode-raw.png",
+    "category": "badges",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "badges/badges-system-raw.png",
+    "category": "badges",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "favicons/favicon-precise.png",
+    "category": "favicons",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "favicons/favicon-raw.png",
+    "category": "favicons",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "illustrations/illustration-empty-state-clean.png",
+    "category": "illustrations",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "illustrations/illustration-empty-state.png",
+    "category": "illustrations",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "illustrations/illustration-loading.png",
+    "category": "illustrations",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "illustrations/illustration-onboarding-clean.png",
+    "category": "illustrations",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "illustrations/illustration-onboarding.png",
+    "category": "illustrations",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "images/card-promo-clean.png",
+    "category": "images",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "images/card-promo.png",
+    "category": "images",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "images/hero-banner.png",
+    "category": "images",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "images/photography-background.png",
+    "category": "images",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "images/splash-design-reference.png",
+    "category": "images",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "images/splash-reference.png",
+    "category": "images",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "images/template-post.png",
+    "category": "images",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "logos/logo-horizontal-clean.png",
+    "category": "logos",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "logos/logo-main-clean.png",
+    "category": "logos",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "logos/logo-mono-dark-clean.png",
+    "category": "logos",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "logos/logo-mono-light-clean.png",
+    "category": "logos",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "logos/logo-symbol-clean.png",
+    "category": "logos",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "logos/logo-tenfy-compact.png",
+    "category": "logos",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "logos/logo-tenfy-horizontal-final.png",
+    "category": "logos",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "logos/logo-tenfy-horizontal.png",
+    "category": "logos",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "logos/logo-tenfy-mono-dark.png",
+    "category": "logos",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "logos/logo-tenfy-mono-light.png",
+    "category": "logos",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "logos/logo-tenfy-outline.png",
+    "category": "logos",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "logos/logo-tenfy-symbol-final.png",
+    "category": "logos",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "logos/logo-tenfy-symbol.png",
+    "category": "logos",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "logos/logo-tenfy-vertical.png",
+    "category": "logos",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "logos/logo-vertical-clean.png",
+    "category": "logos",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "misc/avatar-circular-raw.png",
+    "category": "misc",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "misc/avatar-square-raw.png",
+    "category": "misc",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "misc/launcher-icon-raw.png",
+    "category": "misc",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "misc/notification-icon-raw.png",
+    "category": "misc",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "misc/pattern-background-clean.png",
+    "category": "misc",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "misc/pattern-background.png",
+    "category": "misc",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "stickers/sticker-hand-clean.png",
+    "category": "stickers",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "stickers/sticker-hand.png",
+    "category": "stickers",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "stickers/sticker-lightning-clean.png",
+    "category": "stickers",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "stickers/sticker-lightning.png",
+    "category": "stickers",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "stickers/sticker-medal-clean.png",
+    "category": "stickers",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "stickers/sticker-medal.png",
+    "category": "stickers",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "stickers/sticker-racket-clean.png",
+    "category": "stickers",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "stickers/sticker-racket.png",
+    "category": "stickers",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "stickers/sticker-shield-clean.png",
+    "category": "stickers",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "stickers/sticker-shield.png",
+    "category": "stickers",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "stickers/sticker-trophy-clean.png",
+    "category": "stickers",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "stickers/sticker-trophy.png",
+    "category": "stickers",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "ui-icons/icon-calendar.png",
+    "category": "ui-icons",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "ui-icons/icon-favorites.png",
+    "category": "ui-icons",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "ui-icons/icon-filter.png",
+    "category": "ui-icons",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "ui-icons/icon-home.png",
+    "category": "ui-icons",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "ui-icons/icon-profile.png",
+    "category": "ui-icons",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "ui-icons/icon-ranking.png",
+    "category": "ui-icons",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "ui-icons/icon-search.png",
+    "category": "ui-icons",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "ui-icons/icon-settings.png",
+    "category": "ui-icons",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "ui-icons/icon-star.png",
+    "category": "ui-icons",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "ui-icons/icon-tennis.png",
+    "category": "ui-icons",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  },
+  {
+    "file": "ui-icons/ui-icons-grid-raw.png",
+    "category": "ui-icons",
+    "source": "design/",
+    "usage": "",
+    "notes": "extracted from brand manual"
+  }
+]

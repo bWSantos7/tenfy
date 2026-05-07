@@ -17,7 +17,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
             position="top-center"
             toastOptions={{
               className: '!bg-bg-card !text-text-primary !border !border-border-subtle !rounded-xl',
-              success: { iconTheme: { primary: '#00FF88', secondary: 'rgb(var(--bg-base))' } },
+              success: { iconTheme: { primary: '#3DC55E', secondary: 'rgb(var(--bg-base))' } },
               error:   { iconTheme: { primary: '#FF5A5A', secondary: 'rgb(var(--bg-base))' } },
             }}
           />

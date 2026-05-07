@@ -2,6 +2,15 @@ import React from 'react';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import Toast from 'react-native-toast-message';
 import { StatusBar } from 'expo-status-bar';
+import { View, ActivityIndicator } from 'react-native';
+import { useFonts } from 'expo-font';
+import {
+  Poppins_400Regular,
+  Poppins_500Medium,
+  Poppins_600SemiBold,
+  Poppins_700Bold,
+  Poppins_800ExtraBold,
+} from '@expo-google-fonts/poppins';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 import { RootNavigator } from './src/navigation/RootNavigator';
@@ -13,7 +22,7 @@ function AppContent() {
   const { theme, colors } = useTheme();
   if (!ready) return null;
   const navTheme = theme === 'dark'
-    ? { ...DarkTheme,   colors: { ...DarkTheme.colors,   background: colors.bgBase, card: colors.bgCard, border: colors.borderSubtle, text: colors.textPrimary, primary: colors.accentNeon } }
+    ? { ...DarkTheme,    colors: { ...DarkTheme.colors,    background: colors.bgBase, card: colors.bgCard, border: colors.borderSubtle, text: colors.textPrimary, primary: colors.accentNeon } }
     : { ...DefaultTheme, colors: { ...DefaultTheme.colors, background: colors.bgBase, card: colors.bgCard, border: colors.borderSubtle, text: colors.textPrimary, primary: colors.accentNeon } };
   return (
     <NavigationContainer theme={navTheme}>
@@ -26,6 +35,22 @@ function AppContent() {
 }
 
 export default function App() {
+  const [fontsLoaded] = useFonts({
+    Poppins_400Regular,
+    Poppins_500Medium,
+    Poppins_600SemiBold,
+    Poppins_700Bold,
+    Poppins_800ExtraBold,
+  });
+
+  if (!fontsLoaded) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#F6F7FA', alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator size="large" color="#0A1330" />
+      </View>
+    );
+  }
+
   return (
     <ErrorBoundary>
       <ThemeProvider>

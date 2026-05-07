@@ -44,12 +44,12 @@ export function LoginScreen({ navigation }: Props) {
   return (
     <Screen scroll={false}>
       <View style={{ flex: 1, justifyContent: 'center' }}>
-        <View style={{ alignItems: 'center', marginBottom: 24 }}>
-          <View style={{ width: 72, height: 72, borderRadius: 20, backgroundColor: colors.accentNeon, alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
-            <Image source={require('../../../assets/icon.png')} style={{ width: 52, height: 52 }} resizeMode="contain" tintColor={colors.bgBase} />
-          </View>
-          <AppText variant="title">Tennis Hub</AppText>
-          <AppText variant="muted" style={{ marginTop: 6 }}>Seu hub de torneios de tênis</AppText>
+        <View style={{ alignItems: 'center', marginBottom: 32 }}>
+          <Image
+            source={require('../../../assets/tenfy/logos/logo-main-clean.png')}
+            style={{ width: 220, height: 70 }}
+            resizeMode="contain"
+          />
         </View>
         <Card>
           <Input label="E-mail" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" placeholder="voce@exemplo.com" />

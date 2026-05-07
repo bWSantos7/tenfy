@@ -10,7 +10,7 @@ type ThemeContextType = {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<AppTheme>('dark');
+  const [theme, setTheme] = useState<AppTheme>('light');
   const value = useMemo(() => ({
     theme,
     colors: palette[theme],

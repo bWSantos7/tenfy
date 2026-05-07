@@ -39,7 +39,11 @@ export const storage = {
 };
 
 function resolveBaseUrl(): string {
-  const configured = (process.env.EXPO_PUBLIC_API_BASE_URL || '').trim();
+  const configured = (
+    process.env.EXPO_PUBLIC_API_BASE_URL
+    || process.env.EXPO_PUBLIC_API_URL
+    || ''
+  ).trim();
   if (configured) return configured;
   return 'https://api.tennis.app.br';
 }

@@ -29,6 +29,182 @@ type Props = BottomTabScreenProps<MainTabParamList, 'Tournaments'>;
 type StackNav = NativeStackNavigationProp<MainStackParamList>;
 type ViewMode = 'list' | 'calendar';
 
+// ─── FilterHeader ─────────────────────────────────────────────────────────────
+// MUST live outside TournamentsScreen so FlatList/ScrollView receive a stable
+// component reference. Defining it inside causes FlatList to remount the header
+// on every render (new function ref = new component type), which destroys TextInput
+// focus and closes SelectField modals — breaking category and federation filters.
+
+interface FilterHeaderProps {
+  query: string;
+  onQueryChange: (v: string) => void;
+  showAdvanced: boolean;
+  onToggleAdvanced: () => void;
+  activeFilterCount: number;
+  hasAnyInput: boolean;
+  onClearFilters: () => void;
+  statusFilter: string;
+  onStatusChange: (v: string) => void;
+  circuitFilter: string;
+  onCircuitChange: (v: string) => void;
+  federationFilter: number | undefined;
+  onFederationChange: (v: string) => void;
+  organizationOptions: { value: string; label: string }[];
+  categoryFilter: string;
+  onCategoryChange: (v: string) => void;
+  stateFilter: string;
+  onStateChange: (v: string) => void;
+  cityFilter: string;
+  onCityChange: (v: string) => void;
+  fromDate: string;
+  onFromDateChange: (v: string) => void;
+  toDate: string;
+  onToDateChange: (v: string) => void;
+  modalityFilter: string;
+  onModalityChange: (v: string) => void;
+  surfaceFilter: string;
+  onSurfaceChange: (v: string) => void;
+  nearMe: boolean;
+  onNearMeToggle: () => void;
+  primaryProfileId: number | null;
+}
+
+function FilterHeader({
+  query, onQueryChange,
+  showAdvanced, onToggleAdvanced,
+  activeFilterCount, hasAnyInput, onClearFilters,
+  statusFilter, onStatusChange,
+  circuitFilter, onCircuitChange,
+  federationFilter, onFederationChange,
+  organizationOptions,
+  categoryFilter, onCategoryChange,
+  stateFilter, onStateChange,
+  cityFilter, onCityChange,
+  fromDate, onFromDateChange,
+  toDate, onToDateChange,
+  modalityFilter, onModalityChange,
+  surfaceFilter, onSurfaceChange,
+  nearMe, onNearMeToggle,
+  primaryProfileId,
+}: FilterHeaderProps) {
+  const { colors } = useTheme();
+  return (
+    <View>
+      <Input value={query} onChangeText={onQueryChange} placeholder="Buscar por nome, cidade, circuito..." />
+
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, marginBottom: 8 }}>
+        <Pressable
+          onPress={onToggleAdvanced}
+          style={{
+            flexDirection: 'row', alignItems: 'center', gap: 6,
+            paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10,
+            backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.borderSubtle,
+          }}
+        >
+          <Ionicons name="options-outline" size={16} color={colors.textSecondary} />
+          <AppText variant="caption" style={{ fontWeight: '600' }}>
+            {showAdvanced ? 'Ocultar filtros' : 'Mais filtros'}
+          </AppText>
+          {activeFilterCount > 0 ? (
+            <View style={{ minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5, backgroundColor: colors.accentNeon, alignItems: 'center', justifyContent: 'center' }}>
+              <AppText variant="caption" style={{ color: colors.bgBase, fontWeight: '700', fontSize: 11 }}>{activeFilterCount}</AppText>
+            </View>
+          ) : null}
+        </Pressable>
+        {hasAnyInput ? (
+          <Pressable onPress={onClearFilters} style={{ marginLeft: 'auto', paddingHorizontal: 8, paddingVertical: 8 }}>
+            <AppText variant="caption" style={{ color: colors.accentBlue, fontWeight: '600' }}>Limpar</AppText>
+          </Pressable>
+        ) : null}
+      </View>
+
+      {showAdvanced ? (
+        <View style={{ gap: 10, padding: 12, marginBottom: 10, borderRadius: 12, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.borderSubtle }}>
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <View style={{ flex: 1 }}>
+              <SelectField label="Status" value={statusFilter} options={STATUS_FILTERS} onSelect={onStatusChange} placeholder="Todos" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <SelectField label="Circuito" value={circuitFilter} options={CIRCUIT_FILTERS} onSelect={onCircuitChange} placeholder="Todos" />
+            </View>
+          </View>
+
+          <SelectField
+            label="Organização"
+            value={federationFilter ? String(federationFilter) : ''}
+            options={organizationOptions}
+            onSelect={onFederationChange}
+            placeholder="Todas"
+            searchable
+          />
+
+          <Input
+            label="Categoria"
+            value={categoryFilter}
+            onChangeText={onCategoryChange}
+            placeholder="Ex.: 16M, GA, Sub-12"
+          />
+
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <View style={{ flex: 1 }}>
+              <SelectField label="UF" value={stateFilter} options={STATE_OPTIONS} onSelect={onStateChange} placeholder="Todas" searchable />
+            </View>
+            <View style={{ flex: 1.4 }}>
+              <Input label="Cidade" value={cityFilter} onChangeText={onCityChange} placeholder="Ex.: São Paulo" autoCapitalize="words" />
+            </View>
+          </View>
+
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <View style={{ flex: 1 }}>
+              <Input
+                label="Data inicial" value={fromDate} onChangeText={onFromDateChange}
+                placeholder="AAAA-MM-DD" keyboardType="numbers-and-punctuation"
+                autoCapitalize="none" autoCorrect={false} maxLength={10}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Input
+                label="Data final" value={toDate} onChangeText={onToDateChange}
+                placeholder="AAAA-MM-DD" keyboardType="numbers-and-punctuation"
+                autoCapitalize="none" autoCorrect={false} maxLength={10}
+              />
+            </View>
+          </View>
+
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <View style={{ flex: 1 }}>
+              <SelectField label="Modalidade" value={modalityFilter} options={MODALITY_OPTIONS} onSelect={onModalityChange} placeholder="Todas" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <SelectField label="Superfície" value={surfaceFilter} options={SURFACE_OPTIONS} onSelect={onSurfaceChange} placeholder="Todas" />
+            </View>
+          </View>
+
+          {primaryProfileId ? (
+            <Pressable
+              onPress={onNearMeToggle}
+              style={{
+                flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                paddingHorizontal: 14, paddingVertical: 12, borderRadius: 12,
+                backgroundColor: nearMe ? `${colors.accentNeon}22` : colors.bgBase,
+                borderWidth: 1, borderColor: nearMe ? colors.accentNeon : colors.borderSubtle,
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="location-outline" size={16} color={nearMe ? colors.accentNeon : colors.textSecondary} />
+                <AppText variant="caption" style={{ color: nearMe ? colors.accentNeon : colors.textSecondary, fontWeight: '600' }}>
+                  Perto de mim
+                </AppText>
+              </View>
+              <Ionicons name={nearMe ? 'toggle' : 'toggle-outline'} size={28} color={nearMe ? colors.accentNeon : colors.textMuted} />
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 const MONTHS_PT = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 const WEEKDAYS_PT = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
 const TODAY = new Date().toISOString().slice(0, 10);
@@ -294,6 +470,13 @@ export function TournamentsScreen({ route }: Props) {
     setNearMe(false);
   }
 
+  // Stable callbacks for FilterHeader — avoids creating new lambdas in render
+  const handleFederationChange = useCallback((v: string) => setFederationFilter(v ? Number(v) : undefined), []);
+  const handleFromDateChange   = useCallback((v: string) => setFromDate(formatIsoDateInput(v)), []);
+  const handleToDateChange     = useCallback((v: string) => setToDate(formatIsoDateInput(v)), []);
+  const handleToggleAdvanced   = useCallback(() => setShowAdvanced((v) => !v), []);
+  const handleNearMeToggle     = useCallback(() => setNearMe((v) => !v), []);
+
   function toggleCompareMode() { setCompareMode((v) => !v); setCompareIds([]); }
 
   function toggleCompareId(id: number) {
@@ -349,173 +532,24 @@ export function TournamentsScreen({ route }: Props) {
     [federations],
   );
 
-  // Header for FlatList — must be a component function (not a JSX element)
-  // so FlatList re-renders it when any filter state changes.
-  function ListHeaderComponent() {
-    return (
-    <View>
-      <Input value={query} onChangeText={setQuery} placeholder="Buscar por nome, cidade, circuito..." />
-
-      {/* Advanced filters toggle row */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, marginBottom: 8 }}>
-        <Pressable
-          onPress={() => setShowAdvanced((v) => !v)}
-          style={{
-            flexDirection: 'row', alignItems: 'center', gap: 6,
-            paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10,
-            backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.borderSubtle,
-          }}
-        >
-          <Ionicons name="options-outline" size={16} color={colors.textSecondary} />
-          <AppText variant="caption" style={{ fontWeight: '600' }}>
-            {showAdvanced ? 'Ocultar filtros' : 'Mais filtros'}
-          </AppText>
-          {activeFilterCount > 0 ? (
-            <View style={{ minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5, backgroundColor: colors.accentNeon, alignItems: 'center', justifyContent: 'center' }}>
-              <AppText variant="caption" style={{ color: colors.bgBase, fontWeight: '700', fontSize: 11 }}>{activeFilterCount}</AppText>
-            </View>
-          ) : null}
-        </Pressable>
-        {hasAnyInput ? (
-          <Pressable onPress={clearFilters} style={{ marginLeft: 'auto', paddingHorizontal: 8, paddingVertical: 8 }}>
-            <AppText variant="caption" style={{ color: colors.accentBlue, fontWeight: '600' }}>Limpar</AppText>
-          </Pressable>
-        ) : null}
-      </View>
-
-      {showAdvanced ? (
-        <View style={{ gap: 10, padding: 12, marginBottom: 10, borderRadius: 12, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.borderSubtle }}>
-          <View style={{ flexDirection: 'row', gap: 10 }}>
-            <View style={{ flex: 1 }}>
-              <SelectField
-                label="Status"
-                value={statusFilter}
-                options={STATUS_FILTERS}
-                onSelect={setStatusFilter}
-                placeholder="Todos"
-              />
-            </View>
-            <View style={{ flex: 1 }}>
-              <SelectField
-                label="Circuito"
-                value={circuitFilter}
-                options={CIRCUIT_FILTERS}
-                onSelect={setCircuitFilter}
-                placeholder="Todos"
-              />
-            </View>
-          </View>
-
-          <SelectField
-            label="Organização"
-            value={federationFilter ? String(federationFilter) : ''}
-            options={organizationOptions}
-            onSelect={(value) => setFederationFilter(value ? Number(value) : undefined)}
-            placeholder="Todas"
-            searchable
-          />
-
-          <Input
-            label="Categoria"
-            value={categoryFilter}
-            onChangeText={setCategoryFilter}
-            placeholder="Ex.: 16M, GA, Sub-12"
-          />
-
-          <View style={{ flexDirection: 'row', gap: 10 }}>
-            <View style={{ flex: 1 }}>
-              <SelectField
-                label="UF"
-                value={stateFilter}
-                options={STATE_OPTIONS}
-                onSelect={setStateFilter}
-                placeholder="Todas"
-                searchable
-              />
-            </View>
-            <View style={{ flex: 1.4 }}>
-              <Input
-                label="Cidade"
-                value={cityFilter}
-                onChangeText={setCityFilter}
-                placeholder="Ex.: São Paulo"
-                autoCapitalize="words"
-              />
-            </View>
-          </View>
-
-          <View style={{ flexDirection: 'row', gap: 10 }}>
-            <View style={{ flex: 1 }}>
-              <Input
-                label="Data inicial"
-                value={fromDate}
-                onChangeText={(value) => setFromDate(formatIsoDateInput(value))}
-                placeholder="AAAA-MM-DD"
-                keyboardType="numbers-and-punctuation"
-                autoCapitalize="none"
-                autoCorrect={false}
-                maxLength={10}
-              />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Input
-                label="Data final"
-                value={toDate}
-                onChangeText={(value) => setToDate(formatIsoDateInput(value))}
-                placeholder="AAAA-MM-DD"
-                keyboardType="numbers-and-punctuation"
-                autoCapitalize="none"
-                autoCorrect={false}
-                maxLength={10}
-              />
-            </View>
-          </View>
-
-          <View style={{ flexDirection: 'row', gap: 10 }}>
-            <View style={{ flex: 1 }}>
-              <SelectField
-                label="Modalidade"
-                value={modalityFilter}
-                options={MODALITY_OPTIONS}
-                onSelect={setModalityFilter}
-                placeholder="Todas"
-              />
-            </View>
-            <View style={{ flex: 1 }}>
-              <SelectField
-                label="Superfície"
-                value={surfaceFilter}
-                options={SURFACE_OPTIONS}
-                onSelect={setSurfaceFilter}
-                placeholder="Todas"
-              />
-            </View>
-          </View>
-
-          {primaryProfileId ? (
-            <Pressable
-              onPress={() => setNearMe((v) => !v)}
-              style={{
-                flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-                paddingHorizontal: 14, paddingVertical: 12, borderRadius: 12,
-                backgroundColor: nearMe ? `${colors.accentNeon}22` : colors.bgBase,
-                borderWidth: 1, borderColor: nearMe ? colors.accentNeon : colors.borderSubtle,
-              }}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Ionicons name="location-outline" size={16} color={nearMe ? colors.accentNeon : colors.textSecondary} />
-                <AppText variant="caption" style={{ color: nearMe ? colors.accentNeon : colors.textSecondary, fontWeight: '600' }}>
-                  Perto de mim
-                </AppText>
-              </View>
-              <Ionicons name={nearMe ? 'toggle' : 'toggle-outline'} size={28} color={nearMe ? colors.accentNeon : colors.textMuted} />
-            </Pressable>
-          ) : null}
-        </View>
-      ) : null}
-    </View>
-    );
-  }
+  const filterHeaderProps: FilterHeaderProps = {
+    query, onQueryChange: setQuery,
+    showAdvanced, onToggleAdvanced: handleToggleAdvanced,
+    activeFilterCount, hasAnyInput, onClearFilters: clearFilters,
+    statusFilter, onStatusChange: setStatusFilter,
+    circuitFilter, onCircuitChange: setCircuitFilter,
+    federationFilter, onFederationChange: handleFederationChange,
+    organizationOptions,
+    categoryFilter, onCategoryChange: setCategoryFilter,
+    stateFilter, onStateChange: setStateFilter,
+    cityFilter, onCityChange: setCityFilter,
+    fromDate, onFromDateChange: handleFromDateChange,
+    toDate, onToDateChange: handleToDateChange,
+    modalityFilter, onModalityChange: setModalityFilter,
+    surfaceFilter, onSurfaceChange: setSurfaceFilter,
+    nearMe, onNearMeToggle: handleNearMeToggle,
+    primaryProfileId,
+  };
 
   const year = calMonth.getFullYear();
   const month = calMonth.getMonth();
@@ -558,7 +592,7 @@ export function TournamentsScreen({ route }: Props) {
             data={loading ? [] : items}
             keyExtractor={keyExtractor}
             renderItem={renderItem}
-            ListHeaderComponent={ListHeaderComponent}
+            ListHeaderComponent={<FilterHeader {...filterHeaderProps} />}
             ItemSeparatorComponent={() => <View style={{ height: 2 }} />}
             ListEmptyComponent={
               loading
@@ -606,7 +640,7 @@ export function TournamentsScreen({ route }: Props) {
         </>
       ) : (
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 96 }}>
-          <ListHeaderComponent />
+          <FilterHeader {...filterHeaderProps} />
 
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
             <Pressable onPress={() => { setCalMonth(new Date(year, month - 1, 1)); setSelectedDate(null); }} style={{ padding: 8 }}>

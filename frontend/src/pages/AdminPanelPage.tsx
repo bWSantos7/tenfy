@@ -231,11 +231,11 @@ const DashboardTab: React.FC = () => {
 // Chart colors — must use hex values; Recharts does not resolve CSS custom properties.
 // Values are kept in sync with tailwind.config.js design tokens.
 const CHART_COLORS = [
-  '#00FF88', // accent.neon   → status-open
-  '#00B2FF', // accent.blue
-  '#FFB020', // status.closing
-  '#FF5A5A', // status.canceled
-  '#A463F2', // status.progress
+  '#3DC55E', // accent.neon   → status-open (Tenfy green)
+  '#3B82F6', // accent.blue
+  '#F07B30', // status.closing (Tenfy orange)
+  '#EF4444', // status.canceled
+  '#8B5CF6', // status.progress
 ];
 
 const StatsTab: React.FC = () => {
@@ -327,7 +327,7 @@ const StatsTab: React.FC = () => {
               type="monotone"
               dataKey="registrations"
               name="Cadastros"
-              stroke="#00FF88"
+              stroke="#3DC55E"
               strokeWidth={2}
               dot={false}
               activeDot={{ r: 4 }}

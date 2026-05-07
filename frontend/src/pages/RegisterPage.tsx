@@ -155,7 +155,7 @@ export const RegisterPage: React.FC = () => {
         {/* Header */}
         <div className="flex flex-col items-center mb-6">
           <div className="w-14 h-14 rounded-2xl bg-accent-neon flex items-center justify-center shadow-glow mb-3 overflow-hidden">
-            <img src="/icons/logo.png" alt="Tennis Hub" className="w-10 h-10 object-contain" style={{ filter: 'brightness(0)' }} />
+            <img src="/icons/logo.png" alt="Tenfy" className="w-10 h-10 object-contain" />
           </div>
           <h1 className="text-xl font-bold">Criar conta</h1>
         </div>

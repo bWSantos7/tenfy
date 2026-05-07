@@ -1,6 +1,6 @@
 # Tenfy
 
-**Tennis Hub** é uma plataforma centrada no jogador para agregar torneios de tênis no Brasil, consolidando calendário, regras de inscrição, categorias, elegibilidade, listas de inscritos, rankings e alertas em um único ecossistema.
+**Tenfy** é uma plataforma centrada no jogador para agregar torneios de tênis no Brasil, consolidando calendário, regras de inscrição, categorias, elegibilidade, listas de inscritos, rankings e alertas em um único ecossistema.
 
 O projeto é composto por backend Django, frontend web, aplicativo mobile Expo/React Native, PostgreSQL, Redis/Celery, integrações de pagamento, notificações, pipelines de ingestão e automações externas via n8n.
 

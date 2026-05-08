@@ -344,17 +344,36 @@ def validate_webhook_token(token: str) -> bool:
     avoids silently accepting unverified payloads.
 
     Ref: https://docs.asaas.com/reference/webhook
+
+    Troubleshooting 401:
+      1. Ensure ASAAS_WEBHOOK_TOKEN is set in Railway backend variables.
+      2. Ensure the Asaas webhook panel 'authToken' field has the EXACT same value.
+      3. Redeploy the backend service after changing Railway variables.
     """
     import hmac as _hmac
-    expected = getattr(settings, 'ASAAS_WEBHOOK_TOKEN', '')
+    # .strip() guards against accidental whitespace from copy-paste in Railway panel
+    expected = getattr(settings, 'ASAAS_WEBHOOK_TOKEN', '').strip()
     if not expected:
         logger.error(
-            'ASAAS_WEBHOOK_TOKEN is not configured — all webhook requests rejected. '
-            'Set ASAAS_WEBHOOK_TOKEN in Railway Variables.'
+            '[webhook:config] ASAAS_WEBHOOK_TOKEN is not set in Railway env vars — '
+            'all webhook requests will be rejected. '
+            'Fix: Railway → backend service → Variables → add ASAAS_WEBHOOK_TOKEN. '
+            'Set the same value in Asaas webhook panel → authToken field.'
         )
         return False
     if not token:
-        logger.warning('Webhook request received without authentication token.')
+        # No token received — Asaas webhook panel authToken may not be configured
+        logger.warning(
+            '[webhook:auth] Request missing asaas-access-token header. '
+            'Fix: Asaas panel → Integrações → Webhooks → edit webhook → set authToken.'
+        )
         return False
-    # constant-time comparison prevents timing attacks
-    return _hmac.compare_digest(token.encode(), expected.encode())
+    # Strip received token too — some reverse proxies add trailing whitespace
+    result = _hmac.compare_digest(token.strip().encode(), expected.encode())
+    if not result:
+        logger.warning(
+            '[webhook:auth] Token mismatch — received token does not match ASAAS_WEBHOOK_TOKEN. '
+            'Fix: copy the EXACT value from Railway ASAAS_WEBHOOK_TOKEN to Asaas webhook authToken '
+            '(case-sensitive, no extra spaces).'
+        )
+    return result

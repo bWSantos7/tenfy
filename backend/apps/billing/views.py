@@ -262,6 +262,28 @@ def my_features(request):
 
 # ── Asaas Webhook ──────────────────────────────────────────────────────────────
 
+@api_view(['GET'])
+@permission_classes([permissions.IsAdminUser])
+def asaas_webhook_status(request):
+    """
+    Staff-only diagnostic: confirms whether ASAAS_WEBHOOK_TOKEN is configured.
+    Never returns the token value — only presence and length.
+    GET /api/billing/webhooks/asaas/status/
+    """
+    token = getattr(settings, 'ASAAS_WEBHOOK_TOKEN', '').strip()
+    return Response({
+        'token_configured': bool(token),
+        'token_length':     len(token) if token else 0,
+        'expected_header':  'asaas-access-token',
+        'endpoint':         '/api/billing/webhooks/asaas/',
+        'hint': (
+            'Token configured. Ensure the Asaas webhook authToken matches exactly.'
+            if token else
+            'MISSING: set ASAAS_WEBHOOK_TOKEN in Railway backend variables and redeploy.'
+        ),
+    })
+
+
 @api_view(['POST'])
 @authentication_classes([])
 @permission_classes([permissions.AllowAny])
@@ -277,21 +299,22 @@ def asaas_webhook(request):
     - Rate-limited via WebhookThrottle
     - Processed inside transaction.atomic() for consistency
     """
-    # Asaas sends the token in the 'asaas-access-token' header.
-    # Fallback to legacy 'asaas-webhook-token' for backwards compatibility.
+    # Asaas sends the authToken in the 'asaas-access-token' header (primary).
+    # Fallback to 'asaas-webhook-token' for backwards compatibility.
     token = (
-        request.META.get('HTTP_ASAAS_ACCESS_TOKEN', '')
-        or request.META.get('HTTP_ASAAS_WEBHOOK_TOKEN', '')
+        request.META.get('HTTP_ASAAS_ACCESS_TOKEN', '').strip()
+        or request.META.get('HTTP_ASAAS_WEBHOOK_TOKEN', '').strip()
     )
     from .services.asaas_service import validate_webhook_token
     if not validate_webhook_token(token):
-        logger.warning('Invalid Asaas webhook token — request rejected')
+        # validate_webhook_token already logs the specific failure reason
         return Response({'detail': 'Unauthorized'}, status=status.HTTP_401_UNAUTHORIZED)
 
     payload = request.data
     event_type = payload.get('event', 'UNKNOWN')
     payment_data = payload.get('payment', {})
     asaas_id = payment_data.get('id', '') or payload.get('subscription', {}).get('id', '')
+    logger.info('[webhook] Received: event=%s asaas_id=%s', event_type, asaas_id)
 
     if not asaas_id:
         # Events without an ID cannot be deduplicated — log and accept but don't process

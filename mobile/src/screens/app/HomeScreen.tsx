@@ -14,6 +14,7 @@ import { listProfiles, unreadAlerts } from '../../services/data';
 import { closingSoon, compatibleForProfile, listEditions } from '../../services/tournaments';
 import { PlayerProfile, TournamentEditionList } from '../../types';
 import { pickBestProfile } from '../../utils/profile';
+import { consumeProfileDirty } from '../../utils/profileRefresh';
 
 type Props = BottomTabScreenProps<MainTabParamList, 'Home'>;
 type StackNav = NativeStackNavigationProp<MainStackParamList>;
@@ -68,7 +69,8 @@ export function HomeScreen(_: Props) {
   useFocusEffect(
     useCallback(() => {
       const active = { current: true };
-      if (!hasLoadedRef.current) setLoading(true);
+      const profileWasEdited = consumeProfileDirty();
+      if (!hasLoadedRef.current || profileWasEdited) setLoading(true);
       loadData(active).finally(() => { if (active.current) setLoading(false); });
       return () => { active.current = false; };
     }, [loadData]),

@@ -74,13 +74,16 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
 
         sporting_age = profile.sporting_age
         if sporting_age is not None:
+            # A player may enter any age category whose max_age >= their age.
+            # e.g. 12-year-old can enter "12 anos", "14 anos", "16 anos".
+            # Do NOT filter by min_age — "14 anos" category has min_age=14 but is open
+            # to anyone up to 14 years old (including 10, 11, 12, 13).
             category_filter |= Q(
                 categories__normalized_category__taxonomy__in=[
                     PlayerCategory.TAXONOMY_CBT_AGE,
                     PlayerCategory.TAXONOMY_FPT_AGE,
                     PlayerCategory.TAXONOMY_KIDS,
                 ],
-                categories__normalized_category__min_age__lte=sporting_age,
                 categories__normalized_category__max_age__gte=sporting_age,
             )
             category_filter |= Q(

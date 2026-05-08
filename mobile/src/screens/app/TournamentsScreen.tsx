@@ -24,6 +24,7 @@ import { Organization, PlayerProfile, TournamentEditionList } from '../../types'
 import { calendar, listEditions, listFederations, TournamentFilters } from '../../services/tournaments';
 import { listProfiles } from '../../services/data';
 import { pickBestProfile } from '../../utils/profile';
+import { fmtRadius } from '../../utils/format';
 
 type Props = BottomTabScreenProps<MainTabParamList, 'Tournaments'>;
 type StackNav = NativeStackNavigationProp<MainStackParamList>;
@@ -66,6 +67,8 @@ interface FilterHeaderProps {
   onNearMeToggle: () => void;
   primaryProfileId: number | null;
   primaryProfile: PlayerProfile | null;
+  totalCount: number | null;
+  loading: boolean;
 }
 
 function FilterHeader({
@@ -85,6 +88,8 @@ function FilterHeader({
   nearMe, onNearMeToggle,
   primaryProfileId,
   primaryProfile,
+  totalCount,
+  loading,
 }: FilterHeaderProps) {
   const { colors } = useTheme();
   return (
@@ -116,6 +121,16 @@ function FilterHeader({
           </Pressable>
         ) : null}
       </View>
+
+      {!loading && totalCount !== null ? (
+        <AppText variant="caption" style={{ color: colors.textMuted, marginBottom: 8 }}>
+          {totalCount === 0
+            ? 'Nenhum torneio encontrado'
+            : totalCount === 1
+              ? '1 torneio encontrado'
+              : `${totalCount} torneios encontrados`}
+        </AppText>
+      ) : null}
 
       {showAdvanced ? (
         <View style={{ gap: 10, padding: 12, marginBottom: 10, borderRadius: 12, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.borderSubtle }}>
@@ -191,7 +206,7 @@ function FilterHeader({
                     </AppText>
                     {primaryProfile?.home_city ? (
                       <AppText variant="muted" style={{ fontSize: 10, marginTop: 1 }}>
-                        {primaryProfile.home_city}{primaryProfile.home_state ? `/${primaryProfile.home_state}` : ''} • raio {primaryProfile.travel_radius_km ?? 100} km
+                        {primaryProfile.home_city}{primaryProfile.home_state ? `/${primaryProfile.home_state}` : ''} • raio {fmtRadius(primaryProfile.travel_radius_km)}
                       </AppText>
                     ) : (
                       <AppText variant="muted" style={{ fontSize: 10, marginTop: 1, color: colors.statusClosing }}>
@@ -341,6 +356,7 @@ export function TournamentsScreen({ route }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<TournamentEditionList[]>([]);
   const [nextPage, setNextPage] = useState<number | null>(null);
+  const [totalCount, setTotalCount] = useState<number | null>(null);
   const [calendarMap, setCalendarMap] = useState<Record<string, TournamentEditionList[]>>({});
 
   // Filters
@@ -414,6 +430,7 @@ export function TournamentsScreen({ route }: Props) {
       setError(null);
       setItems([]);
       setNextPage(null);
+      setTotalCount(null);
     } else {
       setLoadingMore(true);
     }
@@ -427,6 +444,7 @@ export function TournamentsScreen({ route }: Props) {
       const results = data.results || [];
       setItems((prev) => page === 1 ? results : [...prev, ...results]);
       setNextPage(data.next ? page + 1 : null);
+      if (page === 1) setTotalCount(data.count ?? results.length);
     } catch {
       if (myVersion === reloadVersion.current) {
         if (page === 1) {
@@ -607,6 +625,8 @@ export function TournamentsScreen({ route }: Props) {
     nearMe, onNearMeToggle: handleNearMeToggle,
     primaryProfileId,
     primaryProfile,
+    totalCount,
+    loading,
   };
 
   const year = calMonth.getFullYear();

@@ -17,7 +17,8 @@ Rules implemented (faithful to the source regulations):
 3. Seniors (35+, 40+, 45+, 50+, ...): unidirectional descending. A 45-year-old
    may enter 35+ but not 50+.
 
-4. Youth exact match: 12F, 14M, 16F, 18M — must match sporting_age exactly.
+4. Youth age categories (12, 14, 16, 18, etc.): player must be <= max_age.
+   "14 anos" = up to 14 years old — a 12-year-old qualifies. A 15-year-old does not.
 
 5. Gender match on category scope (M / F / X mixed / * any).
 
@@ -208,20 +209,21 @@ class EligibilityEngine:
         return STATUS_INCOMPATIBLE
 
     def _check_exact_age(self, cat: PlayerCategory, reasons: list) -> str:
+        # Rule: "14 anos" means "up to 14 years old" — any player aged <= max_age is compatible.
+        # A 12-year-old may enter 12, 14, 16-year-old categories.
+        # min_age on age categories is metadata only — does not restrict entry downward.
         age = self.sporting_age
         if age is None:
             reasons.append(REASON_NO_BIRTH_YEAR)
             return STATUS_UNKNOWN
-        min_age = cat.min_age
         max_age = cat.max_age
-        if min_age is not None and max_age is not None:
-            if min_age <= age <= max_age:
+        if max_age is not None:
+            if age <= max_age:
                 return STATUS_COMPATIBLE
             reasons.append(REASON_AGE_OUT)
             return STATUS_INCOMPATIBLE
+        min_age = cat.min_age
         if min_age is not None and age >= min_age:
-            return STATUS_COMPATIBLE
-        if max_age is not None and age <= max_age:
             return STATUS_COMPATIBLE
         reasons.append(REASON_NO_RULE)
         return STATUS_UNKNOWN

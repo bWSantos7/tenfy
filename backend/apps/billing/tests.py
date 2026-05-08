@@ -111,11 +111,11 @@ class SubscriptionCheckoutTestCase(TestCase):
             }, format='json')
             self.assertEqual(res.status_code, 400, f'Expected 400 for legacy slug={slug}')
 
-    def test_subscription_detail_creates_individual_if_none(self):
+    def test_subscription_detail_returns_404_if_none(self):
+        # Endpoint returns 404 (not auto-create) when user has no subscription.
         res = self.client.get('/api/billing/subscription/')
-        self.assertEqual(res.status_code, 200)
-        self.assertEqual(res.data['plan_slug'], 'individual')
-        self.assertEqual(res.data['status'], 'pending')
+        self.assertEqual(res.status_code, 404)
+        self.assertFalse(res.data.get('has_subscription', True))
 
     def test_cancel_subscription(self):
         self.client.post('/api/billing/subscription/checkout/', {

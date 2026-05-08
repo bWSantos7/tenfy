@@ -130,8 +130,8 @@ export async function listChildRegistrations(childUserId: number) {
 
 // ----- LGPD -----
 export async function requestDataExport() {
-  const res = await api.get('/api/auth/data-export/', { responseType: 'blob' });
-  return res.data as Blob;
+  const res = await api.get<object>('/api/auth/data-export/');
+  return res.data;
 }
 
 // ----- Alerts -----

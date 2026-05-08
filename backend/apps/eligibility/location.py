@@ -7,13 +7,21 @@ from django.conf import settings
 
 NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search'
 
+# Sentinel: travel_radius_km >= this value means "Todo o Brasil" — no distance check.
+_BRASIL_RADIUS_KM = 1000
+
 
 def within_profile_radius(profile, edition) -> bool:
+    # "Todo o Brasil" — bypass all distance logic.
+    if (profile.travel_radius_km or 0) >= _BRASIL_RADIUS_KM:
+        return True
+
     if not profile.home_city or not profile.home_state:
         return True
     venue = edition.venue
     if not venue or not venue.city or not venue.state:
-        return False
+        # No venue data — include optimistically (don't exclude due to missing data).
+        return True
 
     if _same_city(profile.home_city, venue.city) and profile.home_state.upper() == venue.state.upper():
         return True
@@ -35,7 +43,8 @@ def within_profile_radius(profile, edition) -> bool:
         venue.address,
     )
     if distance_km is None:
-        return False
+        # Geocoding failed — include optimistically to avoid silently hiding tournaments.
+        return True
     return distance_km <= profile.travel_radius_km
 
 

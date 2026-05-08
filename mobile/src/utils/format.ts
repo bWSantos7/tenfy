@@ -2,6 +2,11 @@ import { format, formatDistanceToNow, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { TournamentChangeEvent, TournamentStatus } from '../types';
 
+export function fmtRadius(km: number | null | undefined): string {
+  if (km == null) return '100 km';
+  return km >= 1000 ? 'Todo o Brasil' : `${km} km`;
+}
+
 export function fmtDate(iso: string | null | undefined, pattern = "dd 'de' MMMM") {
   if (!iso) return '—';
   try {

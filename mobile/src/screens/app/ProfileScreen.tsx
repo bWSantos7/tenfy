@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, Image, Pressable, View } from 'react-native';
+import { Alert, Image, Pressable, Share, View } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
 import Toast from 'react-native-toast-message';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
@@ -13,7 +14,8 @@ import { deleteAccount, uploadAvatar } from '../../services/auth';
 import { deleteProfile, listChildren, listProfiles, requestDataExport, setPrimary, updateProfile } from '../../services/data';
 import { extractApiError, mediaUrl } from '../../services/api';
 import { ParentChild, PlayerProfile } from '../../types';
-import { GENDER_LABELS, LEVEL_LABELS, ROLE_LABELS, TENNIS_CLASS_LABELS } from '../../utils/format';
+import { fmtRadius, GENDER_LABELS, LEVEL_LABELS, ROLE_LABELS, TENNIS_CLASS_LABELS } from '../../utils/format';
+import { markProfileDirty } from '../../utils/profileRefresh';
 import { AppText, Button, Card, EmptyState, Input, LoadingBlock, Screen, SectionHeader, SelectField } from '../../components/ui';
 
 type Props = BottomTabScreenProps<MainTabParamList, 'Profile'>;
@@ -295,7 +297,7 @@ export function ProfileScreen(_: Props) {
               {isParent ? 'Perfis esportivos dos seus dependentes' : isManagedChild ? 'Seu perfil esportivo' : 'Gerencie seus perfis de jogador'}
             </AppText>
           </View>
-          {!isParent && !isManagedChild ? (
+          {!isParent && !isManagedChild && profiles.length === 0 ? (
             <Pressable
               onPress={() => navigation.navigate('Onboarding')}
               style={{ backgroundColor: `${colors.accentNeon}20`, borderWidth: 1, borderColor: `${colors.accentNeon}55`, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 6, flexDirection: 'row', gap: 6, alignItems: 'center' }}
@@ -354,8 +356,16 @@ function PrivacyCard({ onDeleteAccount }: { onDeleteAccount: () => void }) {
   async function handleExport() {
     setExporting(true);
     try {
-      await requestDataExport();
-      Toast.show({ type: 'success', text1: 'Dados exportados!', text2: 'O arquivo JSON foi baixado.' });
+      const data = await requestDataExport();
+      const jsonString = JSON.stringify(data, null, 2);
+      try {
+        await Clipboard.setStringAsync(jsonString);
+        Toast.show({ type: 'success', text1: 'Dados copiados para a área de transferência.' });
+        return;
+      } catch {
+        // Clipboard unavailable — fallback to Share
+      }
+      await Share.share({ message: jsonString, title: 'Meus dados Tenfy' });
     } catch {
       Toast.show({ type: 'error', text1: 'Não foi possível exportar os dados.' });
     } finally {
@@ -425,7 +435,7 @@ function ProfileCard({ profile: p, colors, onEdit, onMakePrimary, onRemove, rest
         {(p.home_city || p.home_state) ? (
           <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
             <Ionicons name="location-outline" size={13} color={colors.textMuted} />
-            <AppText variant="caption">{[p.home_city, p.home_state].filter(Boolean).join('/')} • raio {p.travel_radius_km} km</AppText>
+            <AppText variant="caption">{[p.home_city, p.home_state].filter(Boolean).join('/')} • raio {fmtRadius(p.travel_radius_km)}</AppText>
           </View>
         ) : null}
         <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
@@ -482,6 +492,7 @@ function ProfileEditor({ profile, onSaved, onCancel, restrictedMode = false }: {
         birth_year: form.birth_year ? Number(form.birth_year) : null,
         travel_radius_km: Number(form.travel_radius_km) || 100,
       } as any);
+      markProfileDirty();
       Toast.show({ type: 'success', text1: 'Perfil atualizado' });
       await onSaved();
     } catch (err) {

@@ -313,17 +313,21 @@ export function TournamentDetailScreen({ route, navigation }: Props) {
         </View>
 
         <View style={{ flexDirection: 'row', gap: 8, marginTop: 14 }}>
-          <Button
-            title={watching ? 'Na agenda' : 'Adicionar à agenda'}
-            onPress={onToggleWatch}
-            loading={togglingWatch}
-          />
-          {detail.official_source_url ? (
+          <View style={{ flex: 1 }}>
             <Button
-              title="Página oficial"
-              variant="secondary"
-              onPress={() => Linking.openURL(detail.official_source_url)}
+              title={watching ? 'Na agenda' : 'Adicionar à agenda'}
+              onPress={onToggleWatch}
+              loading={togglingWatch}
             />
+          </View>
+          {detail.official_source_url ? (
+            <View style={{ flex: 1 }}>
+              <Button
+                title="Página oficial"
+                variant="secondary"
+                onPress={() => Linking.openURL(detail.official_source_url)}
+              />
+            </View>
           ) : null}
         </View>
         <Button

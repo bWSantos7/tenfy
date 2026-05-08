@@ -61,11 +61,13 @@ class WithinProfileRadiusTestCase(TestCase):
         from apps.eligibility.location import within_profile_radius
         self.assertTrue(within_profile_radius(self._make_profile(city='', state=''), self._make_edition()))
 
-    def test_no_venue_returns_false(self):
+    def test_no_venue_includes_optimistically(self):
+        # When venue data is missing, we include the tournament optimistically
+        # rather than silently hiding it. Geocoding failure = uncertain, not excluded.
         from apps.eligibility.location import within_profile_radius
         p = self._make_profile()
         ed = MagicMock(); ed.venue = None
-        self.assertFalse(within_profile_radius(p, ed))
+        self.assertTrue(within_profile_radius(p, ed))
 
 
 # ─── Category normalization tests ──────────────────────────────────────────────

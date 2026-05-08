@@ -41,18 +41,13 @@ class WatchlistViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def summary(self, request):
         qs = self.get_queryset()
-        now = timezone.now()
-        soon = now + timedelta(days=14)
-        today = now.date()
+        today = timezone.now().date()
         upcoming = qs.filter(edition__start_date__gte=today)
-        active = qs.filter(
-            edition__entry_close_at__gte=now,
-            edition__entry_close_at__lte=soon,
-        )
         past = qs.filter(edition__end_date__lt=today)
+        active_registrations = qs.filter(user_status=WatchlistItem.STATUS_REGISTERED).count()
         return Response({
             'total': qs.count(),
-            'active_registrations': active.count(),
+            'active_registrations': active_registrations,
             'upcoming': upcoming.count(),
             'past': past.count(),
             'by_status': {

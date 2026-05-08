@@ -124,6 +124,24 @@ class CosatMongoNormalizationTestCase(TestCase):
         self.assertEqual(result['categories'][0]['source_text'], 'U14 Boys Singles')
         self.assertIn('Buenos Aires', result['venue']['city'])
 
+    def test_normalize_tournament_with_new_fields(self):
+        from apps.ingestion.connectors.cosat_mongo import _normalize_tournament
+        doc = {
+            'cosatId': 'abc123',
+            'name': 'COSAT Junior Open 2026',
+            'url': 'https://cosat.tournamentsoftware.com/sport/tournament?id=abc123',
+            'tournament_start_at': '2026-05-16T00:00:00-05:00',
+            'tournament_end_at': '2026-05-23T00:00:00-05:00',
+            'registration_open_at': '2026-02-18T00:00:00-05:00',
+            'registration_close_at': '2026-04-27T23:59:00-05:00',
+        }
+        result = _normalize_tournament(doc)
+        self.assertIsNotNone(result)
+        self.assertEqual(result['start_date'], '2026-05-16')
+        self.assertEqual(result['end_date'], '2026-05-23')
+        self.assertEqual(result['entry_open_at'], '2026-02-18T00:00:00-05:00')
+        self.assertEqual(result['entry_close_at'], '2026-04-27T23:59:00-05:00')
+
     def test_normalize_tournament_missing_cosat_id_returns_none(self):
         from apps.ingestion.connectors.cosat_mongo import _normalize_tournament
         result = _normalize_tournament({'name': 'Some Tournament'})

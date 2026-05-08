@@ -387,7 +387,25 @@ def _normalize_tournament(doc: dict) -> Optional[dict]:
             pass
 
     date_range = (doc.get('dateRange') or '').strip()
-    start_date, end_date = _parse_date_range(date_range, year_hint=year_hint)
+    
+    start_date = None
+    end_date = None
+    if doc.get('tournament_start_at'):
+        start_date = _parse_inscription_date(doc.get('tournament_start_at'), year_hint)
+    if doc.get('tournament_end_at'):
+        end_date = _parse_inscription_date(doc.get('tournament_end_at'), year_hint)
+    
+    if not start_date or not end_date:
+        parsed_start, parsed_end = _parse_date_range(date_range, year_hint=year_hint)
+        start_date = start_date or parsed_start
+        end_date = end_date or parsed_end
+        
+    # Convert datetime to date if needed for start_date and end_date since Django model expects DateField
+    if isinstance(start_date, datetime):
+        start_date = start_date.date()
+    if isinstance(end_date, datetime):
+        end_date = end_date.date()
+        
     entry_open, entry_close = _parse_inscription_dates(doc, year_hint=year_hint)
 
     # Categories from embedded events array — normalize COSAT codes to human-readable names
@@ -821,16 +839,16 @@ _WITHDRAWAL_FIELDS = ['Withdrawal deadline', 'withdrawal_deadline']
 
 def _parse_inscription_date(value, year_hint: int = 0):
     """
-    Parse a single inscription date field value to a date object.
+    Parse a single inscription date field value to a date or datetime object.
 
     Supported formats:
-      ISO:        2026-04-27 / 2026-04-27T00:00:00Z
+      ISO:        2026-04-27 / 2026-04-27T00:00:00Z / 2026-04-27T23:59:00-05:00
       BR:         27/04/2026
       ES/PT year: "27 de abr. 2026" / "sáb. 2 de may. 2026"
       ES/PT bare: "lun. 27 de abr." / "2 de may." (uses year_hint)
       Prefixed:   "Entries close: sáb. 2 de may."
 
-    Returns date or None — never invents data.
+    Returns date/datetime or None — never invents data.
     """
     if not value:
         return None
@@ -847,7 +865,13 @@ def _parse_inscription_date(value, year_hint: int = 0):
     if not s:
         return None
 
-    # ISO: 2026-04-27 or 2026-04-27T...
+    # ISO: 2026-04-27 or 2026-04-27T23:59:00-05:00
+    if 'T' in s:
+        try:
+            return datetime.fromisoformat(s)
+        except ValueError:
+            pass
+
     m = re.match(r'^(\d{4})-(\d{2})-(\d{2})', s)
     if m:
         try:

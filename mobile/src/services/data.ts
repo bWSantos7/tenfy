@@ -129,10 +129,9 @@ export async function listChildRegistrations(childUserId: number) {
 }
 
 // ----- LGPD -----
-export async function requestDataExport(): Promise<object> {
-  // Returns JSON payload — mobile handles copy/share; browser download header ignored.
-  const res = await api.get('/api/auth/data-export/');
-  return res.data as object;
+export async function requestDataExport() {
+  const res = await api.get('/api/auth/data-export/', { responseType: 'blob' });
+  return res.data as Blob;
 }
 
 // ----- Alerts -----

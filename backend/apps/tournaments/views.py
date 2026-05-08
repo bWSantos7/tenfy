@@ -70,43 +70,45 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
     def _build_compatible_candidate_filter(self, profile):
         from apps.players.models import PlayerCategory
 
-        # Open categories are always candidates.
         category_filter = Q(categories__normalized_category__taxonomy=PlayerCategory.TAXONOMY_OPEN)
 
         sporting_age = profile.sporting_age
         if sporting_age is not None:
-            # MVP rule: player compatible with any category whose max_age >= sporting_age.
-            # A 12-year-old is candidate for BS 12, BS 14, BS 16, BS 18.
-            # (min_age constraint removed — younger players can enter higher age brackets.)
             category_filter |= Q(
                 categories__normalized_category__taxonomy__in=[
                     PlayerCategory.TAXONOMY_CBT_AGE,
                     PlayerCategory.TAXONOMY_FPT_AGE,
                     PlayerCategory.TAXONOMY_KIDS,
                 ],
+                categories__normalized_category__min_age__lte=sporting_age,
                 categories__normalized_category__max_age__gte=sporting_age,
             )
             category_filter |= Q(
                 categories__normalized_category__taxonomy=PlayerCategory.TAXONOMY_SENIORS,
                 categories__normalized_category__min_age__lte=sporting_age,
             )
-            # Also include editions with unnormalized categories (e.g. "BS 14", "Duplas 12")
-            # The eligibility engine will evaluate them using raw age extraction.
-            category_filter |= Q(categories__normalized_category__isnull=True)
 
-        # MVP rule: FPT_CLASS (class/rank categories) are informational only — include as candidates.
-        # The engine will return STATUS_UNKNOWN with a note, not STATUS_INCOMPATIBLE.
-        category_filter |= Q(
-            categories__normalized_category__taxonomy=PlayerCategory.TAXONOMY_FPT_CLASS,
-        )
+        tennis_class = (profile.tennis_class or '').upper().strip()
+        if tennis_class:
+            if tennis_class == 'PR':
+                category_filter |= Q(
+                    categories__normalized_category__taxonomy=PlayerCategory.TAXONOMY_FPT_CLASS,
+                    categories__normalized_category__class_level=5,
+                )
+            elif tennis_class.isdigit():
+                player_class = int(tennis_class)
+                allowed_levels = [player_class]
+                if player_class > 1:
+                    allowed_levels.append(player_class - 1)
+                category_filter |= Q(
+                    categories__normalized_category__taxonomy=PlayerCategory.TAXONOMY_FPT_CLASS,
+                    categories__normalized_category__class_level__in=allowed_levels,
+                )
 
-        # Gender filter: apply as a soft filter — only restrict when gender_scope is known and non-matching.
-        # We allow gender_scope=None (unnormalized) through to let the engine handle them.
         if profile.gender:
-            gender_filter = Q(
+            category_filter &= Q(
                 categories__normalized_category__gender_scope__in=[profile.gender, '*', 'X']
-            ) | Q(categories__normalized_category__isnull=True)
-            category_filter &= gender_filter
+            )
 
         return category_filter
 
@@ -166,7 +168,7 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=False, methods=['get'], throttle_classes=[HeavyUserThrottle])
     def compatible(self, request):
         from apps.eligibility.services import EligibilityEngine
-        from apps.eligibility.location import profile_distance_result
+        from apps.eligibility.location import within_profile_radius
         from apps.players.models import PlayerProfile
 
         profile_id = request.query_params.get('profile_id')
@@ -200,19 +202,15 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
         compatible = []
         for edition in candidate_qs:
             result = engine.evaluate_edition(edition)
-            # Include if effectively compatible (has compatible or unknown-only categories).
-            if not result.get('effective_compatible', result['compatible_count'] > 0):
+            if result['compatible_count'] <= 0:
                 continue
-            dist = profile_distance_result(profile, edition)
-            if not dist['included']:
+            if not within_profile_radius(profile, edition):
                 continue
             data = self.get_serializer(edition).data
             data['eligibility'] = {
                 'compatible_count': result['compatible_count'],
                 'unknown_count': result['unknown_count'],
                 'total_count': result['total_count'],
-                'distance_status': dist['status'],
-                'distance_message': dist['message'],
             }
             compatible.append(data)
 

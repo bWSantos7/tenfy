@@ -1,5 +1,6 @@
 import logging
 from django.utils import timezone
+from datetime import timedelta
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -40,14 +41,18 @@ class WatchlistViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def summary(self, request):
         qs = self.get_queryset()
-        today = timezone.now().date()
+        now = timezone.now()
+        soon = now + timedelta(days=14)
+        today = now.date()
         upcoming = qs.filter(edition__start_date__gte=today)
+        active = qs.filter(
+            edition__entry_close_at__gte=now,
+            edition__entry_close_at__lte=soon,
+        )
         past = qs.filter(edition__end_date__lt=today)
-        # active_registrations: items where the user declared themselves as enrolled
-        registered = qs.filter(user_status=WatchlistItem.STATUS_REGISTERED)
         return Response({
             'total': qs.count(),
-            'active_registrations': registered.count(),
+            'active_registrations': active.count(),
             'upcoming': upcoming.count(),
             'past': past.count(),
             'by_status': {

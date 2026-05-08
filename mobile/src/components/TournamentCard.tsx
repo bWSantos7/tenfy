@@ -161,15 +161,6 @@ export function TournamentCard({
               </AppText>
             </View>
           ) : null}
-
-          {showEligibility && edition.eligibility?.distance_status === 'unknown' ? (
-            <View style={[styles.eligBadge, { backgroundColor: `${colors.statusClosing}12`, borderColor: `${colors.statusClosing}30` }]}>
-              <Ionicons name="location-outline" size={12} color={colors.statusClosing} />
-              <AppText variant="caption" style={{ color: colors.statusClosing, fontWeight: '600', fontSize: 11 }}>
-                Distância incerta
-              </AppText>
-            </View>
-          ) : null}
         </View>
       </Animated.View>
     </Pressable>

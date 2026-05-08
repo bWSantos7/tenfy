@@ -28,7 +28,7 @@ O projeto é composto por backend Django, frontend web, aplicativo mobile Expo/R
 
 ## Visão geral
 
-O Tennis Hub resolve a fragmentação do ecossistema de torneios de tênis. Hoje, jogadores, pais e treinadores precisam consultar múltiplos sites de confederações, federações estaduais, plataformas de inscrição e regulamentos em PDF para descobrir:
+O Tenfy resolve a fragmentação do ecossistema de torneios de tênis. Hoje, jogadores, pais e treinadores precisam consultar múltiplos sites de confederações, federações estaduais, plataformas de inscrição e regulamentos em PDF para descobrir:
 
 - quais torneios estão abertos;
 - quais categorias existem;
@@ -163,7 +163,7 @@ A proposta do app é ser uma camada de inteligência e organização, sem substi
 ## Estrutura do projeto
 
 ```text
-tennis_hub/
+tenfy/
 ├── backend/
 │   ├── apps/
 │   │   ├── accounts/        # usuários, autenticação, OTP, LGPD
@@ -248,7 +248,7 @@ A fonte FPT pode exigir login para algumas listas nominais de inscritos. Quando 
 
 ### COSAT/COSANT
 
-O scraper COSAT roda separadamente e grava dados em um MongoDB dedicado. O Tennis Hub deve consumir esse Mongo como fonte intermediária e sincronizar os dados normalizados para o PostgreSQL oficial.
+O scraper COSAT roda separadamente e grava dados em um MongoDB dedicado. O Tenfy deve consumir esse Mongo como fonte intermediária e sincronizar os dados normalizados para o PostgreSQL oficial.
 
 Diretriz:
 

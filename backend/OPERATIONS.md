@@ -1,4 +1,4 @@
-# Tennis Hub — Comandos Operacionais
+# Tenfy — Comandos Operacionais
 
 Referência de comandos Django para operações recorrentes em produção e staging.
 Todos os comandos devem ser executados no serviço **web** ou **worker** do Railway

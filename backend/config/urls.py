@@ -23,7 +23,7 @@ def health_check(request):
 
 def root_view(request):
     return JsonResponse({
-        'name': 'Tennis Hub API',
+        'name': 'Tenfy API',
         'version': '1.0.0',
         'docs': '/api/docs/',
         'health': '/health/',

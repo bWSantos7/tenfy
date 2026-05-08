@@ -45,7 +45,7 @@ confidence            string   opcional    — high | medium | low (default: her
 ## Payload global
 
 ```
-edition_id    int     OBRIGATÓRIO — ID da edição do torneio no Tennis Hub
+edition_id    int     OBRIGATÓRIO — ID da edição do torneio no Tenfy
 source        string  OBRIGATÓRIO — origem: cosat | cbt | fpt | fct | manual
 source_url    string  opcional    — URL global da lista de inscritos
 confidence    string  opcional    — default: medium
@@ -145,7 +145,7 @@ Chave única: `(edition_id, category_text, player_external_id, source)`
 
 ## Como encontrar o edition_id
 
-1. Acesse o painel admin do Tennis Hub: `https://www.tennis.app.br/admin`
+1. Acesse o painel admin do Tenfy: `https://www.tennis.app.br/admin`
 2. Ou via API: `GET https://api.tennis.app.br/api/tournaments/editions/?q=nome+do+torneio`
 3. O `id` retornado é o `edition_id` para usar no import.
 

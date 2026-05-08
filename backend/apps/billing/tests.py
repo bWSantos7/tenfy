@@ -177,7 +177,7 @@ class WebhookTestCase(TestCase):
                 'subscription': 'sub_test_123',
                 'value': 29.90,
                 'billingType': 'PIX',
-                'description': 'Tennis Hub Individual',
+                'description': 'Tenfy Individual',
                 'externalReference': str(self.user.id),
             }
         }

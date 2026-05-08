@@ -381,7 +381,7 @@ def parse_cosat_entries(html_or_text: str, source_url: str = '') -> dict:
 
 
 _TENISINTEGRADO_INSC_URL = 'https://www.tenisintegrado.com.br/torneio_painel_insc/index/{tid}'
-_TENISINTEGRADO_UA = 'TennisHubDataSync/1.0 (contato@tennis.app.br; data-research; no-automation)'
+_TENISINTEGRADO_UA = 'TenfyDataSync/1.0 (contato@tennis.app.br; data-research; no-automation)'
 _TENISINTEGRADO_RATE = 1.2  # seconds between category requests
 
 

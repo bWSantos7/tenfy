@@ -55,7 +55,7 @@ class BaseConnector(ABC):
         self.config = config or (data_source.config_json if data_source else {})
         self.session = requests.Session()
         self.session.headers.update({
-            'User-Agent': getattr(settings, 'SCRAPER_USER_AGENT', 'TennisHubBot/1.0'),
+            'User-Agent': getattr(settings, 'SCRAPER_USER_AGENT', 'TenfyBot/1.0'),
             'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
         })
         self._rate_limit = getattr(settings, 'SCRAPER_RATE_LIMIT_SECONDS', 2)

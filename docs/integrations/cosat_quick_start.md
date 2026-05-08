@@ -2,7 +2,7 @@
 
 ## Pré-requisitos
 
-- Acesso ao painel Railway do Tennis Hub
+- Acesso ao painel Railway do Tenfy
 - n8n instalado (cloud ou self-hosted)
 - Acesso à página pública do torneio em `cosat.tournamentsoftware.com`
 
@@ -111,7 +111,7 @@ Resposta:
 
 ## Passo 8 — Validar no mobile
 
-1. Abrir o app Tennis Hub
+1. Abrir o app Tenfy
 2. Navegar até o torneio importado
 3. Tocar em **Ver inscritos**
 4. Verificar: nome, categoria, ranking, status, fonte (COSAT), sync time

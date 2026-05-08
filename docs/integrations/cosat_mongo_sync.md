@@ -15,7 +15,7 @@
 [sync_cosat_from_mongo]
        │
        ▼
-[PostgreSQL — fonte oficial Tennis Hub]
+[PostgreSQL — fonte oficial Tenfy]
   ├── TournamentEdition (external_id=cosat:{cosatId}, circuit=COSAT)
   └── FederationEntry   (source=cosat, confidence=medium/high)
        │

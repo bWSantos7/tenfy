@@ -174,7 +174,7 @@ export function translateReason(code: string): string {
 }
 
 const CHANGE_EVENT_LABELS: Record<string, string> = {
-  created: 'Torneio adicionado ao hub',
+  created: 'Torneio adicionado ao Tenfy',
   status_changed: 'Status do torneio atualizado',
   dates_changed: 'Datas do torneio atualizadas',
   deadline_changed: 'Prazo de inscrição atualizado',
@@ -237,7 +237,7 @@ export function formatChangeEventTitle(eventType: string): string {
 
 export function formatChangeEventDetails(event: TournamentChangeEvent): string[] {
   if (event.event_type === 'created') {
-    return ['Esse torneio passou a aparecer no hub.'];
+    return ['Esse torneio passou a aparecer no Tenfy.'];
   }
 
   const entries = Object.entries(event.field_changes || {});

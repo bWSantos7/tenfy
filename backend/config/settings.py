@@ -1,5 +1,5 @@
 """
-Django settings for Tennis Hub.
+Django settings for Tenfy.
 Production-ready configuration with security best practices.
 """
 from pathlib import Path
@@ -267,7 +267,7 @@ CACHES = {
                 'max_connections': 30,  # supports 3,000 users with connection reuse
             },
         },
-        'KEY_PREFIX': 'thub',
+        'KEY_PREFIX': 'tenfy',
         'TIMEOUT': 300,  # default 5min TTL
     }
 }
@@ -336,7 +336,7 @@ if not DEBUG:
 # Scraper config
 SCRAPER_USER_AGENT = config(
     'SCRAPER_USER_AGENT',
-    default='TennisHubBot/1.0'
+    default='TenfyBot/1.0'
 )
 SCRAPER_TIMEOUT = config('SCRAPER_TIMEOUT', default=30, cast=int)
 SCRAPER_RATE_LIMIT_SECONDS = config('SCRAPER_RATE_LIMIT_SECONDS', default=2, cast=int)
@@ -389,7 +389,7 @@ if CLOUDINARY_URL:
 
 # DRF Spectacular
 SPECTACULAR_SETTINGS = {
-    'TITLE': 'Tennis Hub API',
+    'TITLE': 'Tenfy API',
     'DESCRIPTION': 'Agregador de torneios de tênis centrado no jogador',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,

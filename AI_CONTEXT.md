@@ -1,14 +1,14 @@
-# CLAUDE.md — Instruções obrigatórias para IA no projeto Tennis Hub
+# CLAUDE.md — Instruções obrigatórias para IA no projeto Tenfy
 
 Este arquivo deve ser lido obrigatoriamente antes de qualquer alteração no projeto.
 
-O objetivo deste documento é dar contexto de produto, escopo contratual do MVP, regras de arquitetura, padrões de segurança e diretrizes de desenvolvimento para qualquer IA ou desenvolvedor que atue no código do Tennis Hub.
+O objetivo deste documento é dar contexto de produto, escopo contratual do MVP, regras de arquitetura, padrões de segurança e diretrizes de desenvolvimento para qualquer IA ou desenvolvedor que atue no código do Tenfy.
 
 ---
 
 ## 1. Visão geral do projeto
 
-O Tennis Hub é uma plataforma digital para jogadores de tênis, com foco em centralização de calendários de torneios, análise básica de elegibilidade por perfil/categoria e cobrança de assinaturas.
+O Tenfy é uma plataforma digital para jogadores de tênis, com foco em centralização de calendários de torneios, análise básica de elegibilidade por perfil/categoria e cobrança de assinaturas.
 
 O projeto é um produto real em fase de MVP contratual com componentes já avançados em desenvolvimento.
 
@@ -259,7 +259,7 @@ Ao final do MVP, a plataforma deve permitir:
 Repositório principal:
 
 ```txt
-https://github.com/bWSantos7/tennis_hub.git
+https://github.com/bWSantos7/tenfy.git
 ```
 
 Sempre respeitar a estrutura atual do projeto. Não alterar arquitetura sem justificativa clara.
@@ -633,7 +633,7 @@ O visual deve ser:
 - Limpo.
 - Esportivo.
 - Profissional.
-- Coerente com Tennis Hub.
+- Coerente com Tenfy.
 - Responsivo.
 - Leve.
 - Sem excesso de emojis.
@@ -891,7 +891,7 @@ A tarefa só está concluída quando a funcionalidade foi testada e validada, ou
 
 ## 40. Prioridade máxima atual
 
-Prioridades gerais do Tennis Hub:
+Prioridades gerais do Tenfy:
 
 1. Segurança.
 2. MVP contratual.

@@ -37,7 +37,7 @@ CANDIDATE_LINK_PATTERNS = [
     'acceptance', 'participant', 'atleta',
 ]
 
-USER_AGENT = 'TennisHubDataSync/1.0 (contato@tennis.app.br; audit-only; no-save)'
+USER_AGENT = 'TenfyDataSync/1.0 (contato@tennis.app.br; audit-only; no-save)'
 TIMEOUT = 8
 RATE_LIMIT = 1.5  # seconds between requests
 

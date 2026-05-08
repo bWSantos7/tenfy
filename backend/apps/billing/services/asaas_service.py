@@ -57,7 +57,7 @@ def _headers() -> dict:
     return {
         'access_token': api_key,
         'Content-Type': 'application/json',
-        'User-Agent': 'TennisHub/1.0',
+        'User-Agent': 'Tenfy/1.0',
     }
 
 
@@ -219,7 +219,7 @@ def create_subscription(
         'value': price,
         'nextDueDate': date.today().isoformat(),
         'cycle': cycle,
-        'description': f'Tennis Hub — Plano {plan.name}',
+        'description': f'Tenfy — Plano {plan.name}',
         'externalReference': str(user.id),
     }
     if payment_method.upper() == 'CREDIT_CARD':

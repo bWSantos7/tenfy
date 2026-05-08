@@ -34,7 +34,7 @@ from apps.registrations.models import FederationEntry
 from apps.registrations.parsers import get_limitation
 from apps.tournaments.models import TournamentEdition
 
-USER_AGENT = 'TennisHubDataSync/1.0 (contato@tennis.app.br; research-only; no-automation)'
+USER_AGENT = 'TenfyDataSync/1.0 (contato@tennis.app.br; research-only; no-automation)'
 TIMEOUT = 10
 RATE_LIMIT = 2.0  # seconds between requests
 

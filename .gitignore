@@ -76,7 +76,7 @@ tmp/
 
 # n8n exports
 Sync*.json
-*Tennis Hub*.json
+*Tenfy*.json
 *n8n*.json
 
 # Claude / local tools

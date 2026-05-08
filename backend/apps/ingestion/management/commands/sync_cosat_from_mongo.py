@@ -3,7 +3,7 @@ Management command — sync COSAT data from MongoDB crawler into PostgreSQL.
 
 The COSAT crawler (bWSantos7/crawler.git) runs as a separate Railway service
 and writes tournament/player/ranking data to a dedicated MongoDB. This command
-reads that MongoDB and normalizes the data into Tennis Hub PostgreSQL using the
+reads that MongoDB and normalizes the data into Tenfy PostgreSQL using the
 existing persistence layer.
 
 Usage:

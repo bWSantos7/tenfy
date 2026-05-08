@@ -1,6 +1,6 @@
-# Tennis Hub Mobile
+# Tenfy Mobile
 
-App mobile em React Native + Expo para o Tennis Hub - plataforma de calendario e elegibilidade de torneios de tenis no Brasil.
+App mobile em React Native + Expo para o Tenfy - plataforma de calendario e elegibilidade de torneios de tenis no Brasil.
 
 ## Variaveis de ambiente
 

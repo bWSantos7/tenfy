@@ -505,7 +505,7 @@ def data_export(request):
     from django.http import JsonResponse
     import json
     response = JsonResponse(payload, json_dumps_params={'ensure_ascii': False, 'indent': 2})
-    response['Content-Disposition'] = f'attachment; filename="tournament_hub_data_{user.id}.json"'
+    response['Content-Disposition'] = f'attachment; filename="tenfy_data_{user.id}.json"'
     return response
 
 

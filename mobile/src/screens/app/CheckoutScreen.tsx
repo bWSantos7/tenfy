@@ -265,16 +265,15 @@ export function CheckoutScreen() {
 
       <View style={{ alignItems: 'center', gap: 4 }}>
         <AppText variant="caption" style={{ textAlign: 'center', lineHeight: 16 }}>
-          Ao confirmar, você concorda com os Termos de Uso. Você pode cancelar a qualquer momento.
+          Ao confirmar, você concorda com os Termos de Uso e a Política de Privacidade (LGPD — Lei 13.709/2018). Você pode cancelar a assinatura a qualquer momento.
         </AppText>
         <TouchableOpacity onPress={() => {
-          Linking.canOpenURL('https://www.tennis.app.br/termos').then(supported => {
-            if (supported) Linking.openURL('https://www.tennis.app.br/termos');
-            else Alert.alert('Erro', 'Não foi possível abrir o link.');
-          }).catch(() => Alert.alert('Erro', 'Não foi possível abrir o link.'));
+          Linking.openURL('https://www.tennis.app.br/termos').catch(() =>
+            Alert.alert('Erro', 'Não foi possível abrir o link.')
+          );
         }}>
           <AppText variant="caption" style={{ color: colors.accentNeon, textDecorationLine: 'underline' }}>
-            Ler Termos de Uso e Política de Privacidade (LGPD)
+            Ler Termos de Uso e Política de Privacidade
           </AppText>
         </TouchableOpacity>
       </View>

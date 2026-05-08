@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, Image, Pressable, View } from 'react-native';
+import { Alert, Image, Pressable, Share, View } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
 import Toast from 'react-native-toast-message';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
@@ -354,10 +355,43 @@ function PrivacyCard({ onDeleteAccount }: { onDeleteAccount: () => void }) {
   async function handleExport() {
     setExporting(true);
     try {
-      await requestDataExport();
-      Toast.show({ type: 'success', text1: 'Dados exportados!', text2: 'O arquivo JSON foi baixado.' });
-    } catch {
-      Toast.show({ type: 'error', text1: 'Não foi possível exportar os dados.' });
+      const data = await requestDataExport();
+      const jsonString = JSON.stringify(data, null, 2);
+
+      // Primary: copy directly to clipboard.
+      try {
+        await Clipboard.setStringAsync(jsonString);
+        Toast.show({
+          type: 'success',
+          text1: 'Dados copiados para a área de transferência.',
+          text2: 'Cole em qualquer editor de texto para visualizar.',
+        });
+        return;
+      } catch (_clipErr) {
+        // Clipboard unavailable — fall through to Share.
+      }
+
+      // Fallback: native share sheet (includes "Copy" option).
+      try {
+        const result = await Share.share({
+          title: 'Meus dados Tenfy (LGPD)',
+          message: jsonString,
+        });
+        if (result.action === Share.sharedAction) {
+          Toast.show({
+            type: 'success',
+            text1: 'Dados exportados!',
+            text2: 'Use "Copiar" no menu para copiar para a área de transferência.',
+          });
+        }
+      } catch (shareErr: any) {
+        const isCancelled = shareErr?.message === 'User cancelled' || shareErr?.code === 'EUNSPECIFIED';
+        if (!isCancelled) {
+          Toast.show({ type: 'error', text1: 'Não foi possível exportar os dados.' });
+        }
+      }
+    } catch (err: any) {
+      Toast.show({ type: 'error', text1: 'Erro ao buscar dados.', text2: 'Verifique sua conexão e tente novamente.' });
     } finally {
       setExporting(false);
     }

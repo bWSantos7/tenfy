@@ -25,10 +25,16 @@ def _frontend() -> str:
     return getattr(settings, 'FRONTEND_URL', 'https://tennis.app.br').rstrip('/')
 
 
+def _logo_url() -> str:
+    """Return the absolute URL for the Tenfy logo image used in emails."""
+    return f'{_frontend()}/icons/logo.png'
+
+
 def _html(title: str, content: str, preview: str = '') -> str:
     """Render a complete branded email. preview = hidden preheader text.
     All user-controlled values must be escaped with _esc() before passing as content."""
     frontend = _frontend()
+    logo_url = _logo_url()
     return f"""<!DOCTYPE html>
 <html lang="pt-BR" xmlns="http://www.w3.org/1999/xhtml">
 <head>
@@ -42,9 +48,9 @@ def _html(title: str, content: str, preview: str = '') -> str:
     body{{background:{BG};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:{TEXT};-webkit-font-smoothing:antialiased}}
     .wrapper{{max-width:580px;margin:0 auto;padding:40px 16px 60px}}
     .header{{text-align:center;padding-bottom:32px}}
-    .logo{{display:inline-block;background:{CARD};border:1px solid {BORDER};border-radius:16px;padding:12px 24px}}
-    .logo-icon{{font-size:28px;display:block;line-height:1}}
-    .logo-name{{font-size:18px;font-weight:800;color:{BRAND};letter-spacing:-0.5px;margin-top:4px}}
+    .logo-wrap{{display:inline-block;background:{CARD};border:1px solid {BORDER};border-radius:16px;padding:12px 24px;text-align:center}}
+    .logo-img{{max-height:48px;width:auto;display:block;margin:0 auto}}
+    .logo-fallback{{font-size:24px;font-weight:900;color:{BRAND};letter-spacing:-1px;display:block}}
     .card{{background:{CARD};border:1px solid {BORDER};border-radius:20px;padding:36px 32px;margin-bottom:24px}}
     h1{{font-size:22px;font-weight:700;color:{TEXT};margin-bottom:8px;line-height:1.3}}
     .subtitle{{font-size:15px;color:{MUTED};line-height:1.6;margin-bottom:24px}}
@@ -89,8 +95,14 @@ def _html(title: str, content: str, preview: str = '') -> str:
 
     <!-- Logo -->
     <div class="header">
-      <div class="logo">
-        <span class="logo-name" style="font-size:24px;font-weight:900;letter-spacing:-1px;">{APP_NAME}</span>
+      <div class="logo-wrap">
+        <!--[if !mso]><!-->
+        <img src="{logo_url}" alt="{APP_NAME}" class="logo-img"
+             style="max-height:48px;width:auto;display:block;margin:0 auto;"
+             onerror="this.style.display='none';document.getElementById('logo-fallback').style.display='block';" />
+        <span id="logo-fallback" class="logo-fallback" style="display:none;">{APP_NAME}</span>
+        <!--<![endif]-->
+        <!--[if mso]><span class="logo-fallback">{APP_NAME}</span><![endif]-->
       </div>
     </div>
 

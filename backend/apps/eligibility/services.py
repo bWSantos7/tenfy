@@ -4,26 +4,31 @@ Eligibility engine.
 Evaluates whether a PlayerProfile is compatible with a tournament category,
 producing (compatible | incompatible | unknown) + reasons.
 
-Rules implemented (faithful to the source regulations):
+MVP rules (per product spec):
 
 1. CBT / FPT age by civil year: sporting_age = current_year - birth_year
    (never uses month/day). Source: CBT Regulamento Infantojuvenil.
 
-2. FPT classes (1..5): a player in class N may also enter class N-1
-   (one class above, strict harder direction). A 5th-class player may
-   play 4th class. A 5th-class player may NOT play 3rd class.
-   A 1st-class player may NOT descend to 2nd class.
+2. Youth age rule: player is compatible with any category whose max_age >= player's
+   sporting_age. E.g., a 12-year-old is compatible with BS 12, BS 14, BS 16, BS 18.
+   A 14-year-old is NOT compatible with a BS 12 category.
 
-3. Seniors (35+, 40+, 45+, 50+, ...): unidirectional descending. A 45-year-old
+3. FPT classes (1..5): Class information is PRESERVED and DISPLAYED, but does NOT
+   block MVP compatibility. Categories with only class info return STATUS_UNKNOWN
+   with a note to check the official regulations. Per spec: class is informational only.
+
+4. Seniors (35+, 40+, 45+, 50+, ...): unidirectional descending. A 45-year-old
    may enter 35+ but not 50+.
-
-4. Youth exact match: 12F, 14M, 16F, 18M — must match sporting_age exactly.
 
 5. Gender match on category scope (M / F / X mixed / * any).
 
-6. When the category has no normalized taxonomy or no rule found, status is
-   'unknown' with reason 'no_rule_available'.
+6. When the category has no normalized taxonomy: extract age from raw text as fallback.
+   If age found and player's sporting_age <= extracted max_age → compatible.
+   If no age found → STATUS_UNKNOWN with safe message.
+
+7. Ranking, competitive level and class do NOT block MVP compatibility.
 """
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
@@ -46,6 +51,27 @@ REASON_NO_CLASS = 'no_class'
 REASON_NO_RULE = 'no_rule_available'
 REASON_NOT_NORMALIZED = 'category_not_normalized'
 REASON_MATCH = 'matches_profile'
+REASON_CLASS_INFO_ONLY = 'class_informational_only'
+
+# Extended patterns for raw age extraction from unnormalized category text.
+# Order matters: more specific patterns first.
+_RAW_AGE_PATTERNS = [
+    # ITF-style: BS 14, GS 12, BD 16, GD 12, XD 14, MS 18, WS 16
+    (re.compile(r'^\s*(?P<pfx>BS|BB|MS|BD|MD)\s*(?P<age>\d{1,2})\s*$', re.I), 'M'),
+    (re.compile(r'^\s*(?P<pfx>GS|GG|WS|GD|WD)\s*(?P<age>\d{1,2})\s*$', re.I), 'F'),
+    (re.compile(r'^\s*(?P<pfx>XD|MX|AD)\s*(?P<age>\d{1,2})\s*$', re.I), '*'),
+    # Duplas gender-age: "Duplas M 14", "Duplas F 12"
+    (re.compile(r'^\s*[Dd]uplas?\s*M(?:asc(?:ulino)?)?\s*(?P<age>\d{1,2})\s*$', re.I), 'M'),
+    (re.compile(r'^\s*[Dd]uplas?\s*F(?:em(?:inino)?)?\s*(?P<age>\d{1,2})\s*$', re.I), 'F'),
+    # Duplas age only: "Duplas 14", "Dupla 12"
+    (re.compile(r'^\s*[Dd]uplas?\s*(?P<age>\d{1,2})\s*$', re.I), '*'),
+    # Sub N (with optional gender): "Sub 16", "Sub16", "Sub-16 M"
+    (re.compile(r'^\s*[Ss]ub[-\s]*(?P<age>\d{1,2})\s*(?P<g>[MF])?\s*$', re.I), None),
+    # N anos (with optional gender): "16 anos", "14 Anos M"
+    (re.compile(r'^\s*(?P<age>\d{1,2})\s*[Aa]nos?\s*(?P<g>[MF])?\s*$', re.I), None),
+    # Plain "14M", "12F" — already handled by normalizer but as fallback
+    (re.compile(r'^\s*(?P<age>\d{1,2})\s*(?P<g>[MF])\s*$', re.I), None),
+]
 
 # Ranking check states (informational — do not flip the main eligibility status).
 RANKING_NOT_APPLICABLE = 'not_applicable'   # Categoria sem max_participants
@@ -92,16 +118,43 @@ class EligibilityEngine:
 
     # ---------- Category evaluation ----------
 
+    @staticmethod
+    def extract_age_from_text(text: str) -> Optional[tuple]:
+        """Extract (max_age: int, gender: str) from raw category text.
+        Returns None if no numeric age can be extracted.
+        Gender is 'M', 'F', or '*' (any/unknown)."""
+        raw = (text or '').strip()
+        for pattern, fixed_gender in _RAW_AGE_PATTERNS:
+            m = pattern.match(raw)
+            if m:
+                age = int(m.group('age'))
+                if fixed_gender is not None:
+                    gender = fixed_gender
+                else:
+                    try:
+                        g = m.group('g')
+                        gender = g.upper() if g else '*'
+                    except IndexError:
+                        gender = '*'
+                return age, gender
+        return None
+
     def evaluate_category(self, tc: TournamentCategory) -> EligibilityResult:
         """Evaluate a single TournamentCategory against the player."""
         norm: Optional[PlayerCategory] = tc.normalized_category
         if norm is None:
-            base = EligibilityResult(
-                status=STATUS_UNKNOWN,
-                reasons=[REASON_NOT_NORMALIZED],
-                category_code=tc.source_category_text,
-                category_label=tc.source_category_text,
-            )
+            # Try extracting age directly from the raw category text (e.g. "BS 14", "Duplas 12")
+            raw_age = self.extract_age_from_text(tc.source_category_text)
+            if raw_age is not None:
+                max_age, gender = raw_age
+                base = self._evaluate_raw_age(tc.source_category_text, max_age, gender)
+            else:
+                base = EligibilityResult(
+                    status=STATUS_UNKNOWN,
+                    reasons=[REASON_NOT_NORMALIZED],
+                    category_code=tc.source_category_text,
+                    category_label=tc.source_category_text,
+                )
         else:
             base = self.evaluate_player_category(
                 norm,
@@ -174,54 +227,65 @@ class EligibilityEngine:
         return STATUS_UNKNOWN
 
     def _check_fpt_class(self, cat: PlayerCategory, reasons: list) -> str:
-        player_class_str = (self.profile.tennis_class or '').upper().strip()
-        if not player_class_str:
-            reasons.append(REASON_NO_CLASS)
-            return STATUS_UNKNOWN
-        try:
-            player_class = int(player_class_str)
-        except ValueError:
-            # PR (principiante), PRO — not comparable numerically
-            if player_class_str == 'PR':
-                # principiante may play only 5th class
-                if cat.class_level == 5:
-                    return STATUS_COMPATIBLE
-                reasons.append(REASON_CLASS_TOO_HIGH)
-                return STATUS_INCOMPATIBLE
-            return STATUS_UNKNOWN
+        # MVP rule: class is informational only — does NOT block compatibility.
+        # Class data is preserved and displayed, but never used to exclude a player.
+        # Players should verify class eligibility directly with the official regulations.
+        reasons.append(REASON_CLASS_INFO_ONLY)
+        return STATUS_UNKNOWN
 
-        if cat.class_level is None:
-            reasons.append(REASON_NO_RULE)
-            return STATUS_UNKNOWN
-
-        # Rule: may play own class OR one class above (class_level - 1)
-        # lower class_level = higher technical level.
-        if cat.class_level == player_class:
-            return STATUS_COMPATIBLE
-        if cat.class_level == player_class - 1:
-            return STATUS_COMPATIBLE
-        if cat.class_level < player_class - 1:
-            reasons.append(REASON_CLASS_TOO_HIGH)
-            return STATUS_INCOMPATIBLE
-        # cat.class_level > player_class: descending forbidden
-        reasons.append(REASON_CLASS_TOO_LOW)
-        return STATUS_INCOMPATIBLE
+    def _evaluate_raw_age(self, source_text: str, max_age: int, gender: str) -> EligibilityResult:
+        """Evaluate compatibility based on age extracted from raw category text.
+        Rule: player's sporting_age must be <= max_age (younger players can enter older categories)."""
+        reasons = []
+        # Gender check
+        if gender not in ('*', 'X') and self.profile.gender and gender != self.profile.gender:
+            reasons.append(REASON_GENDER_MISMATCH)
+            return EligibilityResult(
+                status=STATUS_INCOMPATIBLE,
+                reasons=reasons,
+                category_code=source_text,
+                category_label=source_text,
+            )
+        # Age check
+        age = self.sporting_age
+        if age is None:
+            return EligibilityResult(
+                status=STATUS_UNKNOWN,
+                reasons=[REASON_NO_BIRTH_YEAR],
+                category_code=source_text,
+                category_label=source_text,
+            )
+        if age <= max_age:
+            return EligibilityResult(
+                status=STATUS_COMPATIBLE,
+                reasons=[REASON_MATCH],
+                category_code=source_text,
+                category_label=source_text,
+            )
+        reasons.append(REASON_AGE_OUT)
+        return EligibilityResult(
+            status=STATUS_INCOMPATIBLE,
+            reasons=reasons,
+            category_code=source_text,
+            category_label=source_text,
+        )
 
     def _check_exact_age(self, cat: PlayerCategory, reasons: list) -> str:
+        """Youth age check: player's sporting_age must be <= category's max_age.
+        A 12-year-old can enter BS 12, BS 14, BS 16, BS 18, but NOT BS 10."""
         age = self.sporting_age
         if age is None:
             reasons.append(REASON_NO_BIRTH_YEAR)
             return STATUS_UNKNOWN
-        min_age = cat.min_age
         max_age = cat.max_age
-        if min_age is not None and max_age is not None:
-            if min_age <= age <= max_age:
+        if max_age is not None:
+            if age <= max_age:
                 return STATUS_COMPATIBLE
             reasons.append(REASON_AGE_OUT)
             return STATUS_INCOMPATIBLE
+        # Fallback to min_age only (e.g. "18+" open-ended categories)
+        min_age = cat.min_age
         if min_age is not None and age >= min_age:
-            return STATUS_COMPATIBLE
-        if max_age is not None and age <= max_age:
             return STATUS_COMPATIBLE
         reasons.append(REASON_NO_RULE)
         return STATUS_UNKNOWN
@@ -322,6 +386,12 @@ class EligibilityEngine:
                 incompatible_count += 1
             else:
                 unknown_count += 1
+
+        # effective_compatible: a tournament is "effectively compatible" if it has
+        # at least one compatible category, OR has no incompatible categories at all
+        # (class-only or unclassified tournaments should not be excluded by default).
+        effective_compatible = compatible_count > 0 or (incompatible_count == 0 and unknown_count > 0)
+
         return {
             'edition_id': edition.id,
             'profile_id': self.profile.id,
@@ -330,5 +400,6 @@ class EligibilityEngine:
             'compatible_count': compatible_count,
             'incompatible_count': incompatible_count,
             'unknown_count': unknown_count,
+            'effective_compatible': effective_compatible,
             'categories': results,
         }

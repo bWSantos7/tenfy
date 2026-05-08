@@ -150,6 +150,16 @@ def subscription_checkout(request):
 
         _log_action(request.user, 'billing.checkout', f'Checkout plan={plan.slug} method={d["payment_method"]}')
 
+        # Record LGPD consent at subscription time for users who don't have it yet.
+        # The checkout screen displays LGPD/terms acceptance text; confirming is implicit agreement.
+        user = request.user
+        if not user.consented_at:
+            from apps.accounts.serializers import CURRENT_CONSENT_VERSION
+            user.consent_version = CURRENT_CONSENT_VERSION
+            user.consented_at = timezone.now()
+            user.save(update_fields=['consent_version', 'consented_at', 'updated_at'])
+            logger.info('LGPD consent recorded at checkout for user %s', user.id)
+
     resp_data = SubscriptionSerializer(sub).data
     if asaas_result:
         # Only expose safe fields — never raw card data or internal Asaas tokens

@@ -120,6 +120,8 @@ export interface TournamentEditionList {
     compatible_count: number;
     unknown_count: number;
     total_count: number;
+    distance_status?: 'within_radius' | 'outside_radius' | 'unknown' | 'nationwide';
+    distance_message?: string | null;
   };
 }
 

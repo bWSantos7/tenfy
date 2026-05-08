@@ -408,6 +408,13 @@ def _normalize_tournament(doc: dict) -> Optional[dict]:
         
     entry_open, entry_close = _parse_inscription_dates(doc, year_hint=year_hint)
 
+    # Withdrawal deadline — separate from registration close (not a dedup key)
+    withdrawal_raw = doc.get('withdrawal_deadline_at') or doc.get('Withdrawal deadline') or doc.get('withdrawal_deadline')
+    withdrawal_deadline = _parse_inscription_date(withdrawal_raw, year_hint) if withdrawal_raw else None
+
+    # hasOnlineEntry — boolean flag from crawler
+    has_online_entry = bool(doc.get('hasOnlineEntry', False))
+
     # Categories from embedded events array — normalize COSAT codes to human-readable names
     events = doc.get('events') or []
     categories = [
@@ -434,6 +441,8 @@ def _normalize_tournament(doc: dict) -> Optional[dict]:
         'end_date': end_date.isoformat() if end_date else None,
         'entry_open_at': entry_open.isoformat() if entry_open else None,
         'entry_close_at': entry_close.isoformat() if entry_close else None,
+        'withdrawal_deadline_at': withdrawal_deadline.isoformat() if withdrawal_deadline else None,
+        'has_online_entry': has_online_entry,
         'status': 'unknown',
         'surface': 'unknown',
         'venue': {

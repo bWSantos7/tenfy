@@ -141,6 +141,16 @@ class TournamentEdition(TimestampedModel):
         max_length=10, choices=CONFIDENCE_CHOICES, default=CONFIDENCE_MED
     )
 
+    # Inscription timeline extras
+    withdrawal_deadline_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text='Deadline to withdraw from tournament after registering.',
+    )
+    has_online_entry = models.BooleanField(
+        default=False,
+        help_text='True when the source indicates online registration is available.',
+    )
+
     # Youth classification
     is_youth = models.BooleanField(
         null=True, blank=True, db_index=True,

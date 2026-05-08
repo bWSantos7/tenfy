@@ -36,6 +36,7 @@ def _trunc(value: str, max_len: int, label: str = '') -> str:
 
 MATERIAL_FIELDS = {
     'start_date', 'end_date', 'entry_open_at', 'entry_close_at',
+    'withdrawal_deadline_at',
     'status', 'surface', 'base_price_brl', 'title',
 }
 
@@ -188,6 +189,8 @@ class TournamentPersister:
                 end_date=self._parse_date(data.get('end_date')),
                 entry_open_at=self._parse_dt(data.get('entry_open_at')),
                 entry_close_at=self._parse_dt(data.get('entry_close_at')),
+                withdrawal_deadline_at=self._parse_dt(data.get('withdrawal_deadline_at')),
+                has_online_entry=bool(data.get('has_online_entry', False)),
                 status=data.get('status') or TournamentEdition.STATUS_UNKNOWN,
                 surface=data.get('surface') or TournamentEdition.SURFACE_UNKNOWN,
                 venue=venue,
@@ -221,6 +224,7 @@ class TournamentPersister:
                     'end_date': ed.end_date.isoformat() if ed.end_date else None,
                     'entry_open_at': ed.entry_open_at.isoformat() if ed.entry_open_at else None,
                     'entry_close_at': ed.entry_close_at.isoformat() if ed.entry_close_at else None,
+                    'withdrawal_deadline_at': ed.withdrawal_deadline_at.isoformat() if ed.withdrawal_deadline_at else None,
                     'status': ed.status,
                     'surface': ed.surface,
                     'base_price_brl': float(ed.base_price_brl) if ed.base_price_brl else None,
@@ -231,6 +235,7 @@ class TournamentPersister:
                     'end_date': data.get('end_date'),
                     'entry_open_at': data.get('entry_open_at'),
                     'entry_close_at': data.get('entry_close_at'),
+                    'withdrawal_deadline_at': data.get('withdrawal_deadline_at'),
                     'status': data.get('status') or ed.status,
                     'surface': data.get('surface') or ed.surface,
                     'base_price_brl': data.get('base_price_brl'),
@@ -245,6 +250,11 @@ class TournamentPersister:
                 ed.end_date = self._parse_date(after['end_date']) or ed.end_date
                 ed.entry_open_at = self._parse_dt(after['entry_open_at']) or ed.entry_open_at
                 ed.entry_close_at = self._parse_dt(after['entry_close_at']) or ed.entry_close_at
+                new_wd = self._parse_dt(data.get('withdrawal_deadline_at'))
+                if new_wd:
+                    ed.withdrawal_deadline_at = new_wd
+                if 'has_online_entry' in data:
+                    ed.has_online_entry = bool(data['has_online_entry'])
                 if after['status']:
                     ed.status = after['status']
                 if after['surface']:

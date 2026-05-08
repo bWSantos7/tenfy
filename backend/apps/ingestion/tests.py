@@ -5,6 +5,18 @@ from unittest.mock import MagicMock, patch, PropertyMock
 from django.test import TestCase, override_settings
 
 
+class MaterialFieldsTestCase(TestCase):
+    def test_withdrawal_deadline_at_is_material(self):
+        """withdrawal_deadline_at must trigger TournamentChangeEvent on change."""
+        from apps.ingestion.persistence import MATERIAL_FIELDS
+        self.assertIn('withdrawal_deadline_at', MATERIAL_FIELDS)
+
+    def test_core_dates_are_material(self):
+        from apps.ingestion.persistence import MATERIAL_FIELDS
+        for field in ('start_date', 'end_date', 'entry_open_at', 'entry_close_at'):
+            self.assertIn(field, MATERIAL_FIELDS)
+
+
 class DedupFingerprintTestCase(TestCase):
     def test_same_title_date_city_produces_same_fingerprint(self):
         from apps.ingestion.persistence import _dedup_fingerprint
@@ -141,6 +153,33 @@ class CosatMongoNormalizationTestCase(TestCase):
         self.assertEqual(result['end_date'], '2026-05-23')
         self.assertEqual(result['entry_open_at'], '2026-02-18T00:00:00-05:00')
         self.assertEqual(result['entry_close_at'], '2026-04-27T23:59:00-05:00')
+
+    def test_normalize_tournament_withdrawal_deadline_and_online_entry(self):
+        """withdrawal_deadline_at and has_online_entry extracted from new crawler schema."""
+        from apps.ingestion.connectors.cosat_mongo import _normalize_tournament
+        doc = {
+            'cosatId': 'wd01',
+            'name': 'COSAT Open 2026',
+            'registration_open_at': '2026-02-04T00:00:00-03:00',
+            'registration_close_at': '2026-04-13T23:59:00-04:00',
+            'withdrawal_deadline_at': '2026-04-21T00:59:00-04:00',
+            'tournament_start_at': '2026-05-02T00:00:00-04:00',
+            'tournament_end_at': '2026-05-09T00:00:00-04:00',
+            'hasOnlineEntry': True,
+        }
+        result = _normalize_tournament(doc)
+        self.assertIsNotNone(result)
+        self.assertEqual(result['withdrawal_deadline_at'], '2026-04-21T00:59:00-04:00')
+        self.assertTrue(result['has_online_entry'])
+
+    def test_normalize_tournament_withdrawal_absent_is_none(self):
+        """withdrawal_deadline_at is None when not present in doc."""
+        from apps.ingestion.connectors.cosat_mongo import _normalize_tournament
+        doc = {'cosatId': 'wd02', 'name': 'Open 2026'}
+        result = _normalize_tournament(doc)
+        self.assertIsNotNone(result)
+        self.assertIsNone(result['withdrawal_deadline_at'])
+        self.assertFalse(result['has_online_entry'])
 
     def test_normalize_tournament_missing_cosat_id_returns_none(self):
         from apps.ingestion.connectors.cosat_mongo import _normalize_tournament

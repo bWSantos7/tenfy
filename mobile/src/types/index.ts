@@ -102,6 +102,8 @@ export interface TournamentEditionList {
   end_date: string | null;
   entry_open_at: string | null;
   entry_close_at: string | null;
+  withdrawal_deadline_at: string | null;
+  has_online_entry: boolean;
   status: TournamentStatus;
   dynamic_status: TournamentStatus;
   surface: string;

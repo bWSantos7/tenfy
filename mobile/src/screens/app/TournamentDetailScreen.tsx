@@ -18,8 +18,52 @@ import { myRegistrations, withdrawRegistration } from '../../services/registrati
 import { pickBestProfile } from '../../utils/profile';
 import { fmtBRL, fmtDate, fmtDateMaybeTime, fmtDateRange, formatChangeEventDetails, formatChangeEventTitle, translateReason, STATUS_LABELS, SURFACE_LABELS } from '../../utils/format';
 import { extractApiError } from '../../services/api';
+import { hasEmailLike } from '../../utils/sanitize';
 
 type Props = NativeStackScreenProps<MainStackParamList, 'TournamentDetail'>;
+
+function TimelineItem({
+  icon,
+  label,
+  value,
+  colors,
+  dotColor,
+  isLast = false,
+}: {
+  icon: string;
+  label: string;
+  value: string | null | undefined;
+  colors: ReturnType<typeof import('../../contexts/ThemeContext').useTheme>['colors'];
+  dotColor: string;
+  isLast?: boolean;
+}) {
+  const formatted = value ? fmtDateMaybeTime(value) : '—';
+  const hasValue = !!value;
+  return (
+    <View style={{ flexDirection: 'row', gap: 12, marginBottom: isLast ? 0 : 16 }}>
+      <View style={{ alignItems: 'center', width: 32 }}>
+        <View style={{
+          width: 32, height: 32, borderRadius: 16,
+          backgroundColor: hasValue ? `${dotColor}20` : `${colors.textMuted}12`,
+          borderWidth: 2,
+          borderColor: hasValue ? dotColor : colors.textMuted,
+          alignItems: 'center', justifyContent: 'center',
+        }}>
+          <Ionicons name={icon as any} size={14} color={hasValue ? dotColor : colors.textMuted} />
+        </View>
+        {!isLast && (
+          <View style={{ width: 2, flex: 1, backgroundColor: colors.borderSubtle, marginTop: 4 }} />
+        )}
+      </View>
+      <View style={{ flex: 1, paddingTop: 6 }}>
+        <AppText variant="caption" style={{ color: colors.textMuted, marginBottom: 2 }}>{label}</AppText>
+        <AppText variant="body" style={{ fontWeight: '600', color: hasValue ? colors.textPrimary : colors.textMuted, fontSize: 14 }}>
+          {formatted}
+        </AppText>
+      </View>
+    </View>
+  );
+}
 
 function getStatusColors(colors: ReturnType<typeof import('../../contexts/ThemeContext').useTheme>['colors']): Record<string, string> {
   return {
@@ -229,9 +273,22 @@ export function TournamentDetailScreen({ route, navigation }: Props) {
               <AppText variant="caption">Prazo final de inscrição: {fmtDateMaybeTime(detail.entry_close_at)}</AppText>
             </View>
           )}
+          {detail.withdrawal_deadline_at && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Ionicons name="exit-outline" size={14} color={colors.statusClosing} />
+              <AppText variant="caption" style={{ color: colors.statusClosing }}>
+                Prazo de desistência: {fmtDateMaybeTime(detail.withdrawal_deadline_at)}
+              </AppText>
+            </View>
+          )}
+          {detail.has_online_entry && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Ionicons name="link-outline" size={14} color={colors.accentBlue} />
+              <AppText variant="caption" style={{ color: colors.accentBlue, fontWeight: '600' }}>Inscrição Online disponível</AppText>
+            </View>
+          )}
           {(() => {
-            const _emailRe = /[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/;
-            const safeCity = (detail.venue_city && !_emailRe.test(detail.venue_city)) ? detail.venue_city : '';
+            const safeCity = (detail.venue_city && !hasEmailLike(detail.venue_city)) ? detail.venue_city : '';
             const locationStr = [safeCity, detail.venue_state].filter(Boolean).join(' / ');
             if (!locationStr) return null;
             return (
@@ -275,6 +332,44 @@ export function TournamentDetailScreen({ route, navigation }: Props) {
           onPress={() => navigation.navigate('RegistrationList', { editionId: id, editionTitle: detail.title })}
         />
       </Card>
+
+      {/* Timeline */}
+      {(detail.entry_open_at || detail.entry_close_at || detail.withdrawal_deadline_at || detail.start_date) && (
+        <Card>
+          <AppText variant="body" style={{ fontWeight: '700', marginBottom: 12 }}>Linha do Tempo</AppText>
+          <TimelineItem
+            icon="create-outline"
+            label="Início das inscrições"
+            value={detail.entry_open_at}
+            colors={colors}
+            dotColor={colors.accentBlue}
+          />
+          <TimelineItem
+            icon="lock-closed-outline"
+            label="Encerramento das inscrições"
+            value={detail.entry_close_at}
+            colors={colors}
+            dotColor={colors.statusClosing}
+          />
+          {detail.withdrawal_deadline_at && (
+            <TimelineItem
+              icon="exit-outline"
+              label="Limite para desistência"
+              value={detail.withdrawal_deadline_at}
+              colors={colors}
+              dotColor={colors.danger}
+            />
+          )}
+          <TimelineItem
+            icon="trophy-outline"
+            label="Início do torneio"
+            value={detail.start_date}
+            colors={colors}
+            dotColor={colors.accentNeon}
+            isLast
+          />
+        </Card>
+      )}
 
       {/* My Registration status */}
       {myReg && regSC ? (

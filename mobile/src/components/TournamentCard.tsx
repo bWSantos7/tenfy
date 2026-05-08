@@ -6,8 +6,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { AppText } from './ui';
 import { STATUS_LABELS, fmtBRL, fmtDateRange } from '../utils/format';
 import { haptic } from '../hooks/useHaptic';
-
-const _VENUE_EMAIL_RE = /[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/;
+import { hasEmailLike } from '../utils/sanitize';
 
 function getStatusStyle(status: TournamentStatus, colors: ReturnType<typeof useTheme>['colors']) {
   switch (status) {
@@ -56,7 +55,7 @@ export function TournamentCard({
   const scale = useRef(new Animated.Value(1)).current;
   const status = edition.dynamic_status || edition.status;
   const { color: statusColor, icon: statusIcon } = getStatusStyle(status, colors);
-  const safeCity = (edition.venue_city && !_VENUE_EMAIL_RE.test(edition.venue_city)) ? edition.venue_city : '';
+  const safeCity = (edition.venue_city && !hasEmailLike(edition.venue_city)) ? edition.venue_city : '';
   const location = [safeCity, edition.venue_state].filter(Boolean).join(' · ');
   const daysUntil = getDaysUntil(edition.entry_close_at);
   const showDeadline = daysUntil !== null && daysUntil >= 0 && ['open', 'closing_soon'].includes(status);
@@ -141,6 +140,15 @@ export function TournamentCard({
             <View style={[styles.priceBadge, { backgroundColor: colors.bgElevated, borderColor: colors.borderSubtle }]}>
               <AppText variant="caption" style={{ color: colors.textSecondary, fontWeight: '600', fontSize: 11 }}>
                 {fmtBRL(edition.base_price_brl)}
+              </AppText>
+            </View>
+          ) : null}
+
+          {edition.has_online_entry ? (
+            <View style={[styles.eligBadge, { backgroundColor: `${colors.accentBlue}12`, borderColor: `${colors.accentBlue}30` }]}>
+              <Ionicons name="link-outline" size={12} color={colors.accentBlue} />
+              <AppText variant="caption" style={{ color: colors.accentBlue, fontWeight: '700', fontSize: 11 }}>
+                Inscrição Online
               </AppText>
             </View>
           ) : null}

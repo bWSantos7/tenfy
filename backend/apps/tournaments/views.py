@@ -70,14 +70,16 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
     def _build_compatible_candidate_filter(self, profile):
         from apps.players.models import PlayerCategory
 
+        # Always include OPEN categories
         category_filter = Q(categories__normalized_category__taxonomy=PlayerCategory.TAXONOMY_OPEN)
+
+        # Always include editions that have unnormalized categories (COSAT, duplas, etc.)
+        # The eligibility engine evaluates them via raw text extraction.
+        category_filter |= Q(categories__normalized_category__isnull=True)
 
         sporting_age = profile.sporting_age
         if sporting_age is not None:
             # A player may enter any age category whose max_age >= their age.
-            # e.g. 12-year-old can enter "12 anos", "14 anos", "16 anos".
-            # Do NOT filter by min_age — "14 anos" category has min_age=14 but is open
-            # to anyone up to 14 years old (including 10, 11, 12, 13).
             category_filter |= Q(
                 categories__normalized_category__taxonomy__in=[
                     PlayerCategory.TAXONOMY_CBT_AGE,
@@ -91,6 +93,7 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
                 categories__normalized_category__min_age__lte=sporting_age,
             )
 
+        # FPT class (informational — not a blocker, but still include as candidates)
         tennis_class = (profile.tennis_class or '').upper().strip()
         if tennis_class:
             if tennis_class == 'PR':
@@ -108,10 +111,13 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
                     categories__normalized_category__class_level__in=allowed_levels,
                 )
 
+        # Gender filter: allow match, wildcard, or unknown-gender normalized cats.
+        # Do NOT apply gender filter globally — unnormalized categories handled by engine.
         if profile.gender:
-            category_filter &= Q(
+            gender_q = Q(
                 categories__normalized_category__gender_scope__in=[profile.gender, '*', 'X']
-            )
+            ) | Q(categories__normalized_category__isnull=True)
+            category_filter &= gender_q
 
         return category_filter
 
@@ -171,7 +177,7 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=False, methods=['get'], throttle_classes=[HeavyUserThrottle])
     def compatible(self, request):
         from apps.eligibility.services import EligibilityEngine
-        from apps.eligibility.location import within_profile_radius
+        from apps.eligibility.location import within_profile_states, profile_state_result
         from apps.players.models import PlayerProfile
 
         profile_id = request.query_params.get('profile_id')
@@ -204,16 +210,28 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
         engine = EligibilityEngine(profile)
         compatible = []
         for edition in candidate_qs:
+            # Location check using states (primary) — only exclude when explicitly outside
+            loc = profile_state_result(profile, edition)
+            if not loc['included']:
+                continue
+
             result = engine.evaluate_edition(edition)
+            # Include if any category is compatible, OR at least one unknown is
+            # parseable (engine extracted age/gender but lacks profile data).
+            # Purely unparseable categories (REASON_NOT_NORMALIZED) are not
+            # sufficient on their own to qualify an edition as compatible.
             if result['compatible_count'] <= 0:
                 continue
-            if not within_profile_radius(profile, edition):
-                continue
+
             data = self.get_serializer(edition).data
             data['eligibility'] = {
                 'compatible_count': result['compatible_count'],
                 'unknown_count': result['unknown_count'],
+                'not_normalized_count': result.get('not_normalized_count', 0),
+                'parseable_unknown_count': result['unknown_count'] - result.get('not_normalized_count', 0),
                 'total_count': result['total_count'],
+                'distance_status': loc['status'],
+                'distance_message': loc['message'],
             }
             compatible.append(data)
 

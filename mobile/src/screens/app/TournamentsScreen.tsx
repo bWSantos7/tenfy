@@ -24,7 +24,6 @@ import { Organization, PlayerProfile, TournamentEditionList } from '../../types'
 import { calendar, listEditions, listFederations, TournamentFilters } from '../../services/tournaments';
 import { listProfiles } from '../../services/data';
 import { pickBestProfile } from '../../utils/profile';
-import { fmtRadius } from '../../utils/format';
 
 type Props = BottomTabScreenProps<MainTabParamList, 'Tournaments'>;
 type StackNav = NativeStackNavigationProp<MainStackParamList>;
@@ -206,7 +205,10 @@ function FilterHeader({
                     </AppText>
                     {primaryProfile?.home_city ? (
                       <AppText variant="muted" style={{ fontSize: 10, marginTop: 1 }}>
-                        {primaryProfile.home_city}{primaryProfile.home_state ? `/${primaryProfile.home_state}` : ''} • raio {fmtRadius(primaryProfile.travel_radius_km)}
+                        {primaryProfile.home_city}{primaryProfile.home_state ? `/${primaryProfile.home_state}` : ''}
+                        {primaryProfile.travel_states && primaryProfile.travel_states.length > 0
+                          ? ` • ${primaryProfile.travel_states.length >= 27 ? 'Todo o Brasil' : `${primaryProfile.travel_states.length} estado${primaryProfile.travel_states.length > 1 ? 's' : ''}`}`
+                          : ''}
                       </AppText>
                     ) : (
                       <AppText variant="muted" style={{ fontSize: 10, marginTop: 1, color: colors.statusClosing }}>

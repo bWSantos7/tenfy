@@ -7,12 +7,94 @@ from django.conf import settings
 
 NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search'
 
+ALL_BR_STATES = frozenset({
+    'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO',
+    'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI',
+    'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO',
+})
+
+# Distance status constants (used by compatible endpoint for transparent reporting).
+DISTANCE_WITHIN = 'within_radius'
+DISTANCE_OUTSIDE = 'outside_radius'
+DISTANCE_UNKNOWN = 'unknown'
+DISTANCE_NATIONWIDE = 'nationwide'
+
+
+# ── State-based check (primary, replaces radius for new profiles) ──────────────
+
+def within_profile_states(profile, edition) -> bool:
+    """
+    Primary location check: profile.travel_states vs edition.venue.state.
+
+    Returns True when the tournament state is among the player's accepted states,
+    or when travel_states covers all Brazilian states (Todo o Brasil).
+
+    Returns True (optimistic) when the tournament has no venue/state — caller
+    should flag this as DISTANCE_UNKNOWN in the API response.
+    """
+    states = list(profile.travel_states or [])
+
+    if not states:
+        # No states set — fall back to legacy radius so existing profiles keep
+        # their previous filtering behaviour instead of seeing all of Brazil.
+        return within_profile_radius(profile, edition)
+
+    # "Todo o Brasil" shortcut: all 27 UFs selected
+    normalised = {s.upper() for s in states}
+    if normalised >= ALL_BR_STATES:
+        return True
+
+    venue = edition.venue
+    if not venue or not venue.state:
+        # Unknown venue state — include optimistically
+        return True
+
+    return venue.state.upper() in normalised
+
+
+def profile_state_result(profile, edition) -> dict:
+    """
+    Detailed state check result for the API response.
+    Returns {'included': bool, 'status': str, 'message': str|None}.
+    """
+    states = list(profile.travel_states or [])
+
+    if not states:
+        # No states set — fall back to radius check; flag as unknown so the UI
+        # prompts the user to configure states.
+        included = within_profile_radius(profile, edition)
+        return {
+            'included': included,
+            'status': DISTANCE_UNKNOWN,
+            'message': 'Selecione os estados onde você aceita jogar para refinar a compatibilidade.',
+        }
+
+    normalised = {s.upper() for s in states}
+    if normalised >= ALL_BR_STATES:
+        return {'included': True, 'status': DISTANCE_NATIONWIDE, 'message': None}
+
+    venue = edition.venue
+    if not venue or not venue.state:
+        return {
+            'included': True,
+            'status': DISTANCE_UNKNOWN,
+            'message': 'Estado do torneio não identificado. Verifique o regulamento oficial.',
+        }
+
+    if venue.state.upper() in normalised:
+        return {'included': True, 'status': DISTANCE_WITHIN, 'message': None}
+
+    return {'included': False, 'status': DISTANCE_OUTSIDE, 'message': None}
+
+
+# ── Legacy radius check (kept for backwards compatibility) ──────────────────────
+
 # Sentinel: travel_radius_km >= this value means "Todo o Brasil" — no distance check.
 _BRASIL_RADIUS_KM = 1000
 
 
 def within_profile_radius(profile, edition) -> bool:
-    # "Todo o Brasil" — bypass all distance logic.
+    """Legacy: radius-based check. Used as fallback when travel_states is empty."""
     if (profile.travel_radius_km or 0) >= _BRASIL_RADIUS_KM:
         return True
 
@@ -20,13 +102,11 @@ def within_profile_radius(profile, edition) -> bool:
         return True
     venue = edition.venue
     if not venue or not venue.city or not venue.state:
-        # No venue data — include optimistically (don't exclude due to missing data).
         return True
 
     if _same_city(profile.home_city, venue.city) and profile.home_state.upper() == venue.state.upper():
         return True
 
-    # Fast path: use pre-stored coordinates when available on both sides
     if (
         profile.home_lat is not None and profile.home_lng is not None
         and venue.latitude is not None and venue.longitude is not None
@@ -34,26 +114,16 @@ def within_profile_radius(profile, edition) -> bool:
         distance_km = haversine_km(profile.home_lat, profile.home_lng, venue.latitude, venue.longitude)
         return distance_km <= profile.travel_radius_km
 
-    # Slow path: geocode via Nominatim (results are LRU-cached per process)
     distance_km = calculate_profile_distance_km(
-        profile.home_city,
-        profile.home_state,
-        venue.city,
-        venue.state,
-        venue.address,
+        profile.home_city, profile.home_state, venue.city, venue.state,
+        getattr(venue, 'address', '') or '',
     )
     if distance_km is None:
-        # Geocoding failed — include optimistically to avoid silently hiding tournaments.
-        return True
+        return True  # Geocoding failed — include optimistically
     return distance_km <= profile.travel_radius_km
 
 
 def geocode_and_save_profile(profile) -> bool:
-    """
-    Geocode a profile's home_city/state and persist lat/lng.
-    Called from profile post-save signal when city or state changes.
-    Returns True if coordinates were updated.
-    """
     if not profile.home_city or not profile.home_state:
         return False
     coords = geocode_location(profile.home_city, profile.home_state)
@@ -68,11 +138,8 @@ def geocode_and_save_profile(profile) -> bool:
 
 
 def calculate_profile_distance_km(
-    origin_city: str,
-    origin_state: str,
-    venue_city: str,
-    venue_state: str,
-    venue_address: str = '',
+    origin_city: str, origin_state: str,
+    venue_city: str, venue_state: str, venue_address: str = '',
 ):
     origin = geocode_location(origin_city, origin_state)
     destination = geocode_location(venue_city, venue_state, venue_address)
@@ -87,8 +154,7 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     d_lon = math.radians(lon2 - lon1)
     a = (
         math.sin(d_lat / 2) ** 2
-        + math.cos(math.radians(lat1))
-        * math.cos(math.radians(lat2))
+        + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2))
         * math.sin(d_lon / 2) ** 2
     )
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
@@ -102,12 +168,7 @@ def geocode_location(city: str, state: str, address: str = ''):
     try:
         response = requests.get(
             NOMINATIM_URL,
-            params={
-                'q': query,
-                'format': 'jsonv2',
-                'limit': 1,
-                'countrycodes': 'br',
-            },
+            params={'q': query, 'format': 'jsonv2', 'limit': 1, 'countrycodes': 'br'},
             headers={'User-Agent': getattr(settings, 'SCRAPER_USER_AGENT', 'TenfyBot/1.0')},
             timeout=20,
         )
@@ -128,7 +189,6 @@ def _same_city(a: str, b: str) -> bool:
 def _normalize_city(value: str) -> str:
     import re
     import unicodedata
-
     normalized = unicodedata.normalize('NFKD', value).encode('ascii', 'ignore').decode('ascii')
     normalized = re.sub(r'[^a-zA-Z0-9]+', ' ', normalized).strip().lower()
     return normalized

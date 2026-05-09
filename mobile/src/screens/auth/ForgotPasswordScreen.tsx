@@ -25,7 +25,7 @@ export function ForgotPasswordScreen({ navigation }: Props) {
 
   return (
     <Screen scroll={false}>
-      <View style={{ flex: 1, justifyContent: 'center' }}>
+      <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: 16 }}>
         {sent ? (
           <Card>
             <AppText variant="section">Verifique seu e-mail</AppText>

@@ -141,6 +141,7 @@ const FIELD_LABELS: Record<string, string> = {
   home_state: 'Estado',
   home_city: 'Cidade',
   travel_radius_km: 'Raio de viagem',
+  travel_states: 'Estados de viagem',
   competitive_level: 'Nível competitivo',
   tennis_class: 'Classe',
   category_id: 'Categoria',

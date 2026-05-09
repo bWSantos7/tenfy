@@ -8,11 +8,12 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { createProfile } from '../../services/data';
 import { extractApiError } from '../../services/api';
+import { markProfileDirty } from '../../utils/profileRefresh';
 import { createChildAccount, register, sendEmailOtp, verifyEmailOtp } from '../../services/auth';
 import { checkout, fetchPlans, Plan } from '../../services/billing';
 import { User } from '../../types';
 import { LEVEL_LABELS, TENNIS_CLASS_LABELS } from '../../utils/format';
-import { AppText, Button, Card, Checkbox, Input, Screen, SelectField } from '../../components/ui';
+import { AppText, Button, Card, Checkbox, Input, MultiSelectField, Screen, SelectField } from '../../components/ui';
 
 type AppColors = ReturnType<typeof import('../../contexts/ThemeContext').useTheme>['colors'];
 
@@ -62,11 +63,8 @@ const CLASS_OPTIONS = [
   { value: '', label: 'Sem classe definida' },
   ...Object.entries(TENNIS_CLASS_LABELS).map(([value, label]) => ({ value, label })),
 ];
-const RADIUS_OPTIONS = [
-  { value: '50', label: '50 km' }, { value: '100', label: '100 km' },
-  { value: '200', label: '200 km' }, { value: '300', label: '300 km' },
-  { value: '500', label: '500 km' }, { value: '1000', label: 'Todo o Brasil' },
-];
+const ALL_STATES_OPTION = { value: '__ALL__', label: 'Todo o Brasil (todos os estados)' };
+const TRAVEL_STATE_OPTIONS = [ALL_STATES_OPTION, ...UF_OPTIONS];
 const GENDER_OPTIONS = [{ value: 'M', label: 'Masculino' }, { value: 'F', label: 'Feminino' }];
 
 export function RegisterScreen({ navigation }: Props) {
@@ -99,16 +97,25 @@ export function RegisterScreen({ navigation }: Props) {
     marketing_consent: false,
   });
   const [emailCode, setEmailCode] = useState('');
+  const ALL_BR_UFS = UF_OPTIONS.map((o) => o.value);
   const [profile, setProfile] = useState({
     display_name: '',
     birth_year: '',
     gender: '',
     home_state: 'SP',
     home_city: '',
-    travel_radius_km: '100',
+    travel_states: [] as string[],
     competitive_level: 'amateur',
     tennis_class: '',
   });
+
+  function handleTravelStatesSelect(vals: string[]) {
+    if (vals.includes('__ALL__')) {
+      setProfile((p) => ({ ...p, travel_states: ALL_BR_UFS }));
+    } else {
+      setProfile((p) => ({ ...p, travel_states: vals }));
+    }
+  }
   const [dependentForm, setDependentForm] = useState({
     full_name: '',
     email: '',
@@ -253,15 +260,29 @@ export function RegisterScreen({ navigation }: Props) {
         gender: (profile.gender || undefined) as any,
         home_state: profile.home_state,
         home_city: profile.home_city,
-        travel_radius_km: Number(profile.travel_radius_km) || 100,
+        travel_states: profile.travel_states,
         competitive_level: profile.competitive_level as any,
         tennis_class: profile.tennis_class || '',
         is_primary: true,
       } as any);
+      markProfileDirty();
       if (registeredUser) setUser(registeredUser);
       Toast.show({ type: 'success', text1: 'Perfil criado! Bem-vindo!' });
-    } catch (err) {
-      Toast.show({ type: 'error', text1: 'Erro ao finalizar cadastro', text2: extractApiError(err) });
+    } catch (err: any) {
+      const httpStatus: number | undefined = err?.response?.status;
+      const isServerOrNetwork = !httpStatus || httpStatus >= 500;
+      if (isServerOrNetwork) {
+        // Server/network error — let user in so registration isn't blocked
+        Toast.show({
+          type: 'info',
+          text1: 'Perfil não configurado',
+          text2: 'Complete seu perfil em "Meu Perfil" para encontrar torneios compatíveis.',
+          visibilityTime: 6000,
+        });
+        if (registeredUser) setUser(registeredUser);
+      } else {
+        Toast.show({ type: 'error', text1: 'Erro ao finalizar cadastro', text2: extractApiError(err), visibilityTime: 5000 });
+      }
     } finally { setSubmitting(false); }
   }
 
@@ -571,7 +592,7 @@ export function RegisterScreen({ navigation }: Props) {
             <SelectField label="Genero" value={profile.gender} options={GENDER_OPTIONS} onSelect={(v) => setProfile({ ...profile, gender: v })} placeholder="Selecione" />
             <SelectField label="Estado (UF)" value={profile.home_state} options={UF_OPTIONS} onSelect={(v) => setProfile({ ...profile, home_state: v, home_city: '' })} />
             <SelectField label="Cidade" value={profile.home_city} options={cities} onSelect={(v) => setProfile({ ...profile, home_city: v })} placeholder={loadingCities ? 'Carregando...' : 'Selecione a cidade'} loading={loadingCities} searchable />
-            <SelectField label="Raio de viagem" value={profile.travel_radius_km} options={RADIUS_OPTIONS} onSelect={(v) => setProfile({ ...profile, travel_radius_km: v })} />
+            <MultiSelectField label="Estados onde aceita jogar" values={profile.travel_states} options={TRAVEL_STATE_OPTIONS} onSelect={handleTravelStatesSelect} placeholder="Selecione os estados..." searchable />
             <SelectField label="Nivel competitivo" value={profile.competitive_level} options={LEVEL_OPTIONS} onSelect={(v) => setProfile({ ...profile, competitive_level: v })} />
             <SelectField label="Classe (FPT/CBT)" value={profile.tennis_class} options={CLASS_OPTIONS} onSelect={(v) => setProfile({ ...profile, tennis_class: v })} placeholder="Opcional" />
 

@@ -14,9 +14,9 @@ import { deleteAccount, uploadAvatar } from '../../services/auth';
 import { deleteProfile, listChildren, listProfiles, requestDataExport, setPrimary, updateProfile } from '../../services/data';
 import { extractApiError, mediaUrl } from '../../services/api';
 import { ParentChild, PlayerProfile } from '../../types';
-import { fmtRadius, GENDER_LABELS, LEVEL_LABELS, ROLE_LABELS, TENNIS_CLASS_LABELS } from '../../utils/format';
+import { GENDER_LABELS, LEVEL_LABELS, ROLE_LABELS, TENNIS_CLASS_LABELS } from '../../utils/format';
 import { markProfileDirty } from '../../utils/profileRefresh';
-import { AppText, Button, Card, EmptyState, Input, LoadingBlock, Screen, SectionHeader, SelectField } from '../../components/ui';
+import { AppText, Button, Card, EmptyState, Input, LoadingBlock, MultiSelectField, Screen, SectionHeader, SelectField } from '../../components/ui';
 
 type Props = BottomTabScreenProps<MainTabParamList, 'Profile'>;
 type StackNav = NativeStackNavigationProp<MainStackParamList>;
@@ -44,10 +44,10 @@ const CLASS_OPTIONS = [
   { value: '', label: 'Sem classe definida' },
   ...Object.entries(TENNIS_CLASS_LABELS).map(([value, label]) => ({ value, label })),
 ];
-const RADIUS_OPTIONS = [
-  { value: '50', label: '50 km' }, { value: '100', label: '100 km' },
-  { value: '200', label: '200 km' }, { value: '300', label: '300 km' },
-  { value: '500', label: '500 km' }, { value: '1000', label: 'Todo o Brasil' },
+const ALL_UFS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
+const TRAVEL_STATE_OPTIONS = [
+  { value: '__ALL__', label: '🌎 Todo o Brasil (todos os estados)' },
+  ...UF_OPTIONS,
 ];
 
 export function ProfileScreen(_: Props) {
@@ -435,7 +435,17 @@ function ProfileCard({ profile: p, colors, onEdit, onMakePrimary, onRemove, rest
         {(p.home_city || p.home_state) ? (
           <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
             <Ionicons name="location-outline" size={13} color={colors.textMuted} />
-            <AppText variant="caption">{[p.home_city, p.home_state].filter(Boolean).join('/')} • raio {fmtRadius(p.travel_radius_km)}</AppText>
+            <AppText variant="caption">{[p.home_city, p.home_state].filter(Boolean).join('/')}</AppText>
+          </View>
+        ) : null}
+        {(p.travel_states && p.travel_states.length > 0) ? (
+          <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+            <Ionicons name="map-outline" size={13} color={colors.textMuted} />
+            <AppText variant="caption">
+              {p.travel_states.length >= 27
+                ? 'Joga em todo o Brasil'
+                : `Joga em: ${p.travel_states.slice(0, 5).join(', ')}${p.travel_states.length > 5 ? ` +${p.travel_states.length - 5}` : ''}`}
+            </AppText>
           </View>
         ) : null}
         <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
@@ -460,10 +470,18 @@ function ProfileEditor({ profile, onSaved, onCancel, restrictedMode = false }: {
     gender: profile.gender ?? '',
     home_state: profile.home_state ?? 'SP',
     home_city: profile.home_city ?? '',
-    travel_radius_km: String(profile.travel_radius_km ?? 100),
+    travel_states: profile.travel_states ?? [],
     tennis_class: profile.tennis_class ?? '',
     competitive_level: profile.competitive_level ?? 'amateur',
   });
+
+  function handleTravelStatesSelect(vals: string[]) {
+    if (vals.includes('__ALL__')) {
+      setForm((f) => ({ ...f, travel_states: ALL_UFS }));
+    } else {
+      setForm((f) => ({ ...f, travel_states: vals }));
+    }
+  }
   const [saving, setSaving] = useState(false);
   const [cities, setCities] = useState<{ value: string; label: string }[]>([]);
   const [loadingCities, setLoadingCities] = useState(false);
@@ -490,7 +508,6 @@ function ProfileEditor({ profile, onSaved, onCancel, restrictedMode = false }: {
       await updateProfile(profile.id, {
         ...form,
         birth_year: form.birth_year ? Number(form.birth_year) : null,
-        travel_radius_km: Number(form.travel_radius_km) || 100,
       } as any);
       markProfileDirty();
       Toast.show({ type: 'success', text1: 'Perfil atualizado' });
@@ -531,11 +548,13 @@ function ProfileEditor({ profile, onSaved, onCancel, restrictedMode = false }: {
       />
       {!restrictedMode ? (
         <>
-          <SelectField
-            label="Raio de viagem"
-            value={form.travel_radius_km}
-            options={RADIUS_OPTIONS}
-            onSelect={(v) => setForm({ ...form, travel_radius_km: v })}
+          <MultiSelectField
+            label="Estados onde aceita jogar"
+            values={form.travel_states}
+            options={TRAVEL_STATE_OPTIONS}
+            onSelect={handleTravelStatesSelect}
+            placeholder="Selecione os estados..."
+            searchable
           />
           <SelectField label="Nível competitivo" value={form.competitive_level} options={LEVEL_OPTIONS} onSelect={(v) => setForm({ ...form, competitive_level: v as PlayerProfile['competitive_level'] })} />
           <SelectField label="Classe" value={form.tennis_class} options={CLASS_OPTIONS} onSelect={(v) => setForm({ ...form, tennis_class: v })} />

@@ -270,6 +270,156 @@ export function LoadingBlock() {
   );
 }
 
+// ─── MultiSelectField ─────────────────────────────────────────────────────────
+
+export function MultiSelectField({
+  label, values, options, onSelect, placeholder, searchable,
+}: {
+  label?: string;
+  values: string[];
+  options: { value: string; label: string }[];
+  onSelect: (values: string[]) => void;
+  placeholder?: string;
+  searchable?: boolean;
+}) {
+  const { colors } = useTheme();
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+
+  const filtered = useMemo(() => {
+    if (!searchable || !query.trim()) return options;
+    const q = query.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    return options.filter((o) =>
+      o.label.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').includes(q)
+    );
+  }, [options, query, searchable]);
+
+  function toggle(val: string) {
+    haptic.select();
+    const next = values.includes(val) ? values.filter((v) => v !== val) : [...values, val];
+    onSelect(next);
+  }
+
+  const selectedLabels = options.filter((o) => values.includes(o.value)).map((o) => o.label);
+  const displayText = selectedLabels.length === 0
+    ? (placeholder || 'Selecione...')
+    : selectedLabels.length <= 3
+      ? selectedLabels.join(', ')
+      : `${selectedLabels.slice(0, 2).join(', ')} + ${selectedLabels.length - 2}`;
+
+  return (
+    <View style={{ gap: 6 }}>
+      {label ? <Text style={{ color: colors.textSecondary, fontSize: 13, fontFamily: 'Poppins_400Regular' }}>{label}</Text> : null}
+      <Pressable
+        onPress={() => { setQuery(''); setOpen(true); haptic.select(); }}
+        style={[
+          styles.input,
+          { borderColor: colors.borderSubtle,
+            flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+        ]}
+      >
+        <Text
+          style={{ flex: 1, color: selectedLabels.length > 0 ? colors.textPrimary : colors.textMuted,
+            fontSize: 15, fontFamily: 'Poppins_400Regular' }}
+          numberOfLines={1}
+        >
+          {displayText}
+        </Text>
+        {values.length > 0 ? (
+          <View style={{ minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4,
+            backgroundColor: colors.accentNeon, alignItems: 'center', justifyContent: 'center', marginRight: 4 }}>
+            <Text style={{ color: colors.bgBase, fontFamily: 'Poppins_600SemiBold', fontSize: 11 }}>{values.length}</Text>
+          </View>
+        ) : null}
+        <Ionicons name="chevron-down" size={16} color={colors.textMuted} />
+      </Pressable>
+      <Modal visible={open} transparent animationType="slide" onRequestClose={() => setOpen(false)}>
+        <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+          <Pressable style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)' }} onPress={() => setOpen(false)} />
+          <View style={{ backgroundColor: colors.bgCard, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '80%' }}>
+            <View style={{ padding: 16, borderBottomWidth: 1, borderBottomColor: colors.borderSubtle,
+              flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: colors.textPrimary, fontSize: 16, fontFamily: 'Poppins_600SemiBold' }}>{label || 'Selecione'}</Text>
+                {values.length > 0 ? (
+                  <Text style={{ color: colors.textMuted, fontSize: 12, fontFamily: 'Poppins_400Regular', marginTop: 2 }}>
+                    {values.length} selecionado{values.length > 1 ? 's' : ''}
+                  </Text>
+                ) : null}
+              </View>
+              <Pressable onPress={() => setOpen(false)} style={{ padding: 4 }}>
+                <Ionicons name="close" size={22} color={colors.textMuted} />
+              </Pressable>
+            </View>
+            {searchable ? (
+              <View style={{ paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.borderSubtle }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.bgBase,
+                  borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: colors.borderSubtle }}>
+                  <Ionicons name="search" size={16} color={colors.textMuted} />
+                  <TextInput
+                    value={query}
+                    onChangeText={setQuery}
+                    placeholder="Buscar..."
+                    placeholderTextColor={colors.textMuted}
+                    style={{ flex: 1, color: colors.textPrimary, fontSize: 15 }}
+                    autoFocus
+                  />
+                  {query.length > 0 ? (
+                    <Pressable onPress={() => setQuery('')}>
+                      <Ionicons name="close-circle" size={16} color={colors.textMuted} />
+                    </Pressable>
+                  ) : null}
+                </View>
+              </View>
+            ) : null}
+            <FlatList
+              data={filtered}
+              keyExtractor={(item) => item.value}
+              renderItem={({ item }) => {
+                const selected = values.includes(item.value);
+                return (
+                  <Pressable
+                    onPress={() => toggle(item.value)}
+                    style={{ padding: 16, borderBottomWidth: 1, borderBottomColor: `${colors.borderSubtle}60`,
+                      flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+                      backgroundColor: selected ? `${colors.accentNeon}10` : 'transparent' }}
+                  >
+                    <Text style={{ color: colors.textPrimary, fontSize: 15, flex: 1, fontFamily: 'Poppins_400Regular' }}>{item.label}</Text>
+                    <View style={{
+                      width: 22, height: 22, borderRadius: 6, borderWidth: 2,
+                      borderColor: selected ? colors.accentNeon : colors.borderSubtle,
+                      backgroundColor: selected ? `${colors.accentNeon}22` : 'transparent',
+                      alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      {selected ? <Ionicons name="checkmark" size={14} color={colors.accentNeon} /> : null}
+                    </View>
+                  </Pressable>
+                );
+              }}
+              keyboardShouldPersistTaps="handled"
+              ListEmptyComponent={
+                <View style={{ padding: 24, alignItems: 'center' }}>
+                  <Text style={{ color: colors.textMuted, fontFamily: 'Poppins_400Regular' }}>Nenhum resultado para "{query}"</Text>
+                </View>
+              }
+            />
+            <View style={{ padding: 16, borderTopWidth: 1, borderTopColor: colors.borderSubtle }}>
+              <Pressable
+                onPress={() => setOpen(false)}
+                style={{ backgroundColor: colors.accentNeon, borderRadius: 14, paddingVertical: 14, alignItems: 'center' }}
+              >
+                <Text style={{ color: colors.bgBase, fontFamily: 'Poppins_600SemiBold', fontSize: 15 }}>
+                  {values.length > 0 ? `Confirmar (${values.length})` : 'Fechar'}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
 // ─── SelectField ──────────────────────────────────────────────────────────────
 
 export function SelectField({

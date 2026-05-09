@@ -72,6 +72,7 @@ export interface PlayerProfile {
   home_state: string;
   home_city: string;
   travel_radius_km: number;
+  travel_states: string[];
   competitive_level: 'beginner' | 'amateur' | 'federated' | 'youth' | 'pro';
   dominant_hand: 'R' | 'L' | '';
   tennis_class: string;

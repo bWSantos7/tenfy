@@ -165,6 +165,257 @@ class EligibilityAPITestCase(TestCase):
         self.assertIn(res.status_code, [400, 404])
 
 
+# ─── Travel states tests ──────────────────────────────────────────────────────
+
+class TravelStatesTestCase(TestCase):
+    """within_profile_states: state-based location check."""
+
+    def _make_profile(self, states):
+        p = MagicMock()
+        p.travel_states = states
+        # Radius fallback fields — None causes within_profile_radius() to return
+        # True optimistically (no home city → include), which is the expected
+        # behaviour when travel_states is empty.
+        p.travel_radius_km = None
+        p.home_city = None
+        p.home_state = None
+        p.home_lat = None
+        p.home_lng = None
+        return p
+
+    def _make_edition(self, state='SP'):
+        venue = MagicMock(); venue.state = state
+        ed = MagicMock(); ed.venue = venue
+        return ed
+
+    def setUp(self):
+        from apps.eligibility.services_normalize import normalize_category_text
+        normalize_category_text.cache_clear()
+
+    def test_state_match_returns_true(self):
+        from apps.eligibility.location import within_profile_states
+        p = self._make_profile(['SP', 'RJ', 'MG'])
+        self.assertTrue(within_profile_states(p, self._make_edition('SP')))
+        self.assertTrue(within_profile_states(p, self._make_edition('RJ')))
+        self.assertTrue(within_profile_states(p, self._make_edition('MG')))
+
+    def test_state_mismatch_returns_false(self):
+        from apps.eligibility.location import within_profile_states
+        p = self._make_profile(['SP', 'RJ'])
+        self.assertFalse(within_profile_states(p, self._make_edition('BA')))
+
+    def test_empty_states_includes_optimistically(self):
+        from apps.eligibility.location import within_profile_states
+        p = self._make_profile([])
+        self.assertTrue(within_profile_states(p, self._make_edition('AM')))
+
+    def test_all_states_todo_brasil(self):
+        from apps.eligibility.location import within_profile_states, ALL_BR_STATES
+        p = self._make_profile(list(ALL_BR_STATES))
+        self.assertTrue(within_profile_states(p, self._make_edition('AC')))
+        self.assertTrue(within_profile_states(p, self._make_edition('TO')))
+
+    def test_no_venue_state_includes_optimistically(self):
+        from apps.eligibility.location import within_profile_states
+        p = self._make_profile(['SP'])
+        venue = MagicMock(); venue.state = None
+        ed = MagicMock(); ed.venue = venue
+        self.assertTrue(within_profile_states(p, ed))
+
+    def test_case_insensitive(self):
+        from apps.eligibility.location import within_profile_states
+        p = self._make_profile(['sp', 'rj'])
+        self.assertTrue(within_profile_states(p, self._make_edition('SP')))
+
+
+# ─── COSAT / duplas eligibility tests ─────────────────────────────────────────
+
+class CosatEligibilityTestCase(TestCase):
+    """Raw text evaluation: COSAT BS/GS/BD/GD U-age, duplas por texto."""
+
+    def _profile(self, age_birth_year_offset, gender):
+        from apps.players.models import PlayerProfile
+        from django.utils import timezone
+        p = MagicMock(spec=PlayerProfile)
+        p.birth_year = timezone.now().year - age_birth_year_offset
+        p.gender = gender
+        p.tennis_class = ''
+        p.external_ids = {}
+        return p
+
+    def _engine(self, age, gender):
+        from apps.eligibility.services import EligibilityEngine
+        eng = EligibilityEngine.__new__(EligibilityEngine)
+        from datetime import datetime
+        eng._current_year = datetime.now().year
+        eng.profile = self._profile(age, gender)
+        return eng
+
+    def _eval(self, age, gender, text):
+        eng = self._engine(age, gender)
+        return eng._evaluate_raw_text(text)
+
+    # --- BS U12 – U18 ---
+    def test_bs_u12_male_12_compatible(self):
+        r = self._eval(12, 'M', 'BS U12')
+        self.assertEqual(r.status, 'compatible')
+
+    def test_bs_u14_male_12_compatible(self):
+        r = self._eval(12, 'M', 'BS U14')
+        self.assertEqual(r.status, 'compatible')
+
+    def test_bs_u16_male_12_compatible(self):
+        r = self._eval(12, 'M', 'BS U16')
+        self.assertEqual(r.status, 'compatible')
+
+    def test_bs_u18_male_12_compatible(self):
+        r = self._eval(12, 'M', 'BS U18')
+        self.assertEqual(r.status, 'compatible')
+
+    def test_bs_u12_male_14_incompatible(self):
+        r = self._eval(14, 'M', 'BS U12')
+        self.assertEqual(r.status, 'incompatible')
+
+    # --- GS U12 – U18 ---
+    def test_gs_u12_female_12_compatible(self):
+        r = self._eval(12, 'F', 'GS U12')
+        self.assertEqual(r.status, 'compatible')
+
+    def test_gs_u14_female_12_compatible(self):
+        r = self._eval(12, 'F', 'GS U14')
+        self.assertEqual(r.status, 'compatible')
+
+    def test_gs_u12_female_14_incompatible(self):
+        r = self._eval(14, 'F', 'GS U12')
+        self.assertEqual(r.status, 'incompatible')
+
+    # --- BD / GD ---
+    def test_bd_u14_male_12_compatible(self):
+        r = self._eval(12, 'M', 'BD U14')
+        self.assertEqual(r.status, 'compatible')
+
+    def test_gd_u16_female_15_compatible(self):
+        r = self._eval(15, 'F', 'GD U16')
+        self.assertEqual(r.status, 'compatible')
+
+    def test_gd_u14_female_14_incompatible_age(self):
+        # 14 anos em GD U12 = incompatível por idade
+        r = self._eval(14, 'F', 'GD U12')
+        self.assertEqual(r.status, 'incompatible')
+
+    # --- Gender cross ---
+    def test_bs_male_12_female_incompatible(self):
+        r = self._eval(12, 'F', 'BS U14')
+        self.assertEqual(r.status, 'incompatible')
+
+    def test_gs_female_12_male_incompatible(self):
+        r = self._eval(12, 'M', 'GS U14')
+        self.assertEqual(r.status, 'incompatible')
+
+    def test_bd_female_incompatible(self):
+        r = self._eval(12, 'F', 'BD U14')
+        self.assertEqual(r.status, 'incompatible')
+
+    def test_gd_male_incompatible(self):
+        r = self._eval(12, 'M', 'GD U14')
+        self.assertEqual(r.status, 'incompatible')
+
+    # --- Variants ---
+    def test_cosat_nospace_bsu12(self):
+        r = self._eval(12, 'M', 'BSU12')
+        self.assertEqual(r.status, 'compatible')
+
+    def test_cosat_nospace_gsu14(self):
+        r = self._eval(12, 'F', 'GSU14')
+        self.assertEqual(r.status, 'compatible')
+
+    def test_bs_space_12(self):
+        r = self._eval(12, 'M', 'BS 12')
+        self.assertEqual(r.status, 'compatible')
+
+    def test_gs_space_14(self):
+        r = self._eval(12, 'F', 'GS 14')
+        self.assertEqual(r.status, 'compatible')
+
+    def test_boys_singles_u12(self):
+        r = self._eval(12, 'M', 'Boys Singles U12')
+        self.assertEqual(r.status, 'compatible')
+
+    def test_girls_doubles_u18(self):
+        r = self._eval(17, 'F', 'Girls Doubles U18')
+        self.assertEqual(r.status, 'compatible')
+
+    # --- Duplas texto ---
+    def test_dupla_masc_12_male_12_compatible(self):
+        r = self._eval(12, 'M', 'Dupla Masculina - 12 anos')
+        self.assertEqual(r.status, 'compatible')
+
+    def test_dupla_masc_14_male_12_compatible(self):
+        r = self._eval(12, 'M', 'Dupla Masculina - 14 anos')
+        self.assertEqual(r.status, 'compatible')
+
+    def test_dupla_masc_16_male_15_compatible(self):
+        r = self._eval(15, 'M', 'Dupla Masculina - 16 anos')
+        self.assertEqual(r.status, 'compatible')
+
+    def test_dupla_masc_18_male_17_compatible(self):
+        r = self._eval(17, 'M', 'Dupla Masculina - 18 anos')
+        self.assertEqual(r.status, 'compatible')
+
+    def test_dupla_masc_12_male_14_incompatible(self):
+        r = self._eval(14, 'M', 'Dupla Masculina - 12 anos')
+        self.assertEqual(r.status, 'incompatible')
+
+    def test_dupla_masc_14_female_incompatible(self):
+        r = self._eval(12, 'F', 'Dupla Masculina - 14 anos')
+        self.assertEqual(r.status, 'incompatible')
+
+    def test_dupla_fem_12_female_compatible(self):
+        r = self._eval(12, 'F', 'Dupla Feminina - 12 anos')
+        self.assertEqual(r.status, 'compatible')
+
+    def test_dupla_fem_16_female_14_compatible(self):
+        r = self._eval(14, 'F', 'Dupla Feminina - 16 anos')
+        self.assertEqual(r.status, 'compatible')
+
+    def test_dupla_fem_12_female_14_incompatible(self):
+        r = self._eval(14, 'F', 'Dupla Feminina - 12 anos')
+        self.assertEqual(r.status, 'incompatible')
+
+    def test_dupla_fem_14_male_incompatible(self):
+        r = self._eval(12, 'M', 'Dupla Feminina - 14 anos')
+        self.assertEqual(r.status, 'incompatible')
+
+    # --- Global age rule ---
+    def test_age_rule_12_u12(self):
+        r = self._eval(12, 'M', 'BS U12')
+        self.assertEqual(r.status, 'compatible')
+
+    def test_age_rule_12_u14(self):
+        r = self._eval(12, 'M', 'BS U14')
+        self.assertEqual(r.status, 'compatible')
+
+    def test_age_rule_12_u16(self):
+        r = self._eval(12, 'M', 'BS U16')
+        self.assertEqual(r.status, 'compatible')
+
+    def test_age_rule_12_u18(self):
+        r = self._eval(12, 'M', 'BS U18')
+        self.assertEqual(r.status, 'compatible')
+
+    def test_age_rule_14_u12_incompatible(self):
+        r = self._eval(14, 'M', 'BS U12')
+        self.assertEqual(r.status, 'incompatible')
+
+    def test_age_rule_15_u16(self):
+        r = self._eval(15, 'M', 'BS U16')
+        self.assertEqual(r.status, 'compatible')
+
+    def test_age_rule_17_u18(self):
+        r = self._eval(17, 'M', 'BS U18')
+        self.assertEqual(r.status, 'compatible')
+
+
 # ─── State machine tests ───────────────────────────────────────────────────────
 
 class SubscriptionStateMachineTestCase(TestCase):

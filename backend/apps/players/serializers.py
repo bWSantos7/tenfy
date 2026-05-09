@@ -29,7 +29,7 @@ class PlayerProfileSerializer(serializers.ModelSerializer):
         model = PlayerProfile
         fields = (
             'id', 'display_name', 'birth_year', 'birth_date',
-            'gender', 'home_state', 'home_city', 'travel_radius_km',
+            'gender', 'home_state', 'home_city', 'travel_radius_km', 'travel_states',
             'competitive_level', 'dominant_hand', 'tennis_class',
             'is_primary', 'external_ids', 'categories', 'sporting_age',
             'created_at', 'updated_at',

@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from apps.core.models import TimestampedModel
 
@@ -111,6 +112,12 @@ class PlayerProfile(TimestampedModel):
     external_ids = models.JSONField(default=dict, blank=True, help_text='CBT id, ITF id, etc')
     home_lat = models.FloatField(null=True, blank=True)
     home_lng = models.FloatField(null=True, blank=True)
+    travel_states = ArrayField(
+        models.CharField(max_length=2),
+        blank=True,
+        default=list,
+        help_text='UFs where the player accepts travelling to compete (e.g. ["SP","RJ","MG"]). Empty = not set.',
+    )
 
     class Meta:
         ordering = ['-is_primary', '-created_at']

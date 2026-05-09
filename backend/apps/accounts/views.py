@@ -329,9 +329,23 @@ def password_reset_request(request):
     # SECURITY: never log the full reset URL — token is a credential
     logger.info('Password reset requested for user %s', user.id)
 
-    # Dispatch via Celery for retry resilience — reset_url never logged
+    # Dispatch via Celery — synchronous fallback when broker is unavailable.
+    # reset_url contains uid+token: never log it.
     from .tasks import send_password_reset_email
-    send_password_reset_email.delay(user.id, user.email, user.full_name or '', reset_url)
+    args = (user.id, user.email, user.full_name or '', reset_url)
+    try:
+        send_password_reset_email.delay(*args)
+    except Exception as exc:
+        logger.warning(
+            'Password reset email enqueue failed for user %s; trying synchronous fallback: %s',
+            user.id, exc,
+        )
+        try:
+            result = send_password_reset_email.apply(args=args)
+            if hasattr(result, 'get'):
+                result.get(propagate=True)
+        except Exception as exc2:
+            logger.error('Password reset email dispatch failed for user %s: %s', user.id, exc2)
 
     return Response({'detail': 'Se o email existir, enviaremos as instruções.'})
 
@@ -453,7 +467,7 @@ def data_export(request):
     profiles = list(
         PlayerProfile.objects.filter(user=user).values(
             'id', 'display_name', 'birth_year', 'birth_date', 'gender',
-            'home_state', 'home_city', 'travel_radius_km', 'competitive_level',
+            'home_state', 'home_city', 'travel_radius_km', 'travel_states', 'competitive_level',
             'dominant_hand', 'tennis_class', 'is_primary', 'external_ids',
             'created_at', 'updated_at',
         )

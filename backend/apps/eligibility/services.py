@@ -97,12 +97,8 @@ class EligibilityEngine:
         """Evaluate a single TournamentCategory against the player."""
         norm: Optional[PlayerCategory] = tc.normalized_category
         if norm is None:
-            base = EligibilityResult(
-                status=STATUS_UNKNOWN,
-                reasons=[REASON_NOT_NORMALIZED],
-                category_code=tc.source_category_text,
-                category_label=tc.source_category_text,
-            )
+            # Try raw text extraction for COSAT/duplas/unnormalized categories
+            base = self._evaluate_raw_text(tc.source_category_text)
         else:
             base = self.evaluate_player_category(
                 norm,
@@ -114,6 +110,160 @@ class EligibilityEngine:
         base.ranking_check = rank_check
         base.ranking_note = rank_note
         return base
+
+    def _evaluate_raw_text(self, text: str) -> EligibilityResult:
+        """
+        Handle COSAT/ITF codes, duplas/simples por texto, and generic age extraction
+        for categories that could not be normalized to a PlayerCategory row.
+
+        Extracts (max_age, gender) from the raw text and evaluates directly.
+        """
+        import re as _re
+
+        if not text:
+            return EligibilityResult(
+                status=STATUS_UNKNOWN,
+                reasons=[REASON_NOT_NORMALIZED],
+                category_code=text,
+                category_label=text,
+            )
+
+        raw = text.strip()
+
+        # COSAT compact: BS U12, GS U14, BD16, GDU18, BSU12 …
+        _COSAT_CODE = _re.compile(
+            r'^\s*(BS|GS|BD|GD)\s*[Uu]?\s*(\d{1,2})\s*$', _re.IGNORECASE
+        )
+        _COSAT_NOSPACE = _re.compile(
+            r'^\s*(BS|GS|BD|GD)[Uu](\d{1,2})\s*$', _re.IGNORECASE
+        )
+        _COSAT_FULL = _re.compile(
+            r'^\s*(boys?|girls?)\s+(singles?|doubles?)\s*[Uu]?\s*(\d{1,2})\s*$',
+            _re.IGNORECASE,
+        )
+        _DUPLAS_M = _re.compile(
+            r'dupla[s]?\s+masculin[ao]s?\s*[-–]?\s*(\d{1,2})\s*(?:anos?)?', _re.IGNORECASE
+        )
+        _DUPLAS_F = _re.compile(
+            r'dupla[s]?\s+feminin[ao]s?\s*[-–]?\s*(\d{1,2})\s*(?:anos?)?', _re.IGNORECASE
+        )
+        _SIMPLES_M = _re.compile(
+            r'simples\s+masculin[ao]s?\s*[-–]?\s*(\d{1,2})\s*(?:anos?)?', _re.IGNORECASE
+        )
+        _SIMPLES_F = _re.compile(
+            r'simples\s+feminin[ao]s?\s*[-–]?\s*(\d{1,2})\s*(?:anos?)?', _re.IGNORECASE
+        )
+        _ANOS = _re.compile(r'(?:sub\s*[-–]?\s*)?(\d{1,2})\s*anos?', _re.IGNORECASE)
+        _U_AGE = _re.compile(r'\bU\s*(\d{1,2})\b', _re.IGNORECASE)
+
+        extracted_age: Optional[int] = None
+        extracted_gender: Optional[str] = None  # 'M', 'F', or None = unknown
+
+        m = _COSAT_NOSPACE.match(raw) or _COSAT_CODE.match(raw)
+        if m:
+            code_part, age_str = m.group(1), m.group(2)
+            extracted_gender = 'M' if code_part[0].upper() == 'B' else 'F'
+            extracted_age = int(age_str)
+
+        if extracted_age is None:
+            m = _COSAT_FULL.match(raw)
+            if m:
+                boy_girl, _sd, age_str = m.groups()
+                extracted_gender = 'M' if boy_girl[0].lower() == 'b' else 'F'
+                extracted_age = int(age_str)
+
+        if extracted_age is None:
+            m = _DUPLAS_M.search(raw)
+            if m:
+                extracted_gender = 'M'
+                extracted_age = int(m.group(1))
+
+        if extracted_age is None:
+            m = _DUPLAS_F.search(raw)
+            if m:
+                extracted_gender = 'F'
+                extracted_age = int(m.group(1))
+
+        if extracted_age is None:
+            m = _SIMPLES_M.search(raw)
+            if m:
+                extracted_gender = 'M'
+                extracted_age = int(m.group(1))
+
+        if extracted_age is None:
+            m = _SIMPLES_F.search(raw)
+            if m:
+                extracted_gender = 'F'
+                extracted_age = int(m.group(1))
+
+        if extracted_age is None:
+            m = _ANOS.search(raw)
+            if m:
+                extracted_age = int(m.group(1))
+
+        if extracted_age is None:
+            m = _U_AGE.search(raw)
+            if m:
+                extracted_age = int(m.group(1))
+
+        if extracted_age is None:
+            return EligibilityResult(
+                status=STATUS_UNKNOWN,
+                reasons=[REASON_NOT_NORMALIZED],
+                category_code=text,
+                category_label=text,
+            )
+
+        return self._check_raw_age_gender(extracted_age, extracted_gender, text)
+
+    def _check_raw_age_gender(
+        self, max_age: int, gender: Optional[str], source_text: str = ''
+    ) -> EligibilityResult:
+        """Evaluate age <= max_age and optional gender against profile."""
+        reasons: list = []
+
+        # Gender check
+        if gender in ('M', 'F'):
+            profile_gender = self.profile.gender
+            if not profile_gender:
+                reasons.append(REASON_NO_GENDER)
+                # soft-pass — unknown gender, don't block
+            elif profile_gender != gender:
+                reasons.append(REASON_GENDER_MISMATCH)
+                return EligibilityResult(
+                    status=STATUS_INCOMPATIBLE,
+                    reasons=reasons,
+                    category_code=source_text,
+                    category_label=source_text,
+                )
+
+        # Age check
+        age = self.sporting_age
+        if age is None:
+            reasons.append(REASON_NO_BIRTH_YEAR)
+            return EligibilityResult(
+                status=STATUS_UNKNOWN,
+                reasons=reasons,
+                category_code=source_text,
+                category_label=source_text,
+            )
+
+        if age <= max_age:
+            reasons.append(REASON_MATCH)
+            return EligibilityResult(
+                status=STATUS_COMPATIBLE,
+                reasons=reasons,
+                category_code=source_text,
+                category_label=source_text,
+            )
+
+        reasons.append(REASON_AGE_OUT)
+        return EligibilityResult(
+            status=STATUS_INCOMPATIBLE,
+            reasons=reasons,
+            category_code=source_text,
+            category_label=source_text,
+        )
 
     def evaluate_player_category(
         self, cat: PlayerCategory, source_text: Optional[str] = None
@@ -310,6 +460,7 @@ class EligibilityEngine:
         compatible_count = 0
         incompatible_count = 0
         unknown_count = 0
+        not_normalized_count = 0
         for tc in edition.categories.select_related('normalized_category').all():
             r = self.evaluate_category(tc)
             results.append({
@@ -324,6 +475,8 @@ class EligibilityEngine:
                 incompatible_count += 1
             else:
                 unknown_count += 1
+                if REASON_NOT_NORMALIZED in r.reasons:
+                    not_normalized_count += 1
         return {
             'edition_id': edition.id,
             'profile_id': self.profile.id,
@@ -332,5 +485,6 @@ class EligibilityEngine:
             'compatible_count': compatible_count,
             'incompatible_count': incompatible_count,
             'unknown_count': unknown_count,
+            'not_normalized_count': not_normalized_count,
             'categories': results,
         }

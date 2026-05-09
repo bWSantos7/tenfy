@@ -8,7 +8,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { createProfile } from '../../services/data';
 import { extractApiError } from '../../services/api';
 import { LEVEL_LABELS, TENNIS_CLASS_LABELS } from '../../utils/format';
-import { AppText, Button, Card, Input, Screen, SectionHeader, SelectField } from '../../components/ui';
+import { AppText, Button, Card, Input, MultiSelectField, Screen, SectionHeader, SelectField } from '../../components/ui';
 
 type Props = NativeStackScreenProps<MainStackParamList, 'Onboarding'>;
 
@@ -53,13 +53,10 @@ const CLASS_OPTIONS = [
   ...Object.entries(TENNIS_CLASS_LABELS).map(([value, label]) => ({ value, label })),
 ];
 
-const RADIUS_OPTIONS = [
-  { value: '50', label: '50 km' },
-  { value: '100', label: '100 km' },
-  { value: '200', label: '200 km' },
-  { value: '300', label: '300 km' },
-  { value: '500', label: '500 km' },
-  { value: '1000', label: 'Todo o Brasil' },
+const ALL_STATES_OPTION = { value: '__ALL__', label: '🌎 Todo o Brasil (todos os estados)' };
+const TRAVEL_STATE_OPTIONS = [
+  ALL_STATES_OPTION,
+  ...UF_OPTIONS,
 ];
 
 export function OnboardingScreen({ navigation }: Props) {
@@ -68,16 +65,27 @@ export function OnboardingScreen({ navigation }: Props) {
   const [cities, setCities] = useState<{ value: string; label: string }[]>([]);
   const [loadingCities, setLoadingCities] = useState(false);
   const [citiesError, setCitiesError] = useState(false);
+  const ALL_BR_UFS = UF_OPTIONS.map((o) => o.value);
+
   const [form, setForm] = useState({
     display_name: '',
     birth_year: '',
     gender: '',
     home_state: 'SP',
     home_city: '',
-    travel_radius_km: '100',
+    travel_states: [] as string[],
     competitive_level: 'amateur',
     tennis_class: '',
   });
+
+  function handleTravelStatesSelect(vals: string[]) {
+    if (vals.includes('__ALL__')) {
+      // Tapped "Todo o Brasil" — select all UFs
+      setForm((f) => ({ ...f, travel_states: ALL_BR_UFS }));
+    } else {
+      setForm((f) => ({ ...f, travel_states: vals }));
+    }
+  }
 
   useEffect(() => {
     loadCities(form.home_state);
@@ -114,7 +122,7 @@ export function OnboardingScreen({ navigation }: Props) {
         gender: (form.gender || undefined) as any,
         home_state: form.home_state,
         home_city: form.home_city,
-        travel_radius_km: Number(form.travel_radius_km) || 100,
+        travel_states: form.travel_states,
         competitive_level: form.competitive_level as any,
         tennis_class: form.tennis_class || '',
         is_primary: true,
@@ -191,11 +199,13 @@ export function OnboardingScreen({ navigation }: Props) {
             </AppText>
           </Pressable>
         )}
-        <SelectField
-          label="Raio de viagem"
-          value={form.travel_radius_km}
-          options={RADIUS_OPTIONS}
-          onSelect={(v) => setForm({ ...form, travel_radius_km: v })}
+        <MultiSelectField
+          label="Estados onde aceita jogar"
+          values={form.travel_states}
+          options={TRAVEL_STATE_OPTIONS}
+          onSelect={handleTravelStatesSelect}
+          placeholder="Selecione os estados..."
+          searchable
         />
       </Card>
 

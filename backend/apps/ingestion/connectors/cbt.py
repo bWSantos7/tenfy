@@ -88,11 +88,15 @@ class CBTPublicConnector(BaseConnector):
         'carpete': 'carpet',
     }
 
+    def _system_id(self) -> str:
+        """Allow per-DataSource override via config_json: {"system_id": "3"}."""
+        return str(self.config.get('system_id', self.SYSTEM_ID))
+
     def extract(self):
         payload = {
             'host': self.HOST,
             'token': '',
-            'system': self.SYSTEM_ID,
+            'system': self._system_id(),
             'language': 'pt-BR',
             'loadAll': '1',
         }
@@ -202,7 +206,7 @@ class CBTPublicConnector(BaseConnector):
         payload = {
             'host': self.HOST,
             'token': '',
-            'system': self.SYSTEM_ID,
+            'system': self._system_id(),
             'language': 'pt-BR',
             'tournamentId': str(tournament_id),
             'departmentType': str(department_type),
@@ -320,3 +324,20 @@ class CBTPublicConnector(BaseConnector):
                 continue
             return self.SURFACE_MAP.get(raw, 'unknown')
         return 'unknown'
+
+
+@register_connector
+class CBTYouthConnector(CBTPublicConnector):
+    """
+    CBT youth/junior circuit connector.
+
+    The CBT website separates adult (cbt-tenis.com.br/tournament) from
+    youth (cbt-tenis.com.br/youth/tournament). The TenisIntegrado API
+    uses a different `system` value for the youth department.
+
+    Default SYSTEM_ID='3' targets the youth circuit. If the admin panel
+    shows 0 tournaments after running this connector, try system_id='5'
+    via config_json: {"system_id": "5"}.
+    """
+    key = 'cbt_youth'
+    SYSTEM_ID = '3'

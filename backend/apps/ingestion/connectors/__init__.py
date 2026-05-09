@@ -14,3 +14,4 @@ __all__ = [
     'base', 'cbt', 'cosat', 'fct', 'fpt', 'itf', 'utr',
     'register_connector', 'registered_connectors',
 ]
+# CBTYouthConnector is registered in cbt module alongside CBTPublicConnector

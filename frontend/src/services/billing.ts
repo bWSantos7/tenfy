@@ -9,7 +9,7 @@ export interface PlanFeature {
 export interface Plan {
   id: number;
   name: string;
-  slug: 'individual' | 'familia';
+  slug: 'free' | 'individual' | 'familia';
   price_monthly: string;
   price_yearly: string;
   description: string;

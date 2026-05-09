@@ -68,7 +68,7 @@ export const SubscriptionPage: React.FC = () => {
     setPix(null);
     try {
       const res = await checkout({
-        plan_slug: plan.slug,
+        plan_slug: plan.slug as 'individual' | 'familia',
         billing_period: billingPeriod,
         payment_method: 'pix',
       });

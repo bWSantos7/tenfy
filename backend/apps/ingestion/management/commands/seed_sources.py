@@ -29,7 +29,7 @@ SOURCES = [
         'connector_key': 'fpt_public',
         'source_type': 'html',
         'base_url': 'https://fpt.com.br/Torneio/Calendario/',
-        'fetch_schedule_cron': '0 */6 * * *',  # every 6 hours
+        'fetch_schedule_cron': '0 */2 * * *',  # every 2 hours
         'priority': 'P0',
         'enabled': True,
         'config_json': {'years': [CURRENT_YEAR]},
@@ -41,11 +41,23 @@ SOURCES = [
         'connector_key': 'cbt_public',
         'source_type': 'json',
         'base_url': 'https://api.tennistool.tenisintegrado.com',
-        'fetch_schedule_cron': '30 */6 * * *',  # every 6 hours, offset 30m
+        'fetch_schedule_cron': '30 */2 * * *',  # every 2 hours, offset 30m
         'priority': 'P0',
         'enabled': True,
         'config_json': {'year': CURRENT_YEAR},
         'legal_notes': 'Public JSON API used by official CBT website.',
+    },
+    {
+        'org_short': 'CBT',
+        'source_name': 'CBT Juvenil / Tênis Integrado API',
+        'connector_key': 'cbt_youth',
+        'source_type': 'json',
+        'base_url': 'https://api.tennistool.tenisintegrado.com',
+        'fetch_schedule_cron': '45 */2 * * *',  # every 2 hours, offset 45m
+        'priority': 'P0',
+        'enabled': True,
+        'config_json': {},
+        'legal_notes': 'Public JSON API — CBT youth/junior circuit (system=3). Same API as cbt_public.',
     },
     {
         'org_short': 'FCT',

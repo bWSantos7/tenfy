@@ -237,6 +237,9 @@ export const SubscriptionPage: React.FC = () => {
 
       {/* Plans list — checkout / upgrade */}
       <div>
+        <div className="rounded border border-amber-500/40 bg-amber-500/10 text-amber-300 text-xs px-3 py-2 mb-3">
+          Os planos Individual e Família estão temporariamente indisponíveis. Em breve você poderá assinar diretamente pelo app.
+        </div>
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-sm font-semibold">Planos disponíveis</h2>
           <div className="flex gap-1 text-xs">
@@ -259,14 +262,19 @@ export const SubscriptionPage: React.FC = () => {
         <div className="grid sm:grid-cols-2 gap-3">
           {plans.map((plan) => {
             const isCurrent = currentPlan?.id === plan.id && (sub?.is_active || sub?.status === 'pending');
+            const isUnavailable = plan.slug !== 'free';
             const price = billingPeriod === 'yearly' ? plan.price_yearly : plan.price_monthly;
             return (
-              <div key={plan.id} className="card !p-4 space-y-3 relative">
-                {plan.highlight_label && (
+              <div key={plan.id} className={`card !p-4 space-y-3 relative ${isUnavailable ? 'opacity-60' : ''}`}>
+                {isUnavailable ? (
+                  <div className="absolute -top-2 right-3 bg-gray-600 text-gray-200 text-[10px] font-bold px-2 py-0.5 rounded">
+                    Em breve
+                  </div>
+                ) : plan.highlight_label ? (
                   <div className="absolute -top-2 right-3 bg-accent-neon text-bg-base text-[10px] font-bold px-2 py-0.5 rounded">
                     {plan.highlight_label}
                   </div>
-                )}
+                ) : null}
                 <div>
                   <div className="text-base font-semibold">{plan.name}</div>
                   <div className="text-xs text-text-muted mt-1">{plan.description}</div>
@@ -290,6 +298,10 @@ export const SubscriptionPage: React.FC = () => {
                 {isCurrent ? (
                   <div className="text-center text-xs text-text-muted py-2 border border-border-subtle rounded">
                     Plano atual
+                  </div>
+                ) : isUnavailable ? (
+                  <div className="text-center text-xs text-text-muted py-2 border border-border-subtle rounded bg-bg-card">
+                    Indisponível no momento
                   </div>
                 ) : (
                   <button

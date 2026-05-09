@@ -26,6 +26,8 @@ function formatPrice(price: string): string {
   return `R$ ${n.toFixed(2).replace('.', ',')}`;
 }
 
+const UNAVAILABLE_PLAN_SLUGS = new Set(['individual', 'familia']);
+
 function PlanCard({
   plan,
   currentSlug,
@@ -40,17 +42,29 @@ function PlanCard({
   const { colors } = useTheme();
   const isCurrent     = plan.slug === currentSlug;
   const isHighlighted = Boolean(plan.highlight_label);
+  const isUnavailable = UNAVAILABLE_PLAN_SLUGS.has(plan.slug);
   const price         = billingPeriod === 'yearly' ? plan.price_yearly : plan.price_monthly;
   const icon          = PLAN_ICONS[plan.slug] ?? 'pricetag-outline';
 
   return (
     <Card style={[
       { marginBottom: 18, padding: 20 },
-      isHighlighted && { borderColor: colors.accentNeon, borderWidth: 2 },
+      isHighlighted && !isUnavailable && { borderColor: colors.accentNeon, borderWidth: 2 },
       isCurrent      && { backgroundColor: `${colors.accentNeon}0e` },
+      isUnavailable  && { opacity: 0.6 },
     ]}>
-      {/* Badge "Mais popular" */}
-      {plan.highlight_label ? (
+      {/* Badge "Mais popular" or "Em breve" */}
+      {isUnavailable ? (
+        <View style={{
+          backgroundColor: `${colors.textMuted}33`, borderRadius: 20,
+          paddingHorizontal: 10, paddingVertical: 3,
+          alignSelf: 'flex-start', marginBottom: 12,
+        }}>
+          <AppText variant="caption" style={{ color: colors.textMuted, fontWeight: '700', fontSize: 11 }}>
+            Em breve
+          </AppText>
+        </View>
+      ) : plan.highlight_label ? (
         <View style={{
           backgroundColor: colors.accentNeon, borderRadius: 20,
           paddingHorizontal: 10, paddingVertical: 3,
@@ -113,10 +127,10 @@ function PlanCard({
       </View>
 
       <Button
-        title={isCurrent ? 'Plano atual' : 'Assinar agora'}
-        variant={isCurrent ? 'secondary' : 'primary'}
-        disabled={isCurrent}
-        onPress={() => onSelect(plan)}
+        title={isCurrent ? 'Plano atual' : isUnavailable ? 'Indisponível no momento' : 'Assinar agora'}
+        variant={isCurrent || isUnavailable ? 'secondary' : 'primary'}
+        disabled={isCurrent || isUnavailable}
+        onPress={isUnavailable ? undefined : () => onSelect(plan)}
       />
     </Card>
   );

@@ -72,7 +72,7 @@ export function RegisterScreen({ navigation }: Props) {
   const { setUser } = useAuth();
 
   // ── Plan selection state ─────────────────────────────────────────────────────
-  const [planSlug, setPlanSlug]       = useState<PlanSlug>('individual');
+  const [planSlug, setPlanSlug]       = useState<PlanSlug>('free');
   const [apiPlans, setApiPlans]       = useState<Plan[]>([]);
   const [loadingPlans, setLoadingPlans] = useState(true);
 
@@ -336,6 +336,7 @@ export function RegisterScreen({ navigation }: Props) {
   }
 
   const PLAN_SLUGS: PlanSlug[] = ['free', 'individual', 'familia'];
+  const UNAVAILABLE_PLANS: PlanSlug[] = ['individual', 'familia'];
 
   return (
     <Screen>
@@ -355,20 +356,22 @@ export function RegisterScreen({ navigation }: Props) {
               </View>
             ) : (
               PLAN_SLUGS.map((slug) => {
-                const selected = planSlug === slug;
+                const isUnavailable = UNAVAILABLE_PLANS.includes(slug);
+                const selected = planSlug === slug && !isUnavailable;
                 const info = PLAN_FALLBACK[slug];
                 const apiPlan = apiPlans.find((p) => p.slug === slug);
                 const price = getPlanPrice(slug);
                 return (
                   <Pressable
                     key={slug}
-                    onPress={() => setPlanSlug(slug)}
+                    onPress={isUnavailable ? undefined : () => setPlanSlug(slug)}
                     style={{
                       flexDirection: 'row', alignItems: 'flex-start', gap: 12,
                       padding: 14, borderRadius: 14, marginBottom: 10,
                       borderWidth: selected ? 2 : 1,
                       borderColor: selected ? colors.accentNeon : colors.borderSubtle,
-                      backgroundColor: selected ? `${colors.accentNeon}10` : colors.bgBase,
+                      backgroundColor: isUnavailable ? `${colors.borderSubtle}22` : selected ? `${colors.accentNeon}10` : colors.bgBase,
+                      opacity: isUnavailable ? 0.55 : 1,
                     }}
                   >
                     <View style={{
@@ -386,7 +389,13 @@ export function RegisterScreen({ navigation }: Props) {
                         <AppText style={{ fontSize: 14, fontWeight: '800', color: selected ? colors.accentNeon : colors.textSecondary }}>
                           {price}
                         </AppText>
-                        {slug === 'familia' ? (
+                        {isUnavailable ? (
+                          <View style={{ backgroundColor: `${colors.textMuted}22`, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 }}>
+                            <AppText variant="caption" style={{ color: colors.textMuted, fontWeight: '700', fontSize: 10 }}>
+                              EM BREVE
+                            </AppText>
+                          </View>
+                        ) : slug === 'familia' ? (
                           <View style={{ backgroundColor: `${colors.accentNeon}22`, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 }}>
                             <AppText variant="caption" style={{ color: colors.accentNeon, fontWeight: '700', fontSize: 10 }}>
                               {apiPlan?.highlight_label || 'POPULAR'}
@@ -395,7 +404,7 @@ export function RegisterScreen({ navigation }: Props) {
                         ) : null}
                       </View>
                       <AppText variant="muted" style={{ marginTop: 3, fontSize: 12 }}>{info.description}</AppText>
-                      {slug !== 'free' && apiPlan ? (
+                      {slug !== 'free' && apiPlan && !isUnavailable ? (
                         <View style={{ marginTop: 4, gap: 2 }}>
                           {apiPlan.features.slice(0, 3).map((f) => (
                             <View key={f.code} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
@@ -406,19 +415,19 @@ export function RegisterScreen({ navigation }: Props) {
                         </View>
                       ) : null}
                     </View>
-                    {selected ? (
+                    {!isUnavailable && selected ? (
                       <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: colors.accentNeon, alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 }}>
                         <Ionicons name="checkmark" size={13} color={colors.bgBase} />
                       </View>
-                    ) : (
+                    ) : !isUnavailable ? (
                       <View style={{ width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: colors.borderSubtle, flexShrink: 0, marginTop: 2 }} />
-                    )}
+                    ) : null}
                   </Pressable>
                 );
               })
             )}
 
-            <Button title="Continuar" onPress={() => setStep('form')} disabled={loadingPlans} />
+            <Button title="Continuar" onPress={() => setStep('form')} disabled={loadingPlans || planSlug !== 'free'} />
           </>
         ) : null}
 

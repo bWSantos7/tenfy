@@ -94,6 +94,14 @@ def subscription_checkout(request):
     ser.is_valid(raise_exception=True)
     d = ser.validated_data
 
+    # Paid plans temporarily unavailable — only Free plan supported for now.
+    _TEMPORARILY_UNAVAILABLE = {'individual', 'familia'}
+    if d['plan_slug'] in _TEMPORARILY_UNAVAILABLE:
+        return Response(
+            {'detail': 'Este plano está temporariamente indisponível. Apenas o plano Free está disponível no momento.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
     try:
         plan = Plan.objects.get(slug=d['plan_slug'], is_active=True)
     except Plan.DoesNotExist:

@@ -48,18 +48,6 @@ SOURCES = [
         'legal_notes': 'Public JSON API used by official CBT website.',
     },
     {
-        'org_short': 'CBT',
-        'source_name': 'CBT Juvenil / Tênis Integrado API',
-        'connector_key': 'cbt_youth',
-        'source_type': 'json',
-        'base_url': 'https://api.tennistool.tenisintegrado.com',
-        'fetch_schedule_cron': '45 */2 * * *',  # every 2 hours, offset 45m
-        'priority': 'P0',
-        'enabled': True,
-        'config_json': {},
-        'legal_notes': 'Public JSON API — CBT youth/junior circuit (system=3). Same API as cbt_public.',
-    },
-    {
         'org_short': 'FCT',
         'source_name': 'FCT / Tênis Integrado',
         'connector_key': 'fct_public',

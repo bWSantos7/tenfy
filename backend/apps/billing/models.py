@@ -21,6 +21,7 @@ from apps.core.models import TimestampedModel
 class Plan(TimestampedModel):
     SLUG_INDIVIDUAL = 'individual'
     SLUG_FAMILIA    = 'familia'
+    SLUG_TESTER     = 'tester'
 
     BILLING_MONTHLY = 'monthly'
     BILLING_YEARLY  = 'yearly'

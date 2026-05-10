@@ -6,9 +6,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { MainStackParamList } from '../../navigation/types';
 import { useTheme } from '../../contexts/ThemeContext';
 import { AppText, Button, Card, EmptyState, LoadingBlock, Screen, SectionHeader } from '../../components/ui';
-import { TournamentRegistration, RegistrationStatus, WatchlistItem } from '../../types';
+import { TournamentRegistration, RegistrationStatus, WatchlistItem, PlayerProfile } from '../../types';
 import { myRegistrations, withdrawRegistration } from '../../services/registrations';
-import { listWatchlist } from '../../services/data';
+import { listWatchlist, listProfiles } from '../../services/data';
 import { fmtDateRange } from '../../utils/format';
 import { extractApiError } from '../../services/api';
 
@@ -34,6 +34,26 @@ function getPaymentColors(c: ThemeColors): Record<string, string> {
   };
 }
 
+interface ProfileGroup {
+  profileId: number | null;
+  profileName: string;
+  items: WatchlistItem[];
+}
+
+function groupByProfile(items: WatchlistItem[], profiles: PlayerProfile[]): ProfileGroup[] {
+  const map: Record<string, WatchlistItem[]> = {};
+  for (const item of items) {
+    const key = item.profile != null ? String(item.profile) : 'none';
+    if (!map[key]) map[key] = [];
+    map[key].push(item);
+  }
+  return Object.entries(map).map(([key, its]) => {
+    const profileId = key === 'none' ? null : Number(key);
+    const profile = profileId != null ? profiles.find((p) => p.id === profileId) ?? null : null;
+    return { profileId, profileName: profile?.display_name ?? 'Sem perfil', items: its };
+  }).sort((a, b) => (a.profileId ?? 0) - (b.profileId ?? 0));
+}
+
 export function MyRegistrationsScreen({ navigation }: Props) {
   const { colors } = useTheme();
   const [loading, setLoading] = useState(true);
@@ -41,15 +61,16 @@ export function MyRegistrationsScreen({ navigation }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [registrations, setRegistrations] = useState<TournamentRegistration[]>([]);
   const [withdrawing, setWithdrawing] = useState<number | null>(null);
-  const [watchlistInscribed, setWatchlistInscribed] = useState<WatchlistItem[]>([]);
+  const [profileGroups, setProfileGroups] = useState<ProfileGroup[]>([]);
 
   async function load() {
     setLoading(true);
     setError(null);
     try {
-      const [regs, wl] = await Promise.all([myRegistrations(), listWatchlist()]);
+      const [regs, wl, profs] = await Promise.all([myRegistrations(), listWatchlist(), listProfiles()]);
       setRegistrations(regs);
-      setWatchlistInscribed((wl as WatchlistItem[]).filter((i) => i.user_status === 'registered_declared'));
+      const inscribed = (wl as WatchlistItem[]).filter((i) => i.user_status === 'registered_declared');
+      setProfileGroups(groupByProfile(inscribed, profs as PlayerProfile[]));
     } catch (err) {
       setError(extractApiError(err));
     } finally {
@@ -61,9 +82,10 @@ export function MyRegistrationsScreen({ navigation }: Props) {
     setRefreshing(true);
     setError(null);
     try {
-      const [regs, wl] = await Promise.all([myRegistrations(), listWatchlist()]);
+      const [regs, wl, profs] = await Promise.all([myRegistrations(), listWatchlist(), listProfiles()]);
       setRegistrations(regs);
-      setWatchlistInscribed((wl as WatchlistItem[]).filter((i) => i.user_status === 'registered_declared'));
+      const inscribed = (wl as WatchlistItem[]).filter((i) => i.user_status === 'registered_declared');
+      setProfileGroups(groupByProfile(inscribed, profs as PlayerProfile[]));
     } catch (err) {
       setError(extractApiError(err));
     } finally {
@@ -88,6 +110,7 @@ export function MyRegistrationsScreen({ navigation }: Props) {
 
   const active = registrations.filter((r) => !r.is_withdrawn);
   const withdrawn = registrations.filter((r) => r.is_withdrawn);
+  const totalWatchlistInscribed = profileGroups.reduce((acc, g) => acc + g.items.length, 0);
 
   return (
     <Screen onRefresh={onRefresh} refreshing={refreshing}>
@@ -107,7 +130,7 @@ export function MyRegistrationsScreen({ navigation }: Props) {
           subtitle={error}
           action={<Button title="Tentar novamente" variant="ghost" onPress={load} />}
         />
-      ) : active.length === 0 && withdrawn.length === 0 && watchlistInscribed.length === 0 ? (
+      ) : active.length === 0 && withdrawn.length === 0 && totalWatchlistInscribed === 0 ? (
         <EmptyState
           icon="ticket-outline"
           title="Você ainda não tem inscrições"
@@ -115,40 +138,50 @@ export function MyRegistrationsScreen({ navigation }: Props) {
         />
       ) : (
         <>
-          {/* Watchlist-based inscriptions (declared by user) */}
-          {watchlistInscribed.length > 0 && (
+          {/* Watchlist-based inscriptions grouped by profile */}
+          {profileGroups.length > 0 && (
             <View>
-              <SectionHeader title="Inscrições declaradas" subtitle={`${watchlistInscribed.length} torneio${watchlistInscribed.length > 1 ? 's' : ''}`} />
-              {watchlistInscribed.map((item) => {
-                const ed = item.edition_detail;
-                return (
-                  <Pressable
-                    key={`wl-${item.id}`}
-                    onPress={() => navigation.navigate('TournamentDetail', { id: ed.id, edition: ed })}
-                    style={{ marginBottom: 10 }}
-                  >
-                    <Card>
-                      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
-                        <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: `${colors.accentNeon}20`, alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                          <Ionicons name="checkmark-circle" size={20} color={colors.accentNeon} />
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <AppText variant="body" style={{ fontWeight: '700', fontSize: 14 }} numberOfLines={2}>{ed.title}</AppText>
-                          {ed.start_date ? (
-                            <AppText variant="caption" style={{ color: colors.textMuted, marginTop: 2 }}>
-                              {fmtDateRange(ed.start_date, ed.end_date)}
-                            </AppText>
-                          ) : null}
-                          <View style={{ marginTop: 4, backgroundColor: `${colors.accentNeon}18`, alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}>
-                            <AppText variant="caption" style={{ color: colors.accentNeon, fontWeight: '700', fontSize: 10 }}>Inscrito</AppText>
+              <SectionHeader title="Inscrições declaradas" subtitle={`${totalWatchlistInscribed} torneio${totalWatchlistInscribed > 1 ? 's' : ''}`} />
+              {profileGroups.map((group) => (
+                <View key={group.profileId ?? 'none'}>
+                  {profileGroups.length > 1 ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6, marginTop: 4 }}>
+                      <Ionicons name="person-outline" size={14} color={colors.accentBlue} />
+                      <AppText variant="caption" style={{ color: colors.accentBlue, fontWeight: '700' }}>{group.profileName}</AppText>
+                    </View>
+                  ) : null}
+                  {group.items.map((item) => {
+                    const ed = item.edition_detail;
+                    return (
+                      <Pressable
+                        key={`wl-${item.id}`}
+                        onPress={() => navigation.navigate('TournamentDetail', { id: ed.id, edition: ed })}
+                        style={{ marginBottom: 10 }}
+                      >
+                        <Card>
+                          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
+                            <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: `${colors.accentNeon}20`, alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                              <Ionicons name="checkmark-circle" size={20} color={colors.accentNeon} />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <AppText variant="body" style={{ fontWeight: '700', fontSize: 14 }} numberOfLines={2}>{ed.title}</AppText>
+                              {ed.start_date ? (
+                                <AppText variant="caption" style={{ color: colors.textMuted, marginTop: 2 }}>
+                                  {fmtDateRange(ed.start_date, ed.end_date)}
+                                </AppText>
+                              ) : null}
+                              <View style={{ marginTop: 4, backgroundColor: `${colors.accentNeon}18`, alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}>
+                                <AppText variant="caption" style={{ color: colors.accentNeon, fontWeight: '700', fontSize: 10 }}>Inscrito</AppText>
+                              </View>
+                            </View>
+                            <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
                           </View>
-                        </View>
-                        <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
-                      </View>
-                    </Card>
-                  </Pressable>
-                );
-              })}
+                        </Card>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ))}
             </View>
           )}
 

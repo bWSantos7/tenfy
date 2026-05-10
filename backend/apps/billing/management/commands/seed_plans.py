@@ -43,7 +43,25 @@ _FAMILIA_FEATURES = {
     'family_members': None,           # Perfis de família (até 4 dependentes)
 }
 
+# Tester plan: all features enabled, free during beta period
+_TESTER_FEATURES = {
+    **_FAMILIA_FEATURES,
+    'multi_profile':           None,
+    'watchlist_unlimited':     None,
+}
+
 PLANS = [
+    {
+        'name': 'Tester',
+        'slug': 'tester',
+        'price_monthly': '0.00',
+        'price_yearly':  '0.00',
+        'description': 'Acesso completo durante o período beta. Todas as funcionalidades liberadas.',
+        'highlight_label': 'Período beta',
+        'display_order': -1,
+        'max_members': 4,
+        'features': _TESTER_FEATURES,
+    },
     {
         'name': 'Individual',
         'slug': 'individual',

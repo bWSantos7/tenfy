@@ -7,7 +7,7 @@ export interface PlanFeature {
 export interface Plan {
   id: number;
   name: string;
-  slug: 'individual' | 'familia';
+  slug: 'individual' | 'familia' | 'tester';
   price_monthly: string;
   price_yearly: string;
   description: string;
@@ -16,13 +16,14 @@ export interface Plan {
   is_active: boolean;
   max_members: number;
   features: PlanFeature[];
+  is_available: boolean;
 }
 
 export interface Subscription {
   id: number;
   plan: number;
   plan_name: string;
-  plan_slug: 'individual' | 'familia';
+  plan_slug: 'individual' | 'familia' | 'tester';
   billing_period: 'monthly' | 'yearly';
   status: 'active' | 'pending' | 'canceled' | 'expired' | 'unpaid' | 'trial';
   is_active: boolean;
@@ -64,7 +65,7 @@ export interface FeatureAccess {
 export type BillingPaymentMethod = 'pix' | 'credit_card' | 'boleto' | 'debit_card';
 
 export interface CheckoutPayload {
-  plan_slug: 'individual' | 'familia';
+  plan_slug: 'individual' | 'familia' | 'tester';
   billing_period: 'monthly' | 'yearly';
   payment_method: BillingPaymentMethod;
   card_token?: string;

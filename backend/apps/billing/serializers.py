@@ -19,14 +19,18 @@ class PlanFeatureSerializer(serializers.ModelSerializer):
 
 
 class PlanSerializer(serializers.ModelSerializer):
-    features = PlanFeatureSerializer(source='plan_features', many=True, read_only=True)
+    features     = PlanFeatureSerializer(source='plan_features', many=True, read_only=True)
+    is_available = serializers.SerializerMethodField()
+
+    def get_is_available(self, obj):
+        return obj.slug == Plan.SLUG_TESTER
 
     class Meta:
         model = Plan
         fields = (
             'id', 'name', 'slug', 'price_monthly', 'price_yearly',
             'description', 'highlight_label', 'display_order', 'is_active',
-            'max_members', 'features',
+            'max_members', 'features', 'is_available',
         )
 
 
@@ -67,7 +71,7 @@ class PaymentSerializer(serializers.ModelSerializer):
 
 
 class CheckoutSerializer(serializers.Serializer):
-    plan_slug      = serializers.ChoiceField(choices=['individual', 'familia'])
+    plan_slug      = serializers.ChoiceField(choices=['individual', 'familia', 'tester'])
     billing_period = serializers.ChoiceField(choices=['monthly', 'yearly'], default='monthly')
     payment_method = serializers.ChoiceField(
         choices=['credit_card', 'pix', 'debit_card'], default='pix'

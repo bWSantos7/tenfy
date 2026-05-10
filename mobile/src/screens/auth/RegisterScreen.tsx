@@ -32,14 +32,15 @@ function passwordStrength(pwd: string, c: AppColors): { score: number; label: st
 }
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Register'>;
-type Step = 'plan' | 'form' | 'otp' | 'payment' | 'profile' | 'dependent';
-type PlanSlug = 'free' | 'individual' | 'familia';
+type Step = 'plan' | 'form' | 'otp' | 'payment' | 'profile' | 'dependent' | 'done_parent';
+type PlanSlug = 'free' | 'individual' | 'familia' | 'tester';
 
 // Hardcoded fallback shown while API loads or if it fails
 const PLAN_FALLBACK: Record<string, { label: string; price: string; description: string; icon: string }> = {
-  free:       { label: 'Free',       price: 'Grátis',        description: 'Acesso básico. Consulte e explore torneios.', icon: 'search-outline' },
-  individual: { label: 'Individual', price: 'R$ 19,90/mês',  description: 'Alertas, agenda, filtros avançados e suporte prioritário.', icon: 'person-outline' },
-  familia:    { label: 'Família',    price: 'R$ 34,90/mês',  description: 'Até 4 perfis. Gerencie toda a família em uma conta.', icon: 'people-outline' },
+  tester:     { label: 'Tester (Beta)', price: 'Grátis',       description: 'Acesso completo durante o período beta. Todas as funcionalidades liberadas.', icon: 'flask-outline' },
+  free:       { label: 'Free',          price: 'Grátis',       description: 'Acesso básico. Consulte e explore torneios.', icon: 'search-outline' },
+  individual: { label: 'Individual',    price: 'R$ 19,90/mês', description: 'Alertas, agenda, filtros avançados e suporte prioritário.', icon: 'person-outline' },
+  familia:    { label: 'Família',       price: 'R$ 34,90/mês', description: 'Até 4 perfis. Gerencie toda a família em uma conta.', icon: 'people-outline' },
 };
 
 const UF_OPTIONS = [
@@ -72,7 +73,7 @@ export function RegisterScreen({ navigation }: Props) {
   const { setUser } = useAuth();
 
   // ── Plan selection state ─────────────────────────────────────────────────────
-  const [planSlug, setPlanSlug]       = useState<PlanSlug>('free');
+  const [planSlug, setPlanSlug]       = useState<PlanSlug>('tester');
   const [apiPlans, setApiPlans]       = useState<Plan[]>([]);
   const [loadingPlans, setLoadingPlans] = useState(true);
 
@@ -161,7 +162,7 @@ export function RegisterScreen({ navigation }: Props) {
   }
 
   // Derived role from plan + isResponsible flag
-  const role = (planSlug === 'familia' && form.isResponsible) ? 'parent' : 'player';
+  const role = ((planSlug === 'familia' || planSlug === 'tester') && form.isResponsible) ? 'parent' : 'player';
 
   // ── Step handlers ─────────────────────────────────────────────────────────────
 
@@ -203,7 +204,15 @@ export function RegisterScreen({ navigation }: Props) {
     try {
       await verifyEmailOtp(emailCode.trim());
       Toast.show({ type: 'success', text1: 'E-mail verificado!' });
-      if (planSlug === 'free') {
+      if (planSlug === 'tester') {
+        // Tester: create subscription in background (no payment), go to profile or parent done
+        checkout({ plan_slug: 'tester', billing_period: 'monthly', payment_method: 'pix' }).catch(() => {});
+        if (role === 'parent') {
+          setStep('done_parent');
+        } else {
+          setStep('profile');
+        }
+      } else if (planSlug === 'free') {
         // Free: skip payment, go to profile
         setStep('profile');
       } else {
@@ -332,14 +341,19 @@ export function RegisterScreen({ navigation }: Props) {
 
   // ── Plan info helpers ─────────────────────────────────────────────────────────
   function getPlanPrice(slug: PlanSlug): string {
-    if (slug === 'free') return 'Grátis';
+    if (slug === 'free' || slug === 'tester') return 'Grátis';
     const p = apiPlans.find((pl) => pl.slug === slug);
     if (p) return `R$ ${parseFloat(p.price_monthly).toFixed(2).replace('.', ',')} / mês`;
     return PLAN_FALLBACK[slug]?.price ?? '';
   }
 
-  const PLAN_SLUGS: PlanSlug[] = ['free', 'individual', 'familia'];
-  const UNAVAILABLE_PLANS: PlanSlug[] = ['individual', 'familia'];
+  function isPlanAvailable(slug: PlanSlug): boolean {
+    const apiPlan = apiPlans.find((p) => p.slug === slug);
+    if (apiPlan?.is_available !== undefined) return apiPlan.is_available;
+    return slug === 'tester';
+  }
+
+  const PLAN_SLUGS: PlanSlug[] = ['tester', 'free', 'individual', 'familia'];
 
   return (
     <Screen>
@@ -359,8 +373,9 @@ export function RegisterScreen({ navigation }: Props) {
               </View>
             ) : (
               PLAN_SLUGS.map((slug) => {
-                const isUnavailable = UNAVAILABLE_PLANS.includes(slug);
-                const selected = planSlug === slug && !isUnavailable;
+                const available = isPlanAvailable(slug);
+                const isUnavailable = !available;
+                const selected = planSlug === slug && available;
                 const info = PLAN_FALLBACK[slug];
                 const apiPlan = apiPlans.find((p) => p.slug === slug);
                 const price = getPlanPrice(slug);
@@ -398,16 +413,16 @@ export function RegisterScreen({ navigation }: Props) {
                               EM BREVE
                             </AppText>
                           </View>
-                        ) : slug === 'familia' ? (
+                        ) : apiPlan?.highlight_label ? (
                           <View style={{ backgroundColor: `${colors.accentNeon}22`, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 }}>
                             <AppText variant="caption" style={{ color: colors.accentNeon, fontWeight: '700', fontSize: 10 }}>
-                              {apiPlan?.highlight_label || 'POPULAR'}
+                              {apiPlan.highlight_label.toUpperCase()}
                             </AppText>
                           </View>
                         ) : null}
                       </View>
                       <AppText variant="muted" style={{ marginTop: 3, fontSize: 12 }}>{info.description}</AppText>
-                      {slug !== 'free' && apiPlan && !isUnavailable ? (
+                      {apiPlan && available ? (
                         <View style={{ marginTop: 4, gap: 2 }}>
                           {apiPlan.features.slice(0, 3).map((f) => (
                             <View key={f.code} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
@@ -418,11 +433,11 @@ export function RegisterScreen({ navigation }: Props) {
                         </View>
                       ) : null}
                     </View>
-                    {!isUnavailable && selected ? (
+                    {available && selected ? (
                       <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: colors.accentNeon, alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 }}>
                         <Ionicons name="checkmark" size={13} color={colors.bgBase} />
                       </View>
-                    ) : !isUnavailable ? (
+                    ) : available ? (
                       <View style={{ width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: colors.borderSubtle, flexShrink: 0, marginTop: 2 }} />
                     ) : null}
                   </Pressable>
@@ -430,7 +445,7 @@ export function RegisterScreen({ navigation }: Props) {
               })
             )}
 
-            <Button title="Continuar" onPress={() => setStep('form')} disabled={loadingPlans || planSlug !== 'free'} />
+            <Button title="Continuar" onPress={() => setStep('form')} disabled={loadingPlans || !isPlanAvailable(planSlug)} />
           </>
         ) : null}
 
@@ -471,15 +486,15 @@ export function RegisterScreen({ navigation }: Props) {
             })()}
             <Input label="Confirme a senha" required value={form.password_confirm} onChangeText={(v) => setForm({ ...form, password_confirm: v })} secureTextEntry placeholder="Repita a senha" />
 
-            {/* Família: show "I'm the responsible" toggle */}
-            {planSlug === 'familia' ? (
+            {/* Família / Tester: show "I'm the responsible/parent" toggle */}
+            {(planSlug === 'familia' || planSlug === 'tester') ? (
               <Checkbox
                 value={form.isResponsible}
                 onValueChange={(v) => setForm({ ...form, isResponsible: v })}
-                label="Serei o responsável pelo plano Família"
+                label="Sou pai / responsável (não sou o jogador)"
                 sublabel={
                   <AppText variant="caption" style={{ color: colors.textMuted, fontSize: 11 }}>
-                    Marque se vai gerenciar dependentes nesta conta.
+                    Marque se vai gerenciar o perfil de dependentes, como filho(a) ou atleta.
                   </AppText>
                 }
               />
@@ -610,6 +625,31 @@ export function RegisterScreen({ navigation }: Props) {
 
             <Button title="Finalizar cadastro" onPress={onFinish} loading={submitting} />
             <Button title="Pular (configurar depois)" variant="ghost" onPress={() => { if (registeredUser) setUser(registeredUser); }} />
+          </>
+        ) : null}
+
+        {/* ── Step: Parent done (tester responsible — no profile needed) ──── */}
+        {step === 'done_parent' ? (
+          <>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Ionicons name="shield-checkmark-outline" size={20} color={colors.accentNeon} />
+              <AppText variant="body" style={{ fontWeight: '600' }}>Conta criada!</AppText>
+            </View>
+            <AppText variant="muted">
+              Sua conta de responsável foi criada com sucesso.
+            </AppText>
+            <View style={{ backgroundColor: `${colors.accentBlue}12`, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: `${colors.accentBlue}30`, gap: 6 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Ionicons name="information-circle-outline" size={16} color={colors.accentBlue} />
+                <AppText variant="body" style={{ fontWeight: '700', color: colors.accentBlue, fontSize: 13 }}>Como adicionar dependentes</AppText>
+              </View>
+              <AppText variant="muted" style={{ fontSize: 12, lineHeight: 19 }}>
+                1. Acesse a aba <AppText style={{ fontWeight: '700', color: colors.textSecondary }}>Perfil</AppText>{'\n'}
+                2. Na seção <AppText style={{ fontWeight: '700', color: colors.textSecondary }}>Perfis esportivos</AppText>, toque em <AppText style={{ fontWeight: '700', color: colors.textSecondary }}>Adicionar perfil</AppText>{'\n'}
+                3. Preencha os dados do seu filho ou dependente
+              </AppText>
+            </View>
+            <Button title="Entrar no app" onPress={() => { if (registeredUser) setUser(registeredUser); }} />
           </>
         ) : null}
 

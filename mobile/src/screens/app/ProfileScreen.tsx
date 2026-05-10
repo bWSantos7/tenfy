@@ -266,11 +266,11 @@ export function ProfileScreen(_: Props) {
               <AppText variant="body" style={{ fontWeight: '700' }}>Meus dependentes</AppText>
             </View>
             <Pressable
-              onPress={() => navigation.navigate('Register' as never)}
+              onPress={() => navigation.navigate('Onboarding')}
               style={{ backgroundColor: `${colors.accentNeon}20`, borderWidth: 1, borderColor: `${colors.accentNeon}55`, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4, flexDirection: 'row', gap: 4, alignItems: 'center' }}
             >
               <Ionicons name="add" size={14} color={colors.accentNeon} />
-              <AppText variant="caption" style={{ color: colors.accentNeon, fontWeight: '700' }}>Adicionar dependente</AppText>
+              <AppText variant="caption" style={{ color: colors.accentNeon, fontWeight: '700' }}>Adicionar perfil</AppText>
             </Pressable>
           </View>
           {children.length === 0 ? (
@@ -296,19 +296,25 @@ export function ProfileScreen(_: Props) {
       {/* Sports profiles */}
       <View>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <View>
+          <View style={{ flex: 1 }}>
             <AppText variant="section">Perfis esportivos</AppText>
             <AppText variant="caption" style={{ marginTop: 2 }}>
-              {isParent ? 'Perfis esportivos dos seus dependentes' : isManagedChild ? 'Seu perfil esportivo' : 'Gerencie seus perfis de jogador'}
+              {isParent
+                ? 'Perfis dos dependentes — selecione o ativo para ver torneios compatíveis'
+                : isManagedChild
+                ? 'Seu perfil esportivo'
+                : 'Gerencie seus perfis de jogador'}
             </AppText>
           </View>
-          {!isParent && !isManagedChild && profiles.length === 0 ? (
+          {!isManagedChild ? (
             <Pressable
               onPress={() => navigation.navigate('Onboarding')}
-              style={{ backgroundColor: `${colors.accentNeon}20`, borderWidth: 1, borderColor: `${colors.accentNeon}55`, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 6, flexDirection: 'row', gap: 6, alignItems: 'center' }}
+              style={{ backgroundColor: `${colors.accentNeon}20`, borderWidth: 1, borderColor: `${colors.accentNeon}55`, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 6, flexDirection: 'row', gap: 6, alignItems: 'center', marginLeft: 8 }}
             >
               <Ionicons name="add" size={16} color={colors.accentNeon} />
-              <AppText variant="caption" style={{ color: colors.accentNeon, fontWeight: '700' }}>Novo</AppText>
+              <AppText variant="caption" style={{ color: colors.accentNeon, fontWeight: '700' }}>
+                {isParent ? 'Perfil' : profiles.length === 0 ? 'Criar' : 'Novo'}
+              </AppText>
             </Pressable>
           ) : null}
         </View>
@@ -322,8 +328,8 @@ export function ProfileScreen(_: Props) {
           />
         ) : profiles.length === 0 ? (
           <EmptyState
-            title={isParent ? 'Nenhum perfil esportivo dos dependentes encontrado.' : isManagedChild ? 'Seu perfil esportivo ainda não foi preenchido.' : 'Nenhum perfil criado.'}
-            subtitle={isParent ? 'Peça ao seu dependente para completar o perfil esportivo no app.' : isManagedChild ? 'Peça ao seu responsável para ajudar a completar seu perfil.' : 'Crie um perfil para ver torneios compatíveis, agenda e resultados.'}
+            title={isParent ? 'Nenhum perfil de dependente cadastrado.' : isManagedChild ? 'Seu perfil esportivo ainda não foi preenchido.' : 'Nenhum perfil criado.'}
+            subtitle={isParent ? 'Toque em "Perfil" acima para adicionar o perfil esportivo do seu filho ou dependente.' : isManagedChild ? 'Peça ao seu responsável para ajudar a completar seu perfil.' : 'Crie um perfil para ver torneios compatíveis, agenda e resultados.'}
           />
         ) : profiles.map((p) =>
           editing?.id === p.id ? (
@@ -461,7 +467,7 @@ function ProfileCard({ profile: p, colors, onEdit, onMakePrimary, onRemove, rest
 
       <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
         <Button title="Editar" variant="secondary" onPress={onEdit} style={{ flex: 1 }} />
-        {!restrictedMode && !p.is_primary ? <Button title="Tornar principal" variant="ghost" onPress={onMakePrimary} style={{ flex: 1 }} /> : null}
+        {!restrictedMode && !p.is_primary ? <Button title="Selecionar" variant="ghost" onPress={onMakePrimary} style={{ flex: 1 }} /> : null}
         {!restrictedMode ? <Button title="Remover" variant="danger" onPress={onRemove} style={{ flex: p.is_primary ? 2 : 1 }} /> : null}
       </View>
     </Card>

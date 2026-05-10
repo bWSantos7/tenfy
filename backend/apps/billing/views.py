@@ -108,53 +108,64 @@ def subscription_checkout(request):
         return Response({'detail': 'Plano não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
 
     with transaction.atomic():
-        # All plans require payment via Asaas — start as pending until webhook confirms
+        is_tester = plan.slug == Plan.SLUG_TESTER
+
         sub, created = Subscription.objects.get_or_create(
             user=request.user,
             defaults={
                 'plan': plan,
                 'billing_period': d['billing_period'],
-                'status': Subscription.STATUS_PENDING,
+                'status': Subscription.STATUS_ACTIVE if is_tester else Subscription.STATUS_PENDING,
                 'start_date': date.today(),
             },
         )
 
-        # Track pending plan; activated via PAYMENT_CONFIRMED webhook
-        sub.pending_plan = plan
-        sub.pending_billing_period = d['billing_period']
-        sub.cancel_at_period_end = False
-        sub.save(update_fields=['pending_plan', 'pending_billing_period', 'cancel_at_period_end', 'updated_at'])
         asaas_result = None
         pix_qr = None
-        try:
-            from .services.asaas_service import (
-                create_subscription, get_subscription_first_pix_qr, AsaasNotConfiguredError,
-            )
-            payment_method_map = {
-                'credit_card': 'CREDIT_CARD',
-                'pix': 'PIX',
-                'boleto': 'BOLETO',
-                'debit_card': 'DEBIT_CARD',
-            }
-            # PCI-DSS: only card_token accepted — raw card data is tokenized
-            # client-side by the mobile app directly with Asaas.
-            asaas_result = create_subscription(
-                user=request.user,
-                plan=plan,
-                billing_period=d['billing_period'],
-                payment_method=payment_method_map[d['payment_method']],
-                card_token=d.get('card_token', ''),
-            )
-            sub.asaas_subscription_id = asaas_result.get('id', '')
-            sub.save(update_fields=['asaas_subscription_id', 'updated_at'])
-            logger.info('Asaas subscription %s created for user %s', sub.asaas_subscription_id, request.user.id)
 
-            # For Pix: fetch QR code from first pending payment
-            if d['payment_method'] == 'pix' and sub.asaas_subscription_id:
-                pix_qr = get_subscription_first_pix_qr(sub.asaas_subscription_id)
+        if is_tester:
+            # Tester plan: activate immediately — no payment required
+            sub.plan = plan
+            sub.status = Subscription.STATUS_ACTIVE
+            sub.pending_plan = None
+            sub.pending_billing_period = ''
+            sub.cancel_at_period_end = False
+            sub.save(update_fields=['plan', 'status', 'pending_plan', 'pending_billing_period', 'cancel_at_period_end', 'updated_at'])
+        else:
+            # Track pending plan; activated via PAYMENT_CONFIRMED webhook
+            sub.pending_plan = plan
+            sub.pending_billing_period = d['billing_period']
+            sub.cancel_at_period_end = False
+            sub.save(update_fields=['pending_plan', 'pending_billing_period', 'cancel_at_period_end', 'updated_at'])
+            try:
+                from .services.asaas_service import (
+                    create_subscription, get_subscription_first_pix_qr, AsaasNotConfiguredError,
+                )
+                payment_method_map = {
+                    'credit_card': 'CREDIT_CARD',
+                    'pix': 'PIX',
+                    'boleto': 'BOLETO',
+                    'debit_card': 'DEBIT_CARD',
+                }
+                # PCI-DSS: only card_token accepted — raw card data is tokenized
+                # client-side by the mobile app directly with Asaas.
+                asaas_result = create_subscription(
+                    user=request.user,
+                    plan=plan,
+                    billing_period=d['billing_period'],
+                    payment_method=payment_method_map[d['payment_method']],
+                    card_token=d.get('card_token', ''),
+                )
+                sub.asaas_subscription_id = asaas_result.get('id', '')
+                sub.save(update_fields=['asaas_subscription_id', 'updated_at'])
+                logger.info('Asaas subscription %s created for user %s', sub.asaas_subscription_id, request.user.id)
 
-        except Exception as exc:  # AsaasNotConfiguredError or network error
-            logger.warning('Asaas not available (%s); subscription created locally.', exc)
+                # For Pix: fetch QR code from first pending payment
+                if d['payment_method'] == 'pix' and sub.asaas_subscription_id:
+                    pix_qr = get_subscription_first_pix_qr(sub.asaas_subscription_id)
+
+            except Exception as exc:  # AsaasNotConfiguredError or network error
+                logger.warning('Asaas not available (%s); subscription created locally.', exc)
 
         _log_action(request.user, 'billing.checkout', f'Checkout plan={plan.slug} method={d["payment_method"]}')
 

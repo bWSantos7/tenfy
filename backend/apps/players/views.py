@@ -35,6 +35,20 @@ class PlayerProfileViewSet(viewsets.ModelViewSet):
                 {'detail': 'Contas de filho não podem criar novos perfis esportivos.'},
                 status=status.HTTP_403_FORBIDDEN,
             )
+        # Enforce dependent profile limit for parent accounts
+        if request.user.role == 'parent':
+            from apps.billing.models import Subscription
+            current_count = PlayerProfile.objects.filter(user=request.user).count()
+            try:
+                sub = request.user.subscription
+                max_dependent_profiles = sub.plan.max_members - 1
+            except Subscription.DoesNotExist:
+                max_dependent_profiles = 3  # safe default (tester plan: max_members=4 → 3 dependents)
+            if current_count >= max_dependent_profiles:
+                return Response(
+                    {'detail': f'Limite de {max_dependent_profiles} perfil(is) de dependentes atingido para o seu plano.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
         return super().create(request, *args, **kwargs)
 
     def destroy(self, request, *args, **kwargs):

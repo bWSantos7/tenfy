@@ -61,11 +61,11 @@
       "expo-font",
       "expo-secure-store"
     ],
+    "owner": "bwsantos7",
     "extra": {
       "eas": {
-        "projectId": "9f1f2255-c936-4597-9c27-f2a70537134a"
+        "projectId": "c53085f5-6c49-40ec-97da-6299d7f30857"
       }
-    },
-    "owner": "bwsantos7"
+    }
   }
 }

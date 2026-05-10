@@ -18,6 +18,7 @@ const AdminPanelPage      = React.lazy(() => import('./pages/AdminPanelPage').th
 const ResultsPage         = React.lazy(() => import('./pages/ResultsPage').then(m => ({ default: m.ResultsPage })));
 const CoachPage           = React.lazy(() => import('./pages/CoachPage').then(m => ({ default: m.CoachPage })));
 const SubscriptionPage    = React.lazy(() => import('./pages/SubscriptionPage').then(m => ({ default: m.SubscriptionPage })));
+const PrivacyPolicyPage   = React.lazy(() => import('./pages/PrivacyPolicyPage').then(m => ({ default: m.PrivacyPolicyPage })));
 
 const PageLoader: React.FC = () => (
   <div className="min-h-screen bg-bg-base flex items-center justify-center">
@@ -91,6 +92,8 @@ const App: React.FC = () => {
             }
           />
         </Route>
+
+        <Route path="/politica-privacidade" element={<PrivacyPolicyPage />} />
 
         <Route
           path="*"

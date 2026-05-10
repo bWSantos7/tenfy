@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Shield } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 
 export const PrivacyPolicyPage: React.FC = () => {
   return (
@@ -16,8 +16,8 @@ export const PrivacyPolicyPage: React.FC = () => {
           </Link>
         </div>
 
-        <div className="flex items-center gap-3 mb-8">
-          <Shield className="text-accent-neon" size={28} />
+        <div className="flex items-center gap-4 mb-8">
+          <img src="/icons/logo.png" alt="Tenfy" className="w-12 h-12 object-contain" />
           <div>
             <h1 className="text-2xl font-bold">Política de Privacidade</h1>
             <p className="text-text-secondary text-sm mt-1">Última atualização: maio de 2026</p>

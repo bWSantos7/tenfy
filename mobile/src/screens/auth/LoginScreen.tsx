@@ -46,7 +46,7 @@ export function LoginScreen({ navigation }: Props) {
       <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: 16 }}>
         <View style={{ alignItems: 'center', marginBottom: 32 }}>
           <Image
-            source={require('../../../assets/tenfy/logos/logo-main-clean.png')}
+            source={require('../../../assets/logo2.png')}
             style={{ width: 220, height: 70 }}
             resizeMode="contain"
           />

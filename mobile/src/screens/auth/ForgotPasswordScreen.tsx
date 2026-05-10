@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View } from 'react-native';
+import { Image, View } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '../../navigation/types';
@@ -26,6 +26,13 @@ export function ForgotPasswordScreen({ navigation }: Props) {
   return (
     <Screen scroll={false}>
       <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: 16 }}>
+        <View style={{ alignItems: 'center', marginBottom: 32 }}>
+          <Image
+            source={require('../../../assets/logo2.png')}
+            style={{ width: 220, height: 70 }}
+            resizeMode="contain"
+          />
+        </View>
         {sent ? (
           <Card>
             <AppText variant="section">Verifique seu e-mail</AppText>

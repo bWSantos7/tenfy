@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Linking, Pressable, Share, View } from 'react-native';
+import { ActivityIndicator, Image, Linking, Pressable, Share, View } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -357,6 +357,13 @@ export function RegisterScreen({ navigation }: Props) {
 
   return (
     <Screen>
+      <View style={{ alignItems: 'center', marginBottom: 8, marginTop: 8 }}>
+        <Image
+          source={require('../../../assets/logo2.png')}
+          style={{ width: 200, height: 64 }}
+          resizeMode="contain"
+        />
+      </View>
       <Card>
         <AppText variant="section">Criar conta</AppText>
 

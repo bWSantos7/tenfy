@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -9,6 +9,10 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { AppText, Button } from '../components/ui';
 import { AuthStackParamList, MainStackParamList } from './types';
+import { BetaModal } from '../components/BetaModal';
+import { storage } from '../services/api';
+
+const BETA_ACK_KEY = 'th_beta_ack';
 import { LoginScreen } from '../screens/auth/LoginScreen';
 import { RegisterScreen } from '../screens/auth/RegisterScreen';
 import { ForgotPasswordScreen } from '../screens/auth/ForgotPasswordScreen';
@@ -94,6 +98,19 @@ function GatedTabs() {
 
 export function RootNavigator() {
   const { isAuthenticated } = useAuth();
+  const [betaVisible, setBetaVisible] = useState(false);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    storage.get(BETA_ACK_KEY).then(val => {
+      if (!val) setBetaVisible(true);
+    });
+  }, [isAuthenticated]);
+
+  const dismissBeta = async () => {
+    await storage.set(BETA_ACK_KEY, '1');
+    setBetaVisible(false);
+  };
 
   if (!isAuthenticated) {
     return (
@@ -106,7 +123,9 @@ export function RootNavigator() {
   }
 
   return (
-    <MainStack.Navigator screenOptions={{ headerShown: false }}>
+    <>
+      <BetaModal visible={betaVisible} onClose={dismissBeta} />
+      <MainStack.Navigator screenOptions={{ headerShown: false }}>
       <MainStack.Screen name="Tabs" component={GatedTabs} />
       <MainStack.Screen name="TournamentDetail" component={TournamentDetailScreen} />
       <MainStack.Screen name="Onboarding" component={OnboardingScreen} />
@@ -140,5 +159,6 @@ export function RootNavigator() {
         options={{ headerShown: true, title: 'Comparar torneios', headerBackTitle: 'Voltar' }}
       />
     </MainStack.Navigator>
+    </>
   );
 }

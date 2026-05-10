@@ -3,6 +3,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { Home, Calendar, Star, Bell, User, LogOut, ShieldCheck, Sun, Moon, Users, Award, CreditCard } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { BetaModal } from './BetaModal';
 
 const navItems = [
   { to: '/', label: 'Início', icon: Home, end: true },
@@ -25,6 +26,7 @@ export const AppLayout: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-bg-base flex flex-col">
+      <BetaModal />
       <header className="sticky top-0 z-30 bg-bg-card/90 backdrop-blur-lg border-b border-border-subtle shadow-sm">
         <div className="mx-auto max-w-5xl px-4 h-14 flex items-center justify-between">
           <NavLink to="/" className="flex items-center gap-2.5 group">

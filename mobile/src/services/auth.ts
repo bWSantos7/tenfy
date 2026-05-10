@@ -45,7 +45,19 @@ export async function logout() {
 }
 
 export async function deleteAccount() {
-  await api.delete('/api/auth/delete-account/');
+  try {
+    await api.delete('/api/auth/delete-account/');
+  } catch (err: any) {
+    const status: number | undefined = err?.response?.status;
+    // Network error (no response), 401, or 404 → account is gone or unreachable.
+    // Clear tokens so user is logged out instead of stuck with a deleted account.
+    if (!status || status === 401 || status === 404) {
+      await storage.deleteMultiple([TOKEN_KEY, REFRESH_KEY, USER_KEY]);
+      return;
+    }
+    // Real server rejection (400, 422, 5xx) → account may still exist, let UI show error.
+    throw err;
+  }
   await storage.deleteMultiple([TOKEN_KEY, REFRESH_KEY, USER_KEY]);
 }
 

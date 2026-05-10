@@ -123,8 +123,13 @@ export function ProfileScreen(_: Props) {
           text: 'Excluir conta',
           style: 'destructive',
           onPress: async () => {
-            try { await deleteAccount(); setUser(null); }
-            catch (err) { Toast.show({ type: 'error', text1: 'Erro ao excluir conta', text2: extractApiError(err) }); }
+            try {
+              await deleteAccount();
+            } catch (err) {
+              Toast.show({ type: 'error', text1: 'Erro ao excluir conta', text2: extractApiError(err) });
+            } finally {
+              setUser(null);
+            }
           },
         },
       ],

@@ -66,9 +66,16 @@ const api: AxiosInstance = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+const PUBLIC_PATHS = ['/api/auth/login/', '/api/auth/register/', '/api/auth/password-reset/', '/api/auth/token/refresh/'];
+
 api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
-  const token = await secureGet(TOKEN_KEY);
-  if (token && config.headers) config.headers.Authorization = `Bearer ${token}`;
+  const isPublic = PUBLIC_PATHS.some((p) => config.url?.includes(p));
+  if (!isPublic) {
+    const token = await secureGet(TOKEN_KEY);
+    if (token && config.headers) config.headers.Authorization = `Bearer ${token}`;
+  } else if (config.headers) {
+    delete config.headers.Authorization;
+  }
   return config;
 });
 

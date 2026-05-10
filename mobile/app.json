@@ -4,7 +4,7 @@
     "slug": "tenfy",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/tenfy/app-icons/app-icon-dark-precise.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
@@ -28,9 +28,9 @@
     },
     "android": {
       "package": "com.tenfy.mobile",
-      "versionCode": 1,
+      "versionCode": 2,
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/tenfy/app-icons/app-icon-compact-precise.png",
         "backgroundColor": "#0A1330"
       },
       "permissions": [
@@ -41,7 +41,7 @@
       ]
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/tenfy/favicons/favicon-precise.png"
     },
     "plugins": [
       "expo-image-picker",

@@ -331,13 +331,45 @@ class CBTYouthConnector(CBTPublicConnector):
     """
     CBT youth/junior circuit connector.
 
-    The CBT website separates adult (cbt-tenis.com.br/tournament) from
-    youth (cbt-tenis.com.br/youth/tournament). The TenisIntegrado API
-    uses a different `system` value for the youth department.
+    The Angular app (cbt-tenis.com.br/youth/tournament) calls the API with
+    departmentType=4 — no loadAll flag. This returns youth-only tournaments
+    and exposes a different (larger) set than the loadAll=1 call used by
+    CBTPublicConnector.
 
-    Default SYSTEM_ID='3' targets the youth circuit. If the admin panel
-    shows 0 tournaments after running this connector, try system_id='5'
-    via config_json: {"system_id": "5"}.
+    DEPARTMENT_TYPE_YOUTH = "4" (extracted from Angular bundle).
     """
     key = 'cbt_youth'
-    SYSTEM_ID = '3'
+    DEPARTMENT_TYPE_YOUTH = '4'
+
+    def extract(self):
+        payload = {
+            'host': self.HOST,
+            'token': '',
+            'system': self._system_id(),
+            'language': 'pt-BR',
+            'departmentType': self.config.get('department_type', self.DEPARTMENT_TYPE_YOUTH),
+        }
+        response = self.session.post(
+            f'{self.API_BASE}{self.API_PATH}',
+            data=payload,
+            timeout=self._timeout,
+        )
+        logger.info('CBT Youth API status=%s', response.status_code)
+        if response.status_code >= 400:
+            raise ConnectorError(f'CBT Youth API returned {response.status_code}')
+
+        data = response.json()
+        if data.get('status_code') not in (0, '0'):
+            raise ConnectorError(data.get('description') or 'CBT Youth API error')
+
+        seen = set()
+        groups = (data.get('registers') or {}).get('list') or []
+        for group in groups:
+            for item in group.get('tournaments') or []:
+                ext_id = item.get('id_torneio')
+                if not ext_id or ext_id in seen:
+                    continue
+                seen.add(ext_id)
+                parsed = self._normalize_item(item)
+                if parsed:
+                    yield parsed

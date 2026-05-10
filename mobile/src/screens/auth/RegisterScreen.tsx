@@ -135,7 +135,10 @@ export function RegisterScreen({ navigation }: Props) {
 
   // ── Load plans from API (public endpoint — no auth needed) ───────────────────
   useEffect(() => {
-    fetchPlans()
+    const timeout = new Promise<Plan[]>((_, reject) =>
+      setTimeout(() => reject(new Error('timeout')), 8000)
+    );
+    Promise.race([fetchPlans(), timeout])
       .then(setApiPlans)
       .catch(() => {})
       .finally(() => setLoadingPlans(false));

@@ -44,7 +44,12 @@
       "favicon": "./assets/logo4.png"
     },
     "plugins": [
-      "expo-image-picker",
+      [
+        "expo-image-picker",
+        {
+          "microphonePermission": false
+        }
+      ],
       [
         "expo-build-properties",
         {

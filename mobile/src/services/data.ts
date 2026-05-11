@@ -151,6 +151,9 @@ export async function createChildWithProfile(
   });
   return res.data;
 }
+export async function removeChild(linkId: number) {
+  return api.delete(`/api/auth/children/${linkId}/remove/`);
+}
 export async function sendChildPasswordReset(linkId: number) {
   await api.post(`/api/auth/children/${linkId}/reset-password/`);
 }

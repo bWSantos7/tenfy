@@ -532,6 +532,14 @@ class ParentChildViewSet(viewsets.ModelViewSet):
             status=status.HTTP_201_CREATED,
         )
 
+    @viewset_action(detail=True, methods=['delete'], url_path='remove')
+    def remove_child(self, request, pk=None):
+        """Deactivate the parent-child link. Child account remains active but is no longer managed."""
+        link = self.get_object()
+        link.is_active = False
+        link.save(update_fields=['is_active'])
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
     @viewset_action(detail=True, methods=['post'], url_path='profile')
     def create_profile(self, request, pk=None):
         """Parent creates a sports profile for a specific child."""

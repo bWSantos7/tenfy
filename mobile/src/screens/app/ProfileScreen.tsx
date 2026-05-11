@@ -13,7 +13,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { deleteAccount, uploadAvatar } from '../../services/auth';
 import {
   createChildProfile, createChildWithProfile, deleteProfile, listChildren, listChildProfiles,
-  listProfiles, requestDataExport, sendChildPasswordReset, setPrimary, updateProfile,
+  listProfiles, removeChild, requestDataExport, sendChildPasswordReset, setPrimary, updateProfile,
 } from '../../services/data';
 import { extractApiError, mediaUrl } from '../../services/api';
 import { ParentChild, PlayerProfile } from '../../types';
@@ -172,6 +172,29 @@ export function ProfileScreen(_: Props) {
               Toast.show({ type: 'success', text1: 'E-mail enviado!', text2: `Instruções enviadas para ${link.child_detail.email}.` });
             } catch (err) {
               Toast.show({ type: 'error', text1: 'Erro', text2: extractApiError(err) });
+            }
+          },
+        },
+      ],
+    );
+  }
+
+  function handleRemoveChild(link: ParentChild) {
+    Alert.alert(
+      'Excluir dependente',
+      `Remover ${link.child_detail.full_name || link.child_detail.email} da sua conta?\n\nA conta do dependente continuará existindo, mas você deixará de gerenciá-la.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Excluir',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await removeChild(link.id);
+              await load();
+              Toast.show({ type: 'success', text1: 'Dependente removido.' });
+            } catch (err) {
+              Toast.show({ type: 'error', text1: 'Erro ao remover dependente', text2: extractApiError(err) });
             }
           },
         },
@@ -370,6 +393,7 @@ export function ProfileScreen(_: Props) {
                 onEditProfile={() => profile && setEditingDep({ link, profile })}
                 onCreateProfile={() => setCreatingProfileFor(link)}
                 onResetPassword={() => handleResetChildPassword(link)}
+                onRemove={() => handleRemoveChild(link)}
               />
             );
           })}
@@ -441,13 +465,14 @@ export function ProfileScreen(_: Props) {
 
 // ── DependentCard ─────────────────────────────────────────────────────────────
 
-function DependentCard({ link, profile, colors, onEditProfile, onCreateProfile, onResetPassword }: {
+function DependentCard({ link, profile, colors, onEditProfile, onCreateProfile, onResetPassword, onRemove }: {
   link: ParentChild;
   profile: PlayerProfile | null;
   colors: any;
   onEditProfile: () => void;
   onCreateProfile: () => void;
   onResetPassword: () => void;
+  onRemove: () => void;
 }) {
   const classLabel = profile?.tennis_class ? (TENNIS_CLASS_LABELS[profile.tennis_class] ?? `Classe ${profile.tennis_class}`) : null;
   const levelLabel = profile ? (LEVEL_LABELS[profile.competitive_level] ?? profile.competitive_level) : null;
@@ -513,13 +538,22 @@ function DependentCard({ link, profile, colors, onEditProfile, onCreateProfile, 
       )}
 
       {/* Actions */}
-      <View style={{ flexDirection: 'row', gap: 8 }}>
+      <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
         {profile ? (
-          <Button title="Editar perfil" variant="secondary" onPress={onEditProfile} style={{ flex: 1 }} />
+          <Button title="Editar perfil" variant="secondary" onPress={onEditProfile} style={{ flex: 1, minWidth: 110 }} />
         ) : (
-          <Button title="Criar perfil" variant="secondary" onPress={onCreateProfile} style={{ flex: 1 }} />
+          <Button title="Criar perfil" variant="secondary" onPress={onCreateProfile} style={{ flex: 1, minWidth: 110 }} />
         )}
-        <Button title="Redefinir senha" variant="ghost" onPress={onResetPassword} style={{ flex: 1 }} />
+        <Button title="Redefinir senha" variant="ghost" onPress={onResetPassword} style={{ flex: 1, minWidth: 110 }} />
+      </View>
+      <View style={{ marginTop: 8, alignItems: 'flex-end' }}>
+        <Pressable
+          onPress={onRemove}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4, paddingHorizontal: 8 }}
+        >
+          <Ionicons name="trash-outline" size={14} color={colors.danger} />
+          <AppText variant="caption" style={{ color: colors.danger }}>Excluir dependente</AppText>
+        </Pressable>
       </View>
     </Card>
   );

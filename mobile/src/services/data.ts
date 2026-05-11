@@ -99,7 +99,7 @@ export async function getAthleteWatchlist(id: number) {
 
 // ----- Parent / Children -----
 export async function listChildren() {
-  const res = await api.get<import('../types').ParentChild[]>('/api/accounts/children/');
+  const res = await api.get<import('../types').ParentChild[]>('/api/auth/children/');
   // DRF may return paginated or array
   const d = res.data as any;
   return d.results ?? (res.data as import('../types').ParentChild[]);
@@ -126,6 +126,14 @@ export async function listChildRegistrations(childUserId: number) {
   const res = await api.get<any>(`/api/registrations/?user_id=${childUserId}`);
   const d = res.data;
   return d.results ?? d;
+}
+
+export async function createChildProfile(linkId: number, data: Partial<PlayerProfile>) {
+  const res = await api.post<PlayerProfile>(`/api/auth/children/${linkId}/profile/`, data);
+  return res.data;
+}
+export async function sendChildPasswordReset(linkId: number) {
+  await api.post(`/api/auth/children/${linkId}/reset-password/`);
 }
 
 // ----- LGPD -----

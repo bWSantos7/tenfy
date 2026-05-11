@@ -38,6 +38,7 @@ export const storage = {
   deleteMultiple: (keys: string[]) => Promise.all(keys.map(secureDelete)),
 };
 
+
 function resolveBaseUrl(): string {
   const configured = (
     process.env.EXPO_PUBLIC_API_BASE_URL

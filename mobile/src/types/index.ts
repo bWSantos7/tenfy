@@ -65,6 +65,7 @@ export interface PlayerProfileCategory {
 
 export interface PlayerProfile {
   id: number;
+  user_id: number;
   display_name: string;
   birth_year: number | null;
   birth_date: string | null;

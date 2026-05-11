@@ -102,8 +102,14 @@ export function RootNavigator() {
 
   useEffect(() => {
     if (!isAuthenticated) return;
-    storage.get(BETA_ACK_KEY).then(val => {
-      if (!val) setBetaVisible(true);
+    Promise.all([
+      storage.get(BETA_ACK_KEY),
+      storage.get('th_just_registered'),
+    ]).then(([acked, justReg]) => {
+      if (!acked || justReg) {
+        storage.delete('th_just_registered');
+        setBetaVisible(true);
+      }
     });
   }, [isAuthenticated]);
 

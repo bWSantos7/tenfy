@@ -24,11 +24,12 @@ class PlayerProfileSerializer(serializers.ModelSerializer):
         source='profile_categories', many=True, read_only=True
     )
     sporting_age = serializers.IntegerField(read_only=True)
+    user_id = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = PlayerProfile
         fields = (
-            'id', 'display_name', 'birth_year', 'birth_date',
+            'id', 'user_id', 'display_name', 'birth_year', 'birth_date',
             'gender', 'home_state', 'home_city', 'travel_radius_km', 'travel_states',
             'competitive_level', 'dominant_hand', 'tennis_class',
             'is_primary', 'external_ids', 'categories', 'sporting_age',

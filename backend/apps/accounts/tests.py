@@ -175,6 +175,203 @@ class ParentChildTestCase(TestCase):
         self.assertEqual(res.status_code, 403)
 
 
+class DependentManagementTestCase(TestCase):
+    """Tests for parent/responsible creating and managing dependent accounts."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.tester_plan = Plan.objects.create(
+            name='Tester', slug=Plan.SLUG_TESTER, max_members=4, is_active=True,
+        )
+        self.familia_plan = Plan.objects.create(
+            name='Familia', slug=Plan.SLUG_FAMILIA, max_members=5, is_active=True,
+        )
+        self.individual_plan = Plan.objects.create(
+            name='Individual', slug=Plan.SLUG_INDIVIDUAL, max_members=1, is_active=True,
+        )
+        self.parent = User.objects.create_user(
+            email='responsible@example.com', password='Str0ngPass!',
+            full_name='Responsible User', role=User.ROLE_PARENT,
+        )
+
+    def _activate_plan(self, user, plan):
+        from apps.billing.models import Subscription
+        Subscription.objects.create(user=user, plan=plan, status='active')
+
+    # ── Account creation ────────────────────────────────────────────────────────
+
+    def test_tester_parent_can_create_child_account(self):
+        self._activate_plan(self.parent, self.tester_plan)
+        self.client.force_authenticate(user=self.parent)
+        res = self.client.post('/api/auth/children/', {
+            'full_name': 'Child One',
+            'email': 'child1@example.com',
+            'password': 'Str0ngPass!',
+            'password_confirm': 'Str0ngPass!',
+        }, format='json')
+        self.assertEqual(res.status_code, 201)
+        child = User.objects.get(email='child1@example.com')
+        self.assertEqual(child.role, User.ROLE_PLAYER)
+        self.assertTrue(ParentChild.objects.filter(parent=self.parent, child=child).exists())
+
+    def test_familia_parent_can_create_child_account(self):
+        self._activate_plan(self.parent, self.familia_plan)
+        self.client.force_authenticate(user=self.parent)
+        res = self.client.post('/api/auth/children/', {
+            'full_name': 'Child Familia',
+            'email': 'childfam@example.com',
+            'password': 'Str0ngPass!',
+            'password_confirm': 'Str0ngPass!',
+        }, format='json')
+        self.assertEqual(res.status_code, 201)
+
+    def test_individual_plan_cannot_create_child(self):
+        self._activate_plan(self.parent, self.individual_plan)
+        self.client.force_authenticate(user=self.parent)
+        res = self.client.post('/api/auth/children/', {
+            'full_name': 'Should Fail',
+            'email': 'fail@example.com',
+            'password': 'Str0ngPass!',
+            'password_confirm': 'Str0ngPass!',
+        }, format='json')
+        self.assertEqual(res.status_code, 403)
+
+    def test_player_role_cannot_create_child(self):
+        player = User.objects.create_user(
+            email='player2@example.com', password='Str0ngPass!', role=User.ROLE_PLAYER,
+        )
+        self.client.force_authenticate(user=player)
+        res = self.client.post('/api/auth/children/', {
+            'full_name': 'Nope',
+            'email': 'nope@example.com',
+            'password': 'Str0ngPass!',
+            'password_confirm': 'Str0ngPass!',
+        }, format='json')
+        self.assertEqual(res.status_code, 403)
+
+    def test_dependent_limit_is_respected(self):
+        """Tester plan: max_members=4 → max 3 dependents."""
+        self._activate_plan(self.parent, self.tester_plan)
+        self.client.force_authenticate(user=self.parent)
+        for i in range(3):
+            res = self.client.post('/api/auth/children/', {
+                'full_name': f'Child {i}',
+                'email': f'child{i}@example.com',
+                'password': 'Str0ngPass!',
+                'password_confirm': 'Str0ngPass!',
+            }, format='json')
+            self.assertEqual(res.status_code, 201, f'Child {i} creation failed')
+        res = self.client.post('/api/auth/children/', {
+            'full_name': 'Child 4 blocked',
+            'email': 'child4@example.com',
+            'password': 'Str0ngPass!',
+            'password_confirm': 'Str0ngPass!',
+        }, format='json')
+        self.assertIn(res.status_code, [400, 403])
+
+    # ── Authentication ──────────────────────────────────────────────────────────
+
+    def test_dependent_can_authenticate(self):
+        self._activate_plan(self.parent, self.tester_plan)
+        self.client.force_authenticate(user=self.parent)
+        self.client.post('/api/auth/children/', {
+            'full_name': 'Auth Child',
+            'email': 'authchild@example.com',
+            'password': 'Str0ngPass!',
+            'password_confirm': 'Str0ngPass!',
+        }, format='json')
+        self.client.force_authenticate(user=None)
+        res = self.client.post('/api/auth/login/', {
+            'email': 'authchild@example.com',
+            'password': 'Str0ngPass!',
+        }, format='json')
+        self.assertEqual(res.status_code, 200)
+        self.assertIn('access', res.data)
+
+    # ── Sports profile management ───────────────────────────────────────────────
+
+    def test_parent_can_create_sports_profile_for_child(self):
+        self._activate_plan(self.parent, self.tester_plan)
+        self.client.force_authenticate(user=self.parent)
+        res = self.client.post('/api/auth/children/', {
+            'full_name': 'Profile Child',
+            'email': 'profchild@example.com',
+            'password': 'Str0ngPass!',
+            'password_confirm': 'Str0ngPass!',
+        }, format='json')
+        link_id = res.data['id']
+        res = self.client.post(f'/api/auth/children/{link_id}/profile/', {
+            'display_name': 'Profile Child',
+            'birth_year': 2010,
+            'gender': 'M',
+            'home_state': 'SP',
+            'competitive_level': 'amateur',
+        }, format='json')
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(res.data['user_id'], User.objects.get(email='profchild@example.com').id)
+
+    def test_parent_cannot_create_duplicate_profile_for_child(self):
+        self._activate_plan(self.parent, self.tester_plan)
+        self.client.force_authenticate(user=self.parent)
+        res = self.client.post('/api/auth/children/', {
+            'full_name': 'Dup Child',
+            'email': 'dupchild@example.com',
+            'password': 'Str0ngPass!',
+            'password_confirm': 'Str0ngPass!',
+        }, format='json')
+        link_id = res.data['id']
+        self.client.post(f'/api/auth/children/{link_id}/profile/', {
+            'display_name': 'Dup Child', 'home_state': 'SP',
+        }, format='json')
+        res2 = self.client.post(f'/api/auth/children/{link_id}/profile/', {
+            'display_name': 'Dup Child', 'home_state': 'RJ',
+        }, format='json')
+        self.assertEqual(res2.status_code, 400)
+
+    def test_parent_can_view_child_profiles(self):
+        from apps.players.models import PlayerProfile
+        self._activate_plan(self.parent, self.tester_plan)
+        child = User.objects.create_user(email='viewchild@example.com', password='pass')
+        ParentChild.objects.create(parent=self.parent, child=child, is_active=True)
+        PlayerProfile.objects.create(user=child, display_name='View Child', home_state='SP', is_primary=True)
+        self.client.force_authenticate(user=self.parent)
+        res = self.client.get(f'/api/players/profiles/?user_id={child.id}')
+        self.assertEqual(res.status_code, 200)
+        results = res.data.get('results', res.data)
+        self.assertTrue(any(p['display_name'] == 'View Child' for p in results))
+
+    def test_parent_can_edit_child_profile(self):
+        from apps.players.models import PlayerProfile
+        self._activate_plan(self.parent, self.tester_plan)
+        child = User.objects.create_user(email='editchild@example.com', password='pass')
+        ParentChild.objects.create(parent=self.parent, child=child, is_active=True)
+        profile = PlayerProfile.objects.create(user=child, display_name='Edit Child', home_state='SP', is_primary=True)
+        self.client.force_authenticate(user=self.parent)
+        res = self.client.patch(f'/api/players/profiles/{profile.id}/', {
+            'home_city': 'Campinas',
+        }, format='json')
+        self.assertEqual(res.status_code, 200)
+        profile.refresh_from_db()
+        self.assertEqual(profile.home_city, 'Campinas')
+
+    def test_reset_password_for_child(self):
+        from unittest.mock import patch
+        self._activate_plan(self.parent, self.tester_plan)
+        child = User.objects.create_user(email='resetkid@example.com', password='pass')
+        link = ParentChild.objects.create(parent=self.parent, child=child, is_active=True)
+        self.client.force_authenticate(user=self.parent)
+        with patch('apps.accounts.tasks.send_password_reset_email.delay') as mock_task:
+            res = self.client.post(f'/api/auth/children/{link.id}/reset-password/')
+        self.assertEqual(res.status_code, 200)
+        mock_task.assert_called_once()
+
+    def test_non_parent_cannot_access_child_profile_endpoint(self):
+        player = User.objects.create_user(email='player3@example.com', password='pass')
+        self.client.force_authenticate(user=player)
+        res = self.client.post('/api/auth/children/999/profile/', {}, format='json')
+        self.assertEqual(res.status_code, 403)
+
+
 class LGPDDataExportTestCase(TestCase):
     def setUp(self):
         self.client = APIClient()

@@ -11,12 +11,16 @@ import { MainStackParamList, MainTabParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { deleteAccount, uploadAvatar } from '../../services/auth';
-import { deleteProfile, listChildren, listProfiles, requestDataExport, setPrimary, updateProfile } from '../../services/data';
+import { createChildAccount } from '../../services/auth';
+import {
+  createChildProfile, deleteProfile, listChildren, listChildProfiles,
+  listProfiles, requestDataExport, sendChildPasswordReset, setPrimary, updateProfile,
+} from '../../services/data';
 import { extractApiError, mediaUrl } from '../../services/api';
 import { ParentChild, PlayerProfile } from '../../types';
 import { GENDER_LABELS, LEVEL_LABELS, ROLE_LABELS, TENNIS_CLASS_LABELS } from '../../utils/format';
 import { markProfileDirty } from '../../utils/profileRefresh';
-import { AppText, Button, Card, EmptyState, Input, LoadingBlock, MultiSelectField, Screen, SectionHeader, SelectField } from '../../components/ui';
+import { AppText, Button, Card, EmptyState, Input, LoadingBlock, Screen, SectionHeader, SelectField, MultiSelectField } from '../../components/ui';
 
 type Props = BottomTabScreenProps<MainTabParamList, 'Profile'>;
 type StackNav = NativeStackNavigationProp<MainStackParamList>;
@@ -46,9 +50,11 @@ const CLASS_OPTIONS = [
 ];
 const ALL_UFS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
 const TRAVEL_STATE_OPTIONS = [
-  { value: '__ALL__', label: '🌎 Todo o Brasil (todos os estados)' },
+  { value: '__ALL__', label: 'Todo o Brasil (todos os estados)' },
   ...UF_OPTIONS,
 ];
+
+type DependentData = { link: ParentChild; profiles: PlayerProfile[] };
 
 export function ProfileScreen(_: Props) {
   const { colors, theme, toggle } = useTheme();
@@ -56,9 +62,16 @@ export function ProfileScreen(_: Props) {
   const navigation = useNavigation<StackNav>();
   const [loading, setLoading] = useState(true);
   const [profileError, setProfileError] = useState<string | null>(null);
+
+  // Non-parent state
   const [profiles, setProfiles] = useState<PlayerProfile[]>([]);
   const [editing, setEditing] = useState<PlayerProfile | null>(null);
-  const [children, setChildren] = useState<ParentChild[]>([]);
+
+  // Parent state
+  const [dependents, setDependents] = useState<DependentData[]>([]);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [editingDep, setEditingDep] = useState<{ link: ParentChild; profile: PlayerProfile } | null>(null);
+  const [creatingProfileFor, setCreatingProfileFor] = useState<ParentChild | null>(null);
 
   const isParent = user?.role === 'parent';
   const isManagedChild = !!user?.managed_by_parent;
@@ -67,13 +80,23 @@ export function ProfileScreen(_: Props) {
     setLoading(true);
     setProfileError(null);
     try {
-      setProfiles(await listProfiles() as PlayerProfile[]);
       if (isParent) {
-        try { setChildren(await listChildren() as ParentChild[]); } catch { /* ignore */ }
+        const childLinks = await listChildren() as ParentChild[];
+        const withProfiles = await Promise.all(
+          childLinks.map(async (link) => {
+            const profs = await listChildProfiles(link.child).catch(() => [] as PlayerProfile[]);
+            return { link, profiles: profs };
+          }),
+        );
+        setDependents(withProfiles);
+      } else {
+        setProfiles(await listProfiles() as PlayerProfile[]);
       }
+    } catch {
+      setProfileError('Não foi possível carregar seus perfis. Verifique sua conexão.');
+    } finally {
+      setLoading(false);
     }
-    catch { setProfileError('Não foi possível carregar seus perfis. Verifique sua conexão.'); }
-    finally { setLoading(false); }
   }
 
   useEffect(() => { load(); }, []);
@@ -129,6 +152,27 @@ export function ProfileScreen(_: Props) {
               Toast.show({ type: 'error', text1: 'Erro ao excluir conta', text2: extractApiError(err) });
             } finally {
               setUser(null);
+            }
+          },
+        },
+      ],
+    );
+  }
+
+  async function handleResetChildPassword(link: ParentChild) {
+    Alert.alert(
+      'Redefinir senha',
+      `Enviar e-mail de redefinição de senha para ${link.child_detail.email}?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Enviar',
+          onPress: async () => {
+            try {
+              await sendChildPasswordReset(link.id);
+              Toast.show({ type: 'success', text1: 'E-mail enviado!', text2: `Instruções enviadas para ${link.child_detail.email}.` });
+            } catch (err) {
+              Toast.show({ type: 'error', text1: 'Erro', text2: extractApiError(err) });
             }
           },
         },
@@ -257,108 +301,418 @@ export function ProfileScreen(_: Props) {
         </Pressable>
       </Card>
 
-      {/* Children section for parents */}
+      {/* ── Parents: unified dependents + sports profiles ── */}
       {isParent ? (
-        <Card>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-              <Ionicons name="people-outline" size={18} color={colors.accentNeon} />
-              <AppText variant="body" style={{ fontWeight: '700' }}>Meus dependentes</AppText>
+        <View>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <View style={{ flex: 1 }}>
+              <AppText variant="section">Meus dependentes - Perfil esportivo</AppText>
+              <AppText variant="caption" style={{ marginTop: 2 }}>
+                Gerencie os dependentes e seus perfis de jogador
+              </AppText>
             </View>
             <Pressable
-              onPress={() => navigation.navigate('Onboarding')}
-              style={{ backgroundColor: `${colors.accentNeon}20`, borderWidth: 1, borderColor: `${colors.accentNeon}55`, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4, flexDirection: 'row', gap: 4, alignItems: 'center' }}
-            >
-              <Ionicons name="add" size={14} color={colors.accentNeon} />
-              <AppText variant="caption" style={{ color: colors.accentNeon, fontWeight: '700' }}>Adicionar perfil</AppText>
-            </Pressable>
-          </View>
-          {children.length === 0 ? (
-            <AppText variant="muted" style={{ textAlign: 'center', paddingVertical: 12 }}>
-              Nenhum dependente cadastrado ainda. Adicione um dependente para gerenciar o perfil dele.
-            </AppText>
-          ) : children.map((link) => (
-            <View key={link.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.borderSubtle }}>
-              <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: `${colors.accentBlue}22`, alignItems: 'center', justifyContent: 'center' }}>
-                <AppText variant="caption" style={{ color: colors.accentBlue, fontWeight: '700', fontSize: 14 }}>
-                  {(link.child_detail?.full_name || 'F').slice(0, 1).toUpperCase()}
-                </AppText>
-              </View>
-              <View style={{ flex: 1 }}>
-                <AppText variant="body" style={{ fontWeight: '600' }}>{link.child_detail?.full_name || '—'}</AppText>
-                <AppText variant="caption">{link.child_detail?.email}</AppText>
-              </View>
-            </View>
-          ))}
-        </Card>
-      ) : null}
-
-      {/* Sports profiles */}
-      <View>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <View style={{ flex: 1 }}>
-            <AppText variant="section">Perfis esportivos</AppText>
-            <AppText variant="caption" style={{ marginTop: 2 }}>
-              {isParent
-                ? 'Perfis dos dependentes — selecione o ativo para ver torneios compatíveis'
-                : isManagedChild
-                ? 'Seu perfil esportivo'
-                : 'Gerencie seus perfis de jogador'}
-            </AppText>
-          </View>
-          {!isManagedChild ? (
-            <Pressable
-              onPress={() => navigation.navigate('Onboarding')}
+              onPress={() => { setShowAddForm(true); setEditingDep(null); setCreatingProfileFor(null); }}
               style={{ backgroundColor: `${colors.accentNeon}20`, borderWidth: 1, borderColor: `${colors.accentNeon}55`, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 6, flexDirection: 'row', gap: 6, alignItems: 'center', marginLeft: 8 }}
             >
               <Ionicons name="add" size={16} color={colors.accentNeon} />
-              <AppText variant="caption" style={{ color: colors.accentNeon, fontWeight: '700' }}>
-                {isParent ? 'Perfil' : profiles.length === 0 ? 'Criar' : 'Novo'}
-              </AppText>
+              <AppText variant="caption" style={{ color: colors.accentNeon, fontWeight: '700' }}>Novo</AppText>
             </Pressable>
-          ) : null}
-        </View>
+          </View>
 
-        {loading ? <LoadingBlock /> : profileError ? (
-          <EmptyState
-            icon="alert-circle-outline"
-            title="Erro ao carregar perfis"
-            subtitle={profileError}
-            action={<Button title="Tentar novamente" onPress={load} />}
-          />
-        ) : profiles.length === 0 ? (
-          <EmptyState
-            title={isParent ? 'Nenhum perfil de dependente cadastrado.' : isManagedChild ? 'Seu perfil esportivo ainda não foi preenchido.' : 'Nenhum perfil criado.'}
-            subtitle={isParent ? 'Toque em "Perfil" acima para adicionar o perfil esportivo do seu filho ou dependente.' : isManagedChild ? 'Peça ao seu responsável para ajudar a completar seu perfil.' : 'Crie um perfil para ver torneios compatíveis, agenda e resultados.'}
-          />
-        ) : profiles.map((p) =>
-          editing?.id === p.id ? (
-            <ProfileEditor
-              key={p.id}
-              profile={p}
-              onSaved={async () => { setEditing(null); await load(); }}
-              onCancel={() => setEditing(null)}
-              restrictedMode={isManagedChild}
+          {showAddForm ? (
+            <AddDependentForm
+              onSuccess={async () => { setShowAddForm(false); await load(); }}
+              onCancel={() => setShowAddForm(false)}
             />
-          ) : (
-            <ProfileCard
-              key={p.id}
-              profile={p}
-              colors={colors}
-              onEdit={() => setEditing(p)}
-              onMakePrimary={() => makePrimaryProfile(p.id)}
-              onRemove={() => removeProfile(p.id)}
-              restrictedMode={isManagedChild}
+          ) : null}
+
+          {loading ? <LoadingBlock /> : profileError ? (
+            <EmptyState
+              icon="alert-circle-outline"
+              title="Erro ao carregar"
+              subtitle={profileError}
+              action={<Button title="Tentar novamente" onPress={load} />}
             />
-          )
-        )}
-      </View>
+          ) : dependents.length === 0 && !showAddForm ? (
+            <EmptyState
+              title="Nenhum dependente cadastrado"
+              subtitle="Toque em Novo para adicionar um dependente e criar o perfil esportivo dele."
+            />
+          ) : dependents.map(({ link, profiles: childProfs }) => {
+            const profile = childProfs[0] ?? null;
+            if (editingDep?.link.id === link.id && editingDep.profile.id === profile?.id) {
+              return (
+                <ProfileEditor
+                  key={link.id}
+                  profile={editingDep.profile}
+                  onSaved={async () => { setEditingDep(null); await load(); }}
+                  onCancel={() => setEditingDep(null)}
+                  restrictedMode={false}
+                />
+              );
+            }
+            if (creatingProfileFor?.id === link.id) {
+              return (
+                <CreateChildProfileForm
+                  key={link.id}
+                  link={link}
+                  onSuccess={async () => { setCreatingProfileFor(null); await load(); }}
+                  onCancel={() => setCreatingProfileFor(null)}
+                />
+              );
+            }
+            return (
+              <DependentCard
+                key={link.id}
+                link={link}
+                profile={profile}
+                colors={colors}
+                onEditProfile={() => profile && setEditingDep({ link, profile })}
+                onCreateProfile={() => setCreatingProfileFor(link)}
+                onResetPassword={() => handleResetChildPassword(link)}
+              />
+            );
+          })}
+        </View>
+      ) : (
+        /* ── Non-parents: own sports profiles ── */
+        <View>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <View style={{ flex: 1 }}>
+              <AppText variant="section">Perfil esportivo</AppText>
+              <AppText variant="caption" style={{ marginTop: 2 }}>
+                {isManagedChild ? 'Seu perfil esportivo' : 'Gerencie seu perfil de jogador'}
+              </AppText>
+            </View>
+            {!isManagedChild ? (
+              <Pressable
+                onPress={() => navigation.navigate('Onboarding')}
+                style={{ backgroundColor: `${colors.accentNeon}20`, borderWidth: 1, borderColor: `${colors.accentNeon}55`, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 6, flexDirection: 'row', gap: 6, alignItems: 'center', marginLeft: 8 }}
+              >
+                <Ionicons name="add" size={16} color={colors.accentNeon} />
+                <AppText variant="caption" style={{ color: colors.accentNeon, fontWeight: '700' }}>
+                  {profiles.length === 0 ? 'Criar' : 'Novo'}
+                </AppText>
+              </Pressable>
+            ) : null}
+          </View>
+
+          {loading ? <LoadingBlock /> : profileError ? (
+            <EmptyState
+              icon="alert-circle-outline"
+              title="Erro ao carregar perfis"
+              subtitle={profileError}
+              action={<Button title="Tentar novamente" onPress={load} />}
+            />
+          ) : profiles.length === 0 ? (
+            <EmptyState
+              title={isManagedChild ? 'Seu perfil esportivo ainda não foi preenchido.' : 'Nenhum perfil criado.'}
+              subtitle={isManagedChild ? 'Peça ao seu responsável para ajudar a completar seu perfil.' : 'Crie um perfil para ver torneios compatíveis.'}
+            />
+          ) : profiles.map((p) =>
+            editing?.id === p.id ? (
+              <ProfileEditor
+                key={p.id}
+                profile={p}
+                onSaved={async () => { setEditing(null); await load(); }}
+                onCancel={() => setEditing(null)}
+                restrictedMode={isManagedChild}
+              />
+            ) : (
+              <ProfileCard
+                key={p.id}
+                profile={p}
+                colors={colors}
+                onEdit={() => setEditing(p)}
+                onMakePrimary={() => makePrimaryProfile(p.id)}
+                onRemove={() => removeProfile(p.id)}
+                restrictedMode={isManagedChild}
+              />
+            )
+          )}
+        </View>
+      )}
 
       {/* Privacy — hide for managed child accounts */}
       {!isManagedChild ? <PrivacyCard onDeleteAccount={handleDeleteAccount} /> : null}
     </Screen>
   );
 }
+
+// ── DependentCard ─────────────────────────────────────────────────────────────
+
+function DependentCard({ link, profile, colors, onEditProfile, onCreateProfile, onResetPassword }: {
+  link: ParentChild;
+  profile: PlayerProfile | null;
+  colors: any;
+  onEditProfile: () => void;
+  onCreateProfile: () => void;
+  onResetPassword: () => void;
+}) {
+  const classLabel = profile?.tennis_class ? (TENNIS_CLASS_LABELS[profile.tennis_class] ?? `Classe ${profile.tennis_class}`) : null;
+  const levelLabel = profile ? (LEVEL_LABELS[profile.competitive_level] ?? profile.competitive_level) : null;
+  const genderLabel = profile?.gender ? (GENDER_LABELS[profile.gender] ?? profile.gender) : null;
+
+  return (
+    <Card style={{ marginBottom: 10 }}>
+      {/* Child user info */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+        <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: `${colors.accentNeon}22`, borderWidth: 2, borderColor: `${colors.accentNeon}44`, alignItems: 'center', justifyContent: 'center' }}>
+          <AppText variant="body" style={{ color: colors.accentNeon, fontWeight: '700', fontSize: 16 }}>
+            {(link.child_detail.full_name || 'D').slice(0, 1).toUpperCase()}
+          </AppText>
+        </View>
+        <View style={{ flex: 1 }}>
+          <AppText variant="body" style={{ fontWeight: '700', fontSize: 15 }}>{link.child_detail.full_name || '—'}</AppText>
+          <AppText variant="caption" style={{ marginTop: 1 }}>{link.child_detail.email}</AppText>
+        </View>
+      </View>
+
+      {/* Sports profile summary */}
+      {profile ? (
+        <View style={{ backgroundColor: colors.bgCard, borderRadius: 8, padding: 10, borderWidth: 1, borderColor: colors.borderSubtle, marginBottom: 10, gap: 4 }}>
+          <AppText variant="caption" style={{ fontWeight: '700', color: colors.textSecondary, marginBottom: 4 }}>Perfil esportivo</AppText>
+          {profile.display_name ? (
+            <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+              <Ionicons name="person-outline" size={13} color={colors.textMuted} />
+              <AppText variant="caption">{profile.display_name}</AppText>
+            </View>
+          ) : null}
+          {(profile.birth_year || profile.sporting_age) ? (
+            <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+              <Ionicons name="calendar-outline" size={13} color={colors.textMuted} />
+              <AppText variant="caption">
+                {profile.birth_year ? `Nascimento: ${profile.birth_year}` : ''}
+                {profile.sporting_age ? ` • ${profile.sporting_age} anos esportivos` : ''}
+              </AppText>
+            </View>
+          ) : null}
+          {genderLabel ? (
+            <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+              <Ionicons name="male-female-outline" size={13} color={colors.textMuted} />
+              <AppText variant="caption">{genderLabel}</AppText>
+            </View>
+          ) : null}
+          {(profile.home_city || profile.home_state) ? (
+            <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+              <Ionicons name="location-outline" size={13} color={colors.textMuted} />
+              <AppText variant="caption">{[profile.home_city, profile.home_state].filter(Boolean).join('/')}</AppText>
+            </View>
+          ) : null}
+          {levelLabel ? (
+            <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+              <Ionicons name="trophy-outline" size={13} color={colors.textMuted} />
+              <AppText variant="caption">{levelLabel}{classLabel ? ` • ${classLabel}` : ''}</AppText>
+            </View>
+          ) : null}
+        </View>
+      ) : (
+        <View style={{ backgroundColor: `${colors.textMuted}10`, borderRadius: 8, padding: 10, marginBottom: 10, alignItems: 'center' }}>
+          <AppText variant="muted" style={{ fontStyle: 'italic' }}>Sem perfil esportivo cadastrado.</AppText>
+        </View>
+      )}
+
+      {/* Actions */}
+      <View style={{ flexDirection: 'row', gap: 8 }}>
+        {profile ? (
+          <Button title="Editar perfil" variant="secondary" onPress={onEditProfile} style={{ flex: 1 }} />
+        ) : (
+          <Button title="Criar perfil" variant="secondary" onPress={onCreateProfile} style={{ flex: 1 }} />
+        )}
+        <Button title="Redefinir senha" variant="ghost" onPress={onResetPassword} style={{ flex: 1 }} />
+      </View>
+    </Card>
+  );
+}
+
+// ── AddDependentForm ──────────────────────────────────────────────────────────
+
+function AddDependentForm({ onSuccess, onCancel }: { onSuccess: () => Promise<void>; onCancel: () => void }) {
+  const { colors } = useTheme();
+  const [submitting, setSubmitting] = useState(false);
+  const [account, setAccount] = useState({ full_name: '', email: '', password: '', password_confirm: '' });
+  const [profile, setProfile] = useState({ birth_year: '', gender: '', home_state: 'SP' });
+
+  async function submit() {
+    if (!account.full_name.trim()) return Toast.show({ type: 'error', text1: 'Informe o nome do dependente' });
+    if (!account.email.trim()) return Toast.show({ type: 'error', text1: 'Informe o e-mail do dependente' });
+    if (!account.password) return Toast.show({ type: 'error', text1: 'Defina uma senha' });
+    if (account.password.length < 8) return Toast.show({ type: 'error', text1: 'Senha deve ter no mínimo 8 caracteres' });
+    if (account.password !== account.password_confirm) return Toast.show({ type: 'error', text1: 'As senhas não conferem' });
+
+    setSubmitting(true);
+    try {
+      const link = await createChildAccount({
+        full_name: account.full_name.trim(),
+        email: account.email.trim().toLowerCase(),
+        password: account.password,
+        password_confirm: account.password_confirm,
+      });
+
+      await createChildProfile(link.id, {
+        display_name: account.full_name.trim(),
+        birth_year: profile.birth_year ? (Number(profile.birth_year) || undefined) : undefined,
+        gender: (profile.gender || '') as any,
+        home_state: profile.home_state,
+        competitive_level: 'amateur',
+        is_primary: true,
+      });
+
+      Toast.show({ type: 'success', text1: 'Dependente adicionado!', text2: `${account.full_name} pode fazer login com o e-mail informado.` });
+      await onSuccess();
+    } catch (err) {
+      Toast.show({ type: 'error', text1: 'Erro ao adicionar dependente', text2: extractApiError(err), visibilityTime: 6000 });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Card style={{ marginBottom: 12 }}>
+      <AppText variant="body" style={{ fontWeight: '700', marginBottom: 4 }}>Novo dependente</AppText>
+      <AppText variant="muted" style={{ marginBottom: 12 }}>
+        O dependente poderá fazer login com o e-mail e senha criados abaixo.
+      </AppText>
+
+      <View style={{ height: 1, backgroundColor: colors.borderSubtle, marginBottom: 12 }} />
+      <AppText variant="caption" style={{ fontWeight: '700', color: colors.textSecondary, marginBottom: 8 }}>Dados de acesso</AppText>
+
+      <Input
+        label="Nome completo"
+        value={account.full_name}
+        onChangeText={(v) => setAccount({ ...account, full_name: v })}
+        placeholder="Nome do dependente"
+      />
+      <Input
+        label="E-mail"
+        value={account.email}
+        onChangeText={(v) => setAccount({ ...account, email: v })}
+        autoCapitalize="none"
+        keyboardType="email-address"
+        placeholder="email@exemplo.com"
+      />
+      <Input
+        label="Senha inicial"
+        value={account.password}
+        onChangeText={(v) => setAccount({ ...account, password: v })}
+        secureTextEntry
+        placeholder="Mínimo 8 caracteres"
+      />
+      <Input
+        label="Confirmar senha"
+        value={account.password_confirm}
+        onChangeText={(v) => setAccount({ ...account, password_confirm: v })}
+        secureTextEntry
+        placeholder="Repita a senha"
+      />
+
+      <View style={{ height: 1, backgroundColor: colors.borderSubtle, marginTop: 4, marginBottom: 12 }} />
+      <AppText variant="caption" style={{ fontWeight: '700', color: colors.textSecondary, marginBottom: 8 }}>Perfil esportivo (opcional)</AppText>
+
+      <Input
+        label="Ano de nascimento"
+        value={profile.birth_year}
+        onChangeText={(v) => setProfile({ ...profile, birth_year: v.replace(/\D/g, '').slice(0, 4) })}
+        keyboardType="number-pad"
+        placeholder="Ex: 2010"
+      />
+      <SelectField
+        label="Gênero"
+        value={profile.gender}
+        options={GENDER_OPTIONS}
+        onSelect={(v) => setProfile({ ...profile, gender: v })}
+      />
+      <SelectField
+        label="Estado (UF)"
+        value={profile.home_state}
+        options={UF_OPTIONS}
+        onSelect={(v) => setProfile({ ...profile, home_state: v })}
+      />
+
+      <Button title="Adicionar dependente" onPress={submit} loading={submitting} style={{ marginTop: 4 }} />
+      <Button title="Cancelar" variant="ghost" onPress={onCancel} />
+    </Card>
+  );
+}
+
+// ── CreateChildProfileForm ────────────────────────────────────────────────────
+
+function CreateChildProfileForm({ link, onSuccess, onCancel }: {
+  link: ParentChild;
+  onSuccess: () => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [submitting, setSubmitting] = useState(false);
+  const [form, setForm] = useState({
+    display_name: link.child_detail.full_name || '',
+    birth_year: '',
+    gender: '',
+    home_state: 'SP',
+    competitive_level: 'amateur',
+  });
+
+  async function submit() {
+    setSubmitting(true);
+    try {
+      await createChildProfile(link.id, {
+        display_name: form.display_name || link.child_detail.full_name || 'Jogador',
+        birth_year: form.birth_year ? Number(form.birth_year) : undefined,
+        gender: (form.gender || '') as any,
+        home_state: form.home_state,
+        competitive_level: form.competitive_level as any,
+        is_primary: true,
+      });
+      Toast.show({ type: 'success', text1: 'Perfil esportivo criado!' });
+      await onSuccess();
+    } catch (err) {
+      Toast.show({ type: 'error', text1: 'Erro ao criar perfil', text2: extractApiError(err) });
+    } finally {
+      setSubmitting(false); }
+  }
+
+  return (
+    <Card style={{ marginBottom: 10 }}>
+      <AppText variant="body" style={{ fontWeight: '700' }}>
+        Criar perfil esportivo — {link.child_detail.full_name}
+      </AppText>
+      <Input
+        label="Nome de exibição"
+        value={form.display_name}
+        onChangeText={(v) => setForm({ ...form, display_name: v })}
+      />
+      <Input
+        label="Ano de nascimento"
+        value={form.birth_year}
+        onChangeText={(v) => setForm({ ...form, birth_year: v.replace(/\D/g, '').slice(0, 4) })}
+        keyboardType="number-pad"
+        placeholder="Ex: 2010"
+      />
+      <SelectField
+        label="Gênero"
+        value={form.gender}
+        options={GENDER_OPTIONS}
+        onSelect={(v) => setForm({ ...form, gender: v })}
+      />
+      <SelectField
+        label="Estado (UF)"
+        value={form.home_state}
+        options={UF_OPTIONS}
+        onSelect={(v) => setForm({ ...form, home_state: v })}
+      />
+      <SelectField
+        label="Nível competitivo"
+        value={form.competitive_level}
+        options={LEVEL_OPTIONS}
+        onSelect={(v) => setForm({ ...form, competitive_level: v })}
+      />
+      <Button title="Criar perfil" onPress={submit} loading={submitting} />
+      <Button title="Cancelar" variant="ghost" onPress={onCancel} />
+    </Card>
+  );
+}
+
+// ── PrivacyCard ───────────────────────────────────────────────────────────────
 
 function PrivacyCard({ onDeleteAccount }: { onDeleteAccount: () => void }) {
   const { colors } = useTheme();
@@ -404,6 +758,8 @@ function PrivacyCard({ onDeleteAccount }: { onDeleteAccount: () => void }) {
     </Card>
   );
 }
+
+// ── ProfileCard ───────────────────────────────────────────────────────────────
 
 function ProfileCard({ profile: p, colors, onEdit, onMakePrimary, onRemove, restrictedMode = false }: {
   profile: PlayerProfile;
@@ -473,6 +829,8 @@ function ProfileCard({ profile: p, colors, onEdit, onMakePrimary, onRemove, rest
     </Card>
   );
 }
+
+// ── ProfileEditor ─────────────────────────────────────────────────────────────
 
 function ProfileEditor({ profile, onSaved, onCancel, restrictedMode = false }: { profile: PlayerProfile; onSaved: () => Promise<void>; onCancel: () => void; restrictedMode?: boolean; }) {
   const [form, setForm] = useState({

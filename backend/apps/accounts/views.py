@@ -450,6 +450,65 @@ class ParentChildViewSet(viewsets.ModelViewSet):
             status=status.HTTP_201_CREATED,
         )
 
+    @viewset_action(detail=True, methods=['post'], url_path='profile')
+    def create_profile(self, request, pk=None):
+        """Parent creates a sports profile for a specific child."""
+        link = self.get_object()
+        child = link.child
+
+        from apps.players.models import PlayerProfile
+        from apps.players.serializers import PlayerProfileSerializer
+
+        if PlayerProfile.objects.filter(user=child).exists():
+            return Response(
+                {'detail': 'Este dependente já possui um perfil esportivo.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = PlayerProfileSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        vd = serializer.validated_data
+
+        profile = PlayerProfile.objects.create(
+            user=child,
+            display_name=vd.get('display_name') or child.full_name or 'Jogador',
+            birth_year=vd.get('birth_year'),
+            gender=vd.get('gender', ''),
+            home_state=vd.get('home_state', 'SP'),
+            home_city=vd.get('home_city', ''),
+            travel_states=vd.get('travel_states', []),
+            competitive_level=vd.get('competitive_level', 'amateur'),
+            tennis_class=vd.get('tennis_class', ''),
+            is_primary=True,
+        )
+        return Response(PlayerProfileSerializer(profile).data, status=status.HTTP_201_CREATED)
+
+    @viewset_action(detail=True, methods=['post'], url_path='reset-password')
+    def reset_password_child(self, request, pk=None):
+        """Send password reset email to a child account."""
+        link = self.get_object()
+        child = link.child
+
+        uid = urlsafe_base64_encode(force_bytes(child.pk))
+        token = default_token_generator.make_token(child)
+        frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:5173')
+        reset_url = f'{frontend_url}/redefinir-senha/{uid}/{token}/'
+
+        from .tasks import send_password_reset_email
+        args = (child.id, child.email, child.full_name or '', reset_url)
+        try:
+            send_password_reset_email.delay(*args)
+        except Exception as exc:
+            logger.warning('Password reset enqueue failed for child %s: %s', child.id, exc)
+            try:
+                result = send_password_reset_email.apply(args=args)
+                if hasattr(result, 'get'):
+                    result.get(propagate=True)
+            except Exception as exc2:
+                logger.error('Password reset dispatch failed for child %s: %s', child.id, exc2)
+
+        return Response({'detail': f'E-mail de recuperação enviado para {child.email}.'})
+
 
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])

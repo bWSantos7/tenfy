@@ -16,9 +16,33 @@ class PlayerProfileViewSet(viewsets.ModelViewSet):
     filterset_fields = ('competitive_level', 'home_state', 'is_primary')
 
     def get_queryset(self):
+        user = self.request.user
+
+        if user.role == 'parent':
+            from apps.accounts.models import ParentChild
+            child_ids = list(
+                ParentChild.objects.filter(parent=user, is_active=True).values_list('child_id', flat=True)
+            )
+            # Optional filter: parent requesting a specific child's profiles
+            child_user_id = self.request.query_params.get('user_id')
+            if child_user_id:
+                try:
+                    child_user_id_int = int(child_user_id)
+                except (ValueError, TypeError):
+                    child_user_id_int = None
+                if child_user_id_int and child_user_id_int in child_ids:
+                    child_ids = [child_user_id_int]
+
+            return (
+                PlayerProfile.objects
+                .filter(user_id__in=child_ids)
+                .prefetch_related('profile_categories__category')
+                .order_by('user_id', '-is_primary', '-created_at')
+            )
+
         return (
             PlayerProfile.objects
-            .filter(user=self.request.user)
+            .filter(user=user)
             .prefetch_related('profile_categories__category')
             .order_by('-is_primary', '-created_at')
         )

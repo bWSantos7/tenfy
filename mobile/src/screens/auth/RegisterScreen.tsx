@@ -7,7 +7,7 @@ import { AuthStackParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { createProfile } from '../../services/data';
-import { extractApiError } from '../../services/api';
+import { extractApiError, storage } from '../../services/api';
 import { markProfileDirty } from '../../utils/profileRefresh';
 import { createChildAccount, register, sendEmailOtp, verifyEmailOtp } from '../../services/auth';
 import { checkout, fetchPlans, Plan } from '../../services/billing';
@@ -278,6 +278,7 @@ export function RegisterScreen({ navigation }: Props) {
         is_primary: true,
       } as any);
       markProfileDirty();
+      await storage.set('th_just_registered', '1');
       if (registeredUser) setUser(registeredUser);
       Toast.show({ type: 'success', text1: 'Perfil criado! Bem-vindo!' });
     } catch (err: any) {

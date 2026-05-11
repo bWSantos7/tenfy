@@ -450,6 +450,88 @@ class ParentChildViewSet(viewsets.ModelViewSet):
             status=status.HTTP_201_CREATED,
         )
 
+    @viewset_action(detail=False, methods=['post'], url_path='create-with-profile')
+    def create_with_profile(self, request):
+        """Atomically create a child account and sports profile in a single request."""
+        from django.db import transaction
+        from apps.players.models import PlayerProfile
+
+        if request.user.role != 'parent':
+            return Response(
+                {'detail': 'Apenas contas do tipo Responsável/Pai podem cadastrar dependentes.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        from apps.billing.models import Subscription, Plan
+        current_dependents = ParentChild.objects.filter(parent=request.user, is_active=True).count()
+        try:
+            sub = request.user.subscription
+            if sub.plan.slug == Plan.SLUG_INDIVIDUAL:
+                return Response(
+                    {'detail': 'O Plano Individual não permite cadastrar dependentes. Faça upgrade para o Plano Família.'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            max_dependents = sub.plan.max_members - 1
+            if current_dependents >= max_dependents:
+                return Response(
+                    {'detail': f'Limite de {max_dependents} dependente(s) atingido para o seu plano.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        except Subscription.DoesNotExist:
+            if current_dependents >= 1:
+                return Response(
+                    {'detail': 'Você precisa de uma assinatura ativa do Plano Família para adicionar mais dependentes.'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+        account_serializer = ChildAccountCreateSerializer(data=request.data, context={'request': request})
+        account_serializer.is_valid(raise_exception=True)
+
+        profile_data = request.data.get('profile')
+        if not isinstance(profile_data, dict):
+            return Response(
+                {'profile': 'O perfil esportivo do dependente é obrigatório.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        profile_errors = {}
+        if not profile_data.get('birth_year'):
+            profile_errors['birth_year'] = 'Este campo é obrigatório.'
+        if not profile_data.get('gender'):
+            profile_errors['gender'] = 'Este campo é obrigatório.'
+        if not profile_data.get('home_state'):
+            profile_errors['home_state'] = 'Este campo é obrigatório.'
+        if not profile_data.get('competitive_level'):
+            profile_errors['competitive_level'] = 'Este campo é obrigatório.'
+        if profile_errors:
+            return Response({'profile': profile_errors}, status=status.HTTP_400_BAD_REQUEST)
+
+        travel_states = profile_data.get('travel_states', [])
+        if not isinstance(travel_states, list):
+            travel_states = []
+
+        with transaction.atomic():
+            link = account_serializer.save()
+            child = link.child
+            display_name = (profile_data.get('display_name') or '').strip() or child.full_name or 'Jogador'
+            PlayerProfile.objects.create(
+                user=child,
+                display_name=display_name,
+                birth_year=profile_data.get('birth_year'),
+                gender=profile_data.get('gender', ''),
+                home_state=profile_data.get('home_state', 'SP'),
+                home_city=profile_data.get('home_city', ''),
+                travel_states=travel_states,
+                competitive_level=profile_data.get('competitive_level', 'amateur'),
+                tennis_class=profile_data.get('tennis_class', ''),
+                is_primary=True,
+            )
+
+        return Response(
+            ParentChildSerializer(link, context={'request': request}).data,
+            status=status.HTTP_201_CREATED,
+        )
+
     @viewset_action(detail=True, methods=['post'], url_path='profile')
     def create_profile(self, request, pk=None):
         """Parent creates a sports profile for a specific child."""

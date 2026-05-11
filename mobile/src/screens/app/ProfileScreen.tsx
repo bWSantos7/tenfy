@@ -11,9 +11,8 @@ import { MainStackParamList, MainTabParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { deleteAccount, uploadAvatar } from '../../services/auth';
-import { createChildAccount } from '../../services/auth';
 import {
-  createChildProfile, deleteProfile, listChildren, listChildProfiles,
+  createChildProfile, createChildWithProfile, deleteProfile, listChildren, listChildProfiles,
   listProfiles, requestDataExport, sendChildPasswordReset, setPrimary, updateProfile,
 } from '../../services/data';
 import { extractApiError, mediaUrl } from '../../services/api';
@@ -532,7 +531,42 @@ function AddDependentForm({ onSuccess, onCancel }: { onSuccess: () => Promise<vo
   const { colors } = useTheme();
   const [submitting, setSubmitting] = useState(false);
   const [account, setAccount] = useState({ full_name: '', email: '', password: '', password_confirm: '' });
-  const [profile, setProfile] = useState({ birth_year: '', gender: '', home_state: 'SP' });
+  const [profile, setProfile] = useState({
+    display_name: '',
+    birth_year: '',
+    gender: '',
+    home_state: 'SP',
+    home_city: '',
+    travel_states: [] as string[],
+    competitive_level: 'amateur',
+    tennis_class: '',
+  });
+  const [cities, setCities] = useState<{ value: string; label: string }[]>([]);
+  const [loadingCities, setLoadingCities] = useState(false);
+
+  useEffect(() => { loadCitiesForState(profile.home_state); }, [profile.home_state]);
+
+  async function loadCitiesForState(uf: string) {
+    if (!uf) return;
+    setLoadingCities(true);
+    try {
+      const res = await fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${uf}/municipios`);
+      const data: any[] = await res.json();
+      setCities(data.map((c) => ({ value: c.nome, label: c.nome })).sort((a, b) => a.label.localeCompare(b.label, 'pt-BR')));
+    } catch {
+      setCities([]);
+    } finally {
+      setLoadingCities(false);
+    }
+  }
+
+  function handleTravelStates(vals: string[]) {
+    if (vals.includes('__ALL__')) {
+      setProfile((p) => ({ ...p, travel_states: ALL_UFS }));
+    } else {
+      setProfile((p) => ({ ...p, travel_states: vals }));
+    }
+  }
 
   async function submit() {
     if (!account.full_name.trim()) return Toast.show({ type: 'error', text1: 'Informe o nome do dependente' });
@@ -540,25 +574,35 @@ function AddDependentForm({ onSuccess, onCancel }: { onSuccess: () => Promise<vo
     if (!account.password) return Toast.show({ type: 'error', text1: 'Defina uma senha' });
     if (account.password.length < 8) return Toast.show({ type: 'error', text1: 'Senha deve ter no mínimo 8 caracteres' });
     if (account.password !== account.password_confirm) return Toast.show({ type: 'error', text1: 'As senhas não conferem' });
+    if (!profile.birth_year) return Toast.show({ type: 'error', text1: 'Informe o ano de nascimento do dependente' });
+    const birthYearNum = Number(profile.birth_year);
+    if (!birthYearNum || birthYearNum < 1940 || birthYearNum > new Date().getFullYear()) {
+      return Toast.show({ type: 'error', text1: 'Ano de nascimento inválido' });
+    }
+    if (!profile.gender) return Toast.show({ type: 'error', text1: 'Selecione o gênero do dependente' });
+    if (!profile.home_state) return Toast.show({ type: 'error', text1: 'Selecione o estado do dependente' });
+    if (!profile.competitive_level) return Toast.show({ type: 'error', text1: 'Selecione o nível competitivo' });
 
     setSubmitting(true);
     try {
-      const link = await createChildAccount({
-        full_name: account.full_name.trim(),
-        email: account.email.trim().toLowerCase(),
-        password: account.password,
-        password_confirm: account.password_confirm,
-      });
-
-      await createChildProfile(link.id, {
-        display_name: account.full_name.trim(),
-        birth_year: profile.birth_year ? (Number(profile.birth_year) || undefined) : undefined,
-        gender: (profile.gender || '') as any,
-        home_state: profile.home_state,
-        competitive_level: 'amateur',
-        is_primary: true,
-      });
-
+      await createChildWithProfile(
+        {
+          full_name: account.full_name.trim(),
+          email: account.email.trim().toLowerCase(),
+          password: account.password,
+          password_confirm: account.password_confirm,
+        },
+        {
+          display_name: profile.display_name.trim() || account.full_name.trim(),
+          birth_year: birthYearNum,
+          gender: profile.gender as 'M' | 'F' | '',
+          home_state: profile.home_state,
+          home_city: profile.home_city,
+          travel_states: profile.travel_states,
+          competitive_level: profile.competitive_level,
+          tennis_class: profile.tennis_class,
+        },
+      );
       Toast.show({ type: 'success', text1: 'Dependente adicionado!', text2: `${account.full_name} pode fazer login com o e-mail informado.` });
       await onSuccess();
     } catch (err) {
@@ -572,20 +616,20 @@ function AddDependentForm({ onSuccess, onCancel }: { onSuccess: () => Promise<vo
     <Card style={{ marginBottom: 12 }}>
       <AppText variant="body" style={{ fontWeight: '700', marginBottom: 4 }}>Novo dependente</AppText>
       <AppText variant="muted" style={{ marginBottom: 12 }}>
-        O dependente poderá fazer login com o e-mail e senha criados abaixo.
+        Preencha os dados de acesso e o perfil esportivo. Campos com * são obrigatórios.
       </AppText>
 
       <View style={{ height: 1, backgroundColor: colors.borderSubtle, marginBottom: 12 }} />
       <AppText variant="caption" style={{ fontWeight: '700', color: colors.textSecondary, marginBottom: 8 }}>Dados de acesso</AppText>
 
       <Input
-        label="Nome completo"
+        label="Nome completo *"
         value={account.full_name}
         onChangeText={(v) => setAccount({ ...account, full_name: v })}
         placeholder="Nome do dependente"
       />
       <Input
-        label="E-mail"
+        label="E-mail *"
         value={account.email}
         onChangeText={(v) => setAccount({ ...account, email: v })}
         autoCapitalize="none"
@@ -593,14 +637,14 @@ function AddDependentForm({ onSuccess, onCancel }: { onSuccess: () => Promise<vo
         placeholder="email@exemplo.com"
       />
       <Input
-        label="Senha inicial"
+        label="Senha inicial *"
         value={account.password}
         onChangeText={(v) => setAccount({ ...account, password: v })}
         secureTextEntry
         placeholder="Mínimo 8 caracteres"
       />
       <Input
-        label="Confirmar senha"
+        label="Confirmar senha *"
         value={account.password_confirm}
         onChangeText={(v) => setAccount({ ...account, password_confirm: v })}
         secureTextEntry
@@ -608,26 +652,61 @@ function AddDependentForm({ onSuccess, onCancel }: { onSuccess: () => Promise<vo
       />
 
       <View style={{ height: 1, backgroundColor: colors.borderSubtle, marginTop: 4, marginBottom: 12 }} />
-      <AppText variant="caption" style={{ fontWeight: '700', color: colors.textSecondary, marginBottom: 8 }}>Perfil esportivo (opcional)</AppText>
+      <AppText variant="caption" style={{ fontWeight: '700', color: colors.textSecondary, marginBottom: 8 }}>Perfil esportivo</AppText>
 
       <Input
-        label="Ano de nascimento"
+        label="Nome do atleta"
+        value={profile.display_name}
+        onChangeText={(v) => setProfile({ ...profile, display_name: v })}
+        placeholder="Deixe em branco para usar o nome completo"
+      />
+      <Input
+        label="Ano de nascimento *"
         value={profile.birth_year}
         onChangeText={(v) => setProfile({ ...profile, birth_year: v.replace(/\D/g, '').slice(0, 4) })}
         keyboardType="number-pad"
         placeholder="Ex: 2010"
       />
       <SelectField
-        label="Gênero"
+        label="Gênero *"
         value={profile.gender}
         options={GENDER_OPTIONS}
         onSelect={(v) => setProfile({ ...profile, gender: v })}
       />
       <SelectField
-        label="Estado (UF)"
+        label="Estado (UF) *"
         value={profile.home_state}
         options={UF_OPTIONS}
-        onSelect={(v) => setProfile({ ...profile, home_state: v })}
+        onSelect={(v) => setProfile({ ...profile, home_state: v, home_city: '' })}
+      />
+      <SelectField
+        label="Cidade"
+        value={profile.home_city}
+        options={cities}
+        onSelect={(v) => setProfile({ ...profile, home_city: v })}
+        placeholder={loadingCities ? 'Carregando...' : 'Selecione a cidade'}
+        loading={loadingCities}
+        searchable
+      />
+      <MultiSelectField
+        label="Estados onde aceita jogar"
+        values={profile.travel_states}
+        options={TRAVEL_STATE_OPTIONS}
+        onSelect={handleTravelStates}
+        placeholder="Selecione os estados..."
+        searchable
+      />
+      <SelectField
+        label="Nível competitivo *"
+        value={profile.competitive_level}
+        options={LEVEL_OPTIONS}
+        onSelect={(v) => setProfile({ ...profile, competitive_level: v })}
+      />
+      <SelectField
+        label="Classe"
+        value={profile.tennis_class}
+        options={CLASS_OPTIONS}
+        onSelect={(v) => setProfile({ ...profile, tennis_class: v })}
       />
 
       <Button title="Adicionar dependente" onPress={submit} loading={submitting} style={{ marginTop: 4 }} />
@@ -649,18 +728,58 @@ function CreateChildProfileForm({ link, onSuccess, onCancel }: {
     birth_year: '',
     gender: '',
     home_state: 'SP',
+    home_city: '',
+    travel_states: [] as string[],
     competitive_level: 'amateur',
+    tennis_class: '',
   });
+  const [cities, setCities] = useState<{ value: string; label: string }[]>([]);
+  const [loadingCities, setLoadingCities] = useState(false);
+
+  useEffect(() => { loadCitiesForState(form.home_state); }, [form.home_state]);
+
+  async function loadCitiesForState(uf: string) {
+    if (!uf) return;
+    setLoadingCities(true);
+    try {
+      const res = await fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${uf}/municipios`);
+      const data: any[] = await res.json();
+      setCities(data.map((c) => ({ value: c.nome, label: c.nome })).sort((a, b) => a.label.localeCompare(b.label, 'pt-BR')));
+    } catch {
+      setCities([]);
+    } finally {
+      setLoadingCities(false);
+    }
+  }
+
+  function handleTravelStates(vals: string[]) {
+    if (vals.includes('__ALL__')) {
+      setForm((f) => ({ ...f, travel_states: ALL_UFS }));
+    } else {
+      setForm((f) => ({ ...f, travel_states: vals }));
+    }
+  }
 
   async function submit() {
+    if (!form.birth_year) return Toast.show({ type: 'error', text1: 'Informe o ano de nascimento' });
+    const birthYearNum = Number(form.birth_year);
+    if (!birthYearNum || birthYearNum < 1940 || birthYearNum > new Date().getFullYear()) {
+      return Toast.show({ type: 'error', text1: 'Ano de nascimento inválido' });
+    }
+    if (!form.gender) return Toast.show({ type: 'error', text1: 'Selecione o gênero' });
+    if (!form.competitive_level) return Toast.show({ type: 'error', text1: 'Selecione o nível competitivo' });
+
     setSubmitting(true);
     try {
       await createChildProfile(link.id, {
-        display_name: form.display_name || link.child_detail.full_name || 'Jogador',
-        birth_year: form.birth_year ? Number(form.birth_year) : undefined,
-        gender: (form.gender || '') as any,
+        display_name: form.display_name.trim() || link.child_detail.full_name || 'Jogador',
+        birth_year: birthYearNum,
+        gender: form.gender as any,
         home_state: form.home_state,
+        home_city: form.home_city,
+        travel_states: form.travel_states,
         competitive_level: form.competitive_level as any,
+        tennis_class: form.tennis_class,
         is_primary: true,
       });
       Toast.show({ type: 'success', text1: 'Perfil esportivo criado!' });
@@ -668,45 +787,71 @@ function CreateChildProfileForm({ link, onSuccess, onCancel }: {
     } catch (err) {
       Toast.show({ type: 'error', text1: 'Erro ao criar perfil', text2: extractApiError(err) });
     } finally {
-      setSubmitting(false); }
+      setSubmitting(false);
+    }
   }
 
   return (
     <Card style={{ marginBottom: 10 }}>
-      <AppText variant="body" style={{ fontWeight: '700' }}>
-        Criar perfil esportivo — {link.child_detail.full_name}
+      <AppText variant="body" style={{ fontWeight: '700', marginBottom: 4 }}>
+        Perfil esportivo — {link.child_detail.full_name}
       </AppText>
+      <AppText variant="muted" style={{ marginBottom: 10 }}>Campos com * são obrigatórios.</AppText>
       <Input
-        label="Nome de exibição"
+        label="Nome do atleta"
         value={form.display_name}
         onChangeText={(v) => setForm({ ...form, display_name: v })}
+        placeholder="Nome de exibição"
       />
       <Input
-        label="Ano de nascimento"
+        label="Ano de nascimento *"
         value={form.birth_year}
         onChangeText={(v) => setForm({ ...form, birth_year: v.replace(/\D/g, '').slice(0, 4) })}
         keyboardType="number-pad"
         placeholder="Ex: 2010"
       />
       <SelectField
-        label="Gênero"
+        label="Gênero *"
         value={form.gender}
         options={GENDER_OPTIONS}
         onSelect={(v) => setForm({ ...form, gender: v })}
       />
       <SelectField
-        label="Estado (UF)"
+        label="Estado (UF) *"
         value={form.home_state}
         options={UF_OPTIONS}
-        onSelect={(v) => setForm({ ...form, home_state: v })}
+        onSelect={(v) => setForm({ ...form, home_state: v, home_city: '' })}
       />
       <SelectField
-        label="Nível competitivo"
+        label="Cidade"
+        value={form.home_city}
+        options={cities}
+        onSelect={(v) => setForm({ ...form, home_city: v })}
+        placeholder={loadingCities ? 'Carregando...' : 'Selecione a cidade'}
+        loading={loadingCities}
+        searchable
+      />
+      <MultiSelectField
+        label="Estados onde aceita jogar"
+        values={form.travel_states}
+        options={TRAVEL_STATE_OPTIONS}
+        onSelect={handleTravelStates}
+        placeholder="Selecione os estados..."
+        searchable
+      />
+      <SelectField
+        label="Nível competitivo *"
         value={form.competitive_level}
         options={LEVEL_OPTIONS}
         onSelect={(v) => setForm({ ...form, competitive_level: v })}
       />
-      <Button title="Criar perfil" onPress={submit} loading={submitting} />
+      <SelectField
+        label="Classe"
+        value={form.tennis_class}
+        options={CLASS_OPTIONS}
+        onSelect={(v) => setForm({ ...form, tennis_class: v })}
+      />
+      <Button title="Criar perfil" onPress={submit} loading={submitting} style={{ marginTop: 4 }} />
       <Button title="Cancelar" variant="ghost" onPress={onCancel} />
     </Card>
   );

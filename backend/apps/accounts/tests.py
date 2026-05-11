@@ -371,6 +371,64 @@ class DependentManagementTestCase(TestCase):
         res = self.client.post('/api/auth/children/999/profile/', {}, format='json')
         self.assertEqual(res.status_code, 403)
 
+    # ── Atomic create-with-profile ───────────────────────────────────────────────
+
+    def _create_with_profile_payload(self, email='cwp@example.com'):
+        return {
+            'full_name': 'CWP Child',
+            'email': email,
+            'password': 'Str0ngPass!',
+            'password_confirm': 'Str0ngPass!',
+            'profile': {
+                'birth_year': 2012,
+                'gender': 'M',
+                'home_state': 'SP',
+                'home_city': 'São Paulo',
+                'competitive_level': 'amateur',
+                'tennis_class': '',
+                'travel_states': ['SP', 'RJ'],
+            },
+        }
+
+    def test_create_with_profile_success(self):
+        from apps.players.models import PlayerProfile
+        self._activate_plan(self.parent, self.tester_plan)
+        self.client.force_authenticate(user=self.parent)
+        res = self.client.post('/api/auth/children/create-with-profile/', self._create_with_profile_payload(), format='json')
+        self.assertEqual(res.status_code, 201)
+        child = User.objects.get(email='cwp@example.com')
+        self.assertTrue(PlayerProfile.objects.filter(user=child, birth_year=2012, gender='M').exists())
+
+    def test_create_with_profile_missing_profile_section(self):
+        self._activate_plan(self.parent, self.tester_plan)
+        self.client.force_authenticate(user=self.parent)
+        payload = {
+            'full_name': 'No Profile Child',
+            'email': 'noprofile@example.com',
+            'password': 'Str0ngPass!',
+            'password_confirm': 'Str0ngPass!',
+        }
+        res = self.client.post('/api/auth/children/create-with-profile/', payload, format='json')
+        self.assertEqual(res.status_code, 400)
+        self.assertIn('profile', res.data)
+
+    def test_create_with_profile_missing_required_profile_fields(self):
+        self._activate_plan(self.parent, self.tester_plan)
+        self.client.force_authenticate(user=self.parent)
+        payload = self._create_with_profile_payload(email='partial@example.com')
+        payload['profile'] = {'home_state': 'SP'}
+        res = self.client.post('/api/auth/children/create-with-profile/', payload, format='json')
+        self.assertEqual(res.status_code, 400)
+        self.assertIn('birth_year', res.data.get('profile', {}))
+        self.assertIn('gender', res.data.get('profile', {}))
+        self.assertIn('competitive_level', res.data.get('profile', {}))
+
+    def test_create_with_profile_individual_plan_forbidden(self):
+        self._activate_plan(self.parent, self.individual_plan)
+        self.client.force_authenticate(user=self.parent)
+        res = self.client.post('/api/auth/children/create-with-profile/', self._create_with_profile_payload(), format='json')
+        self.assertEqual(res.status_code, 403)
+
 
 class LGPDDataExportTestCase(TestCase):
     def setUp(self):

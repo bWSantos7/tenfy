@@ -1,5 +1,5 @@
 import api from './api';
-import { Alert, CoachAthlete, Paginated, PlayerCategory, PlayerProfile, WatchlistItem } from '../types';
+import { Alert, CoachAthlete, Paginated, ParentChild, PlayerCategory, PlayerProfile, WatchlistItem } from '../types';
 
 // ----- Players -----
 export async function listProfiles() {
@@ -130,6 +130,25 @@ export async function listChildRegistrations(childUserId: number) {
 
 export async function createChildProfile(linkId: number, data: Partial<PlayerProfile>) {
   const res = await api.post<PlayerProfile>(`/api/auth/children/${linkId}/profile/`, data);
+  return res.data;
+}
+export async function createChildWithProfile(
+  accountData: { full_name: string; email: string; password: string; password_confirm: string },
+  profileData: {
+    display_name?: string;
+    birth_year: number;
+    gender: 'M' | 'F' | '';
+    home_state: string;
+    home_city?: string;
+    travel_states?: string[];
+    competitive_level: string;
+    tennis_class?: string;
+  },
+): Promise<ParentChild> {
+  const res = await api.post<ParentChild>('/api/auth/children/create-with-profile/', {
+    ...accountData,
+    profile: profileData,
+  });
   return res.data;
 }
 export async function sendChildPasswordReset(linkId: number) {

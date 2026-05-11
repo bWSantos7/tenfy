@@ -365,6 +365,18 @@ class DependentManagementTestCase(TestCase):
         self.assertEqual(res.status_code, 200)
         mock_task.assert_called_once()
 
+    def test_parent_can_remove_child_link(self):
+        self._activate_plan(self.parent, self.tester_plan)
+        child = User.objects.create_user(email='removekid@example.com', password='pass')
+        link = ParentChild.objects.create(parent=self.parent, child=child, is_active=True)
+        self.client.force_authenticate(user=self.parent)
+
+        res = self.client.delete(f'/api/auth/children/{link.id}/remove/')
+
+        self.assertEqual(res.status_code, 204)
+        link.refresh_from_db()
+        self.assertFalse(link.is_active)
+
     def test_non_parent_cannot_access_child_profile_endpoint(self):
         player = User.objects.create_user(email='player3@example.com', password='pass')
         self.client.force_authenticate(user=player)

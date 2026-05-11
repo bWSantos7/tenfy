@@ -6,11 +6,12 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Toast from 'react-native-toast-message';
 import { MainStackParamList, MainTabParamList } from '../../navigation/types';
+import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { AppText, Button, EmptyState, LoadingBlock, Screen, SectionHeader, SelectField } from '../../components/ui';
 import { TournamentListSkeleton } from '../../components/Skeleton';
-import { listWatchlist, saveResult, updateWatch } from '../../services/data';
-import { WatchlistItem, TournamentResult } from '../../types';
+import { listProfiles, listWatchlist, saveResult } from '../../services/data';
+import { PlayerProfile, WatchlistItem } from '../../types';
 
 type Props = BottomTabScreenProps<MainTabParamList, 'Results'>;
 type Nav = NativeStackNavigationProp<MainStackParamList>;
@@ -268,22 +269,25 @@ function ResultCard({
 // ─── Screen ───────────────────────────────────────────────────────────────────
 export function ResultsScreen(_: Props) {
   const { colors } = useTheme();
+  const { user } = useAuth();
   const navigation = useNavigation<Nav>();
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<WatchlistItem[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editingItem, setEditingItem] = useState<WatchlistItem | null>(null);
+  const [profileNames, setProfileNames] = useState<Record<number, string>>({});
 
   async function load() {
     setLoading(true);
     setError(null);
     try {
-      const list = await listWatchlist();
+      const [list, profs] = await Promise.all([listWatchlist(), listProfiles().catch(() => [] as PlayerProfile[])]);
       // Show ALL inscribed tournaments (registered_declared) — with or without result
       setItems((list as WatchlistItem[]).filter(
         (item) => item.user_status === 'registered_declared' || !!item.result,
       ));
+      setProfileNames(Object.fromEntries((profs as PlayerProfile[]).map((p) => [p.id, p.display_name])));
     } catch {
       setError('Não foi possível carregar seus resultados agora.');
     } finally {
@@ -295,10 +299,11 @@ export function ResultsScreen(_: Props) {
     setRefreshing(true);
     setError(null);
     try {
-      const list = await listWatchlist();
+      const [list, profs] = await Promise.all([listWatchlist(), listProfiles().catch(() => [] as PlayerProfile[])]);
       setItems((list as WatchlistItem[]).filter(
         (item) => item.user_status === 'registered_declared' || !!item.result,
       ));
+      setProfileNames(Object.fromEntries((profs as PlayerProfile[]).map((p) => [p.id, p.display_name])));
     } catch {
       setError('Não foi possível atualizar seus resultados agora.');
     } finally {
@@ -315,6 +320,42 @@ export function ResultsScreen(_: Props) {
   const totalWins   = items.reduce((sum, i) => sum + (i.result?.wins   ?? 0), 0);
   const totalLosses = items.reduce((sum, i) => sum + (i.result?.losses ?? 0), 0);
   const totalMatches = totalWins + totalLosses;
+
+  function renderResultItem(item: WatchlistItem) {
+    return (
+      <ResultCard
+        key={item.id}
+        item={item}
+        onEdit={() => setEditingItem(item)}
+        onPress={() => navigation.navigate('TournamentDetail', { id: item.edition_detail.id, edition: item.edition_detail })}
+      />
+    );
+  }
+
+  function renderGroupedResults() {
+    if (user?.role !== 'parent') return items.map(renderResultItem);
+
+    const groups: Record<string, WatchlistItem[]> = {};
+    items.forEach((item) => {
+      const key = item.profile != null ? String(item.profile) : 'none';
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(item);
+    });
+
+    return Object.entries(groups).map(([key, groupItems]) => {
+      const profileId = key === 'none' ? null : Number(key);
+      const name = profileId ? profileNames[profileId] ?? 'Dependente' : 'Sem perfil';
+      return (
+        <View key={key}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6, marginTop: 4 }}>
+            <Ionicons name="person-outline" size={14} color={colors.accentBlue} />
+            <AppText variant="caption" style={{ color: colors.accentBlue, fontWeight: '700' }}>{name}</AppText>
+          </View>
+          {groupItems.map(renderResultItem)}
+        </View>
+      );
+    });
+  }
 
   return (
     <Screen onRefresh={onRefresh} refreshing={refreshing}>
@@ -360,14 +401,7 @@ export function ResultsScreen(_: Props) {
           }
         />
       ) : (
-        items.map((item) => (
-          <ResultCard
-            key={item.id}
-            item={item}
-            onEdit={() => setEditingItem(item)}
-            onPress={() => navigation.navigate('TournamentDetail', { id: item.edition_detail.id, edition: item.edition_detail })}
-          />
-        ))
+        renderGroupedResults()
       )}
 
       <Modal

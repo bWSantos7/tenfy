@@ -11,11 +11,12 @@ import {
 import { BottomTabBarHeightContext } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import { MainStackParamList, MainTabParamList } from '../../navigation/types';
+import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { AppText, Button, EmptyState, Input, Screen, SelectField } from '../../components/ui';
 import { TournamentCard } from '../../components/TournamentCard';
@@ -24,6 +25,7 @@ import { Organization, PlayerProfile, TournamentEditionList } from '../../types'
 import { calendar, listEditions, listFederations, TournamentFilters } from '../../services/tournaments';
 import { listProfiles } from '../../services/data';
 import { pickBestProfile } from '../../utils/profile';
+import { getActiveProfileId } from '../../utils/activeProfile';
 
 type Props = BottomTabScreenProps<MainTabParamList, 'Tournaments'>;
 type StackNav = NativeStackNavigationProp<MainStackParamList>;
@@ -348,6 +350,7 @@ const SURFACE_OPTIONS: { value: string; label: string }[] = [
 export function TournamentsScreen({ route }: Props) {
   const { colors } = useTheme();
   const navigation = useNavigation<StackNav>();
+  const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const tabBarHeight = useContext(BottomTabBarHeightContext) ?? 0;
   const flatListPadding = tabBarHeight > 0 ? tabBarHeight + 8 : insets.bottom + 16;
@@ -490,18 +493,33 @@ export function TournamentsScreen({ route }: Props) {
     }
   }
 
-  // Load primary profile (for "Perto de mim" filter)
-  useEffect(() => {
-    listProfiles()
-      .then((profiles) => {
-        const primary = pickBestProfile(profiles as PlayerProfile[]);
-        if (primary) {
-          setPrimaryProfileId(primary.id);
-          setPrimaryProfile(primary);
+  // Load active profile (for "Perto de mim" filter). Parent accounts only use
+  // a dependent after explicit selection in Profile.
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      (async () => {
+        try {
+          const profiles = await listProfiles();
+          const profileList = profiles as PlayerProfile[];
+          const selectedProfileId = user?.role === 'parent' && user?.id ? await getActiveProfileId(user.id) : null;
+          const selected = user?.role === 'parent'
+            ? profileList.find((p) => p.id === selectedProfileId) ?? null
+            : pickBestProfile(profileList);
+          if (!active) return;
+          setPrimaryProfileId(selected?.id ?? null);
+          setPrimaryProfile(selected);
+          if (!selected) setNearMe(false);
+        } catch {
+          if (!active) return;
+          setPrimaryProfileId(null);
+          setPrimaryProfile(null);
+          setNearMe(false);
         }
-      })
-      .catch(() => {});
-  }, []);
+      })();
+      return () => { active = false; };
+    }, [user?.id, user?.role]),
+  );
 
   // Load federations once
   useEffect(() => {

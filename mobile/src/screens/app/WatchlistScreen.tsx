@@ -6,12 +6,19 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import { MainStackParamList, MainTabParamList } from '../../navigation/types';
+import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { AppText, Button, Card, EmptyState, LoadingBlock, Screen, SectionHeader } from '../../components/ui';
 import { haptic } from '../../hooks/useHaptic';
 import { TournamentCard } from '../../components/TournamentCard';
-import { listWatchlist, watchlistSummary, removeWatchlist, updateWatch } from '../../services/data';
-import { WatchlistItem } from '../../types';
+import { listChildren, listChildWatchlist, listProfiles, listWatchlist, watchlistSummary, removeWatchlist, updateWatch } from '../../services/data';
+import { ParentChild, PlayerProfile, WatchlistItem } from '../../types';
+
+interface ChildWatchlistGroup {
+  childName: string;
+  childId: number;
+  items: WatchlistItem[];
+}
 
 const TODAY = new Date().toISOString().slice(0, 10);
 
@@ -50,6 +57,7 @@ type StackNav = NativeStackNavigationProp<MainStackParamList>;
 
 export function WatchlistScreen(_: Props) {
   const { colors } = useTheme();
+  const { user } = useAuth();
   const navigation = useNavigation<StackNav>();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -60,13 +68,39 @@ export function WatchlistScreen(_: Props) {
   const [marking, setMarking] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showPast, setShowPast] = useState(false);
+  const [profileNames, setProfileNames] = useState<Record<number, string>>({});
+  const [childGroups, setChildGroups] = useState<ChildWatchlistGroup[]>([]);
 
   async function fetchAll(): Promise<void> {
-    const [wl, sm] = await Promise.all([listWatchlist(), watchlistSummary()]);
-    const list = wl as WatchlistItem[];
-    setItems(list);
-    setSummary(sm);
-    setConflicts(detectConflicts(list));
+    if (user?.role === 'parent') {
+      const [children, sm] = await Promise.all([
+        listChildren().catch(() => [] as ParentChild[]),
+        watchlistSummary(),
+      ]);
+      const childList = children as ParentChild[];
+      const childWatchlists = await Promise.all(
+        childList.map((link) => listChildWatchlist(link.child).catch(() => [] as WatchlistItem[])),
+      );
+      const groups: ChildWatchlistGroup[] = childList.map((link, i) => ({
+        childName: link.child_detail.full_name || link.child_detail.email,
+        childId: link.child,
+        items: childWatchlists[i] as WatchlistItem[],
+      }));
+      const allItems = groups.flatMap((g) => g.items);
+      setChildGroups(groups);
+      setItems(allItems);
+      setSummary(sm);
+      setConflicts(detectConflicts(allItems));
+      setProfileNames({});
+    } else {
+      const [wl, sm, profs] = await Promise.all([listWatchlist(), watchlistSummary(), listProfiles().catch(() => [] as PlayerProfile[])]);
+      const list = wl as WatchlistItem[];
+      setChildGroups([]);
+      setItems(list);
+      setSummary(sm);
+      setConflicts(detectConflicts(list));
+      setProfileNames(Object.fromEntries((profs as PlayerProfile[]).map((p) => [p.id, p.display_name])));
+    }
   }
 
   useFocusEffect(
@@ -155,6 +189,29 @@ export function WatchlistScreen(_: Props) {
 
   const activeItems = items.filter((i) => !isPast(i));
   const pastItems   = items.filter((i) => isPast(i));
+
+  function renderGrouped(itemsToRender: WatchlistItem[]) {
+    if (user?.role !== 'parent' || childGroups.length === 0) {
+      // Non-parent: render items directly (no grouping needed)
+      return itemsToRender.map(renderItem);
+    }
+    const itemSet = new Set(itemsToRender.map((i) => i.id));
+    return childGroups
+      .map((group) => {
+        const filtered = group.items.filter((i) => itemSet.has(i.id));
+        if (filtered.length === 0) return null;
+        return (
+          <View key={group.childId}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6, marginTop: 4 }}>
+              <Ionicons name="person-outline" size={14} color={colors.accentBlue} />
+              <AppText variant="caption" style={{ color: colors.accentBlue, fontWeight: '700' }}>{group.childName}</AppText>
+            </View>
+            {filtered.map(renderItem)}
+          </View>
+        );
+      })
+      .filter(Boolean);
+  }
 
   function renderItem(item: WatchlistItem) {
     const isInscrito = item.user_status === 'registered_declared';
@@ -274,7 +331,7 @@ export function WatchlistScreen(_: Props) {
           {activeItems.length > 0 && (
             <>
               <SectionHeader title="Próximos" subtitle={`${activeItems.length} torneio${activeItems.length > 1 ? 's' : ''}`} />
-              {activeItems.map(renderItem)}
+              {renderGrouped(activeItems)}
             </>
           )}
 
@@ -288,7 +345,7 @@ export function WatchlistScreen(_: Props) {
                 <SectionHeader title="Passados" subtitle={`${pastItems.length} torneio${pastItems.length > 1 ? 's' : ''}`} />
                 <Ionicons name={showPast ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textMuted} />
               </Pressable>
-              {showPast && pastItems.map(renderItem)}
+              {showPast && renderGrouped(pastItems)}
             </>
           )}
         </>

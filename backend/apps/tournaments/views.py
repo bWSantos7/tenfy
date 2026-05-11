@@ -187,7 +187,18 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
         try:
             profile = PlayerProfile.objects.get(pk=profile_id, user=request.user)
         except PlayerProfile.DoesNotExist:
-            return Response({'error': 'Perfil nao encontrado'}, status=404)
+            if request.user.role == 'parent':
+                from apps.accounts.models import ParentChild
+                child_ids = list(
+                    ParentChild.objects.filter(parent=request.user, is_active=True)
+                    .values_list('child_id', flat=True)
+                )
+                try:
+                    profile = PlayerProfile.objects.get(pk=profile_id, user_id__in=child_ids)
+                except PlayerProfile.DoesNotExist:
+                    return Response({'error': 'Perfil não encontrado'}, status=404)
+            else:
+                return Response({'error': 'Perfil não encontrado'}, status=404)
 
         cache_key = 'compatible:{}:{}:{}'.format(
             request.user.id,

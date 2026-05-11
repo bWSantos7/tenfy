@@ -30,10 +30,31 @@ class WatchlistViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
     filterset_fields = ('user_status',)
 
+    def _managed_child_ids(self):
+        from apps.accounts.models import ParentChild
+        return list(
+            ParentChild.objects
+            .filter(parent=self.request.user, is_active=True)
+            .values_list('child_id', flat=True)
+        )
+
     def get_queryset(self):
+        user = self.request.user
+        user_ids = [user.id]
+
+        if user.role == 'parent':
+            user_ids = self._managed_child_ids()
+            requested_user_id = self.request.query_params.get('user_id')
+            if requested_user_id:
+                try:
+                    requested_user_id_int = int(requested_user_id)
+                except (TypeError, ValueError):
+                    requested_user_id_int = None
+                user_ids = [requested_user_id_int] if requested_user_id_int in user_ids else []
+
         return (
             WatchlistItem.objects
-            .filter(user=self.request.user)
+            .filter(user_id__in=user_ids)
             .select_related('edition__tournament__organization', 'edition__venue', 'profile')
             .order_by('-created_at')
         )
@@ -84,13 +105,34 @@ class WatchlistViewSet(viewsets.ModelViewSet):
             edition = TournamentEdition.objects.get(pk=edition_id)
         except TournamentEdition.DoesNotExist:
             return Response({'error': 'Edição não encontrada'}, status=404)
-        item = WatchlistItem.objects.filter(user=request.user, edition=edition).first()
+        owner = request.user
+        if profile_id:
+            from apps.players.models import PlayerProfile
+            try:
+                profile = PlayerProfile.objects.select_related('user').get(pk=profile_id)
+            except PlayerProfile.DoesNotExist:
+                return Response({'error': 'Perfil nÃ£o encontrado'}, status=404)
+
+            if request.user.role == 'parent':
+                if profile.user_id not in self._managed_child_ids():
+                    return Response(
+                        {'detail': 'Este perfil nÃ£o pertence a um dependente gerenciado por vocÃª.'},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+                owner = profile.user
+            elif profile.user_id != request.user.id:
+                return Response(
+                    {'detail': 'Este perfil nÃ£o pertence ao usuÃ¡rio autenticado.'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+        item = WatchlistItem.objects.filter(user=owner, edition=edition).first()
         if item:
             item.delete()
             _audit(request.user, 'watchlist.remove', str(edition_id), f'Removed edition {edition_id} from watchlist')
             return Response({'watching': False, 'edition_id': edition_id})
         item = WatchlistItem.objects.create(
-            user=request.user,
+            user=owner,
             edition=edition,
             profile_id=profile_id,
         )

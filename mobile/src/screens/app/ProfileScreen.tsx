@@ -19,6 +19,7 @@ import { extractApiError, mediaUrl } from '../../services/api';
 import { ParentChild, PlayerProfile } from '../../types';
 import { GENDER_LABELS, LEVEL_LABELS, ROLE_LABELS, TENNIS_CLASS_LABELS } from '../../utils/format';
 import { markProfileDirty } from '../../utils/profileRefresh';
+import { getActiveProfileId, setActiveProfileId } from '../../utils/activeProfile';
 import { AppText, Button, Card, EmptyState, Input, LoadingBlock, Screen, SectionHeader, SelectField, MultiSelectField } from '../../components/ui';
 
 type Props = BottomTabScreenProps<MainTabParamList, 'Profile'>;
@@ -68,6 +69,7 @@ export function ProfileScreen(_: Props) {
 
   // Parent state
   const [dependents, setDependents] = useState<DependentData[]>([]);
+  const [activeProfileId, setActiveProfileIdState] = useState<number | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingDep, setEditingDep] = useState<{ link: ParentChild; profile: PlayerProfile } | null>(null);
   const [creatingProfileFor, setCreatingProfileFor] = useState<ParentChild | null>(null);
@@ -88,6 +90,7 @@ export function ProfileScreen(_: Props) {
           }),
         );
         setDependents(withProfiles);
+        if (user?.id) setActiveProfileIdState(await getActiveProfileId(user.id));
       } else {
         setProfiles(await listProfiles() as PlayerProfile[]);
       }
@@ -200,6 +203,18 @@ export function ProfileScreen(_: Props) {
         },
       ],
     );
+  }
+
+  async function handleSelectDependentProfile(profile: PlayerProfile) {
+    if (!user?.id) return;
+    try {
+      await setActiveProfileId(user.id, profile.id);
+      setActiveProfileIdState(profile.id);
+      markProfileDirty();
+      Toast.show({ type: 'success', text1: 'Perfil ativo selecionado.', text2: profile.display_name });
+    } catch {
+      Toast.show({ type: 'error', text1: 'Não foi possível selecionar o perfil.' });
+    }
   }
 
   const avatarLetter = (user?.full_name || user?.email || 'U').slice(0, 1).toUpperCase();
@@ -392,8 +407,10 @@ export function ProfileScreen(_: Props) {
                 colors={colors}
                 onEditProfile={() => profile && setEditingDep({ link, profile })}
                 onCreateProfile={() => setCreatingProfileFor(link)}
+                onSelectProfile={() => profile && handleSelectDependentProfile(profile)}
                 onResetPassword={() => handleResetChildPassword(link)}
                 onRemove={() => handleRemoveChild(link)}
+                isActive={!!profile && activeProfileId === profile.id}
               />
             );
           })}
@@ -465,14 +482,16 @@ export function ProfileScreen(_: Props) {
 
 // ── DependentCard ─────────────────────────────────────────────────────────────
 
-function DependentCard({ link, profile, colors, onEditProfile, onCreateProfile, onResetPassword, onRemove }: {
+function DependentCard({ link, profile, colors, onEditProfile, onCreateProfile, onSelectProfile, onResetPassword, onRemove, isActive }: {
   link: ParentChild;
   profile: PlayerProfile | null;
   colors: any;
   onEditProfile: () => void;
   onCreateProfile: () => void;
+  onSelectProfile: () => void;
   onResetPassword: () => void;
   onRemove: () => void;
+  isActive: boolean;
 }) {
   const classLabel = profile?.tennis_class ? (TENNIS_CLASS_LABELS[profile.tennis_class] ?? `Classe ${profile.tennis_class}`) : null;
   const levelLabel = profile ? (LEVEL_LABELS[profile.competitive_level] ?? profile.competitive_level) : null;
@@ -480,34 +499,33 @@ function DependentCard({ link, profile, colors, onEditProfile, onCreateProfile, 
 
   return (
     <Card style={{ marginBottom: 10 }}>
-      {/* Child user info */}
+      {/* Header: avatar + name/email + active badge */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-        <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: `${colors.accentNeon}22`, borderWidth: 2, borderColor: `${colors.accentNeon}44`, alignItems: 'center', justifyContent: 'center' }}>
-          <AppText variant="body" style={{ color: colors.accentNeon, fontWeight: '700', fontSize: 16 }}>
+        <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: `${colors.accentNeon}22`, borderWidth: 2, borderColor: isActive ? colors.accentNeon : `${colors.accentNeon}44`, alignItems: 'center', justifyContent: 'center' }}>
+          <AppText variant="body" style={{ color: colors.accentNeon, fontWeight: '700', fontSize: 18 }}>
             {(link.child_detail.full_name || 'D').slice(0, 1).toUpperCase()}
           </AppText>
         </View>
         <View style={{ flex: 1 }}>
           <AppText variant="body" style={{ fontWeight: '700', fontSize: 15 }}>{link.child_detail.full_name || '—'}</AppText>
-          <AppText variant="caption" style={{ marginTop: 1 }}>{link.child_detail.email}</AppText>
+          <AppText variant="caption" style={{ marginTop: 1, color: colors.textMuted }}>{link.child_detail.email}</AppText>
         </View>
+        {isActive ? (
+          <View style={{ backgroundColor: `${colors.accentNeon}22`, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, borderWidth: 1, borderColor: `${colors.accentNeon}55` }}>
+            <AppText variant="caption" style={{ color: colors.accentNeon, fontWeight: '700' }}>Ativo</AppText>
+          </View>
+        ) : null}
       </View>
 
       {/* Sports profile summary */}
       {profile ? (
-        <View style={{ backgroundColor: colors.bgCard, borderRadius: 8, padding: 10, borderWidth: 1, borderColor: colors.borderSubtle, marginBottom: 10, gap: 4 }}>
-          <AppText variant="caption" style={{ fontWeight: '700', color: colors.textSecondary, marginBottom: 4 }}>Perfil esportivo</AppText>
-          {profile.display_name ? (
-            <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
-              <Ionicons name="person-outline" size={13} color={colors.textMuted} />
-              <AppText variant="caption">{profile.display_name}</AppText>
-            </View>
-          ) : null}
+        <View style={{ backgroundColor: `${colors.bgBase}`, borderRadius: 10, padding: 10, borderWidth: 1, borderColor: colors.borderSubtle, marginBottom: 12, gap: 5 }}>
+          <AppText variant="caption" style={{ fontWeight: '700', color: colors.textSecondary, marginBottom: 2 }}>Perfil esportivo</AppText>
           {(profile.birth_year || profile.sporting_age) ? (
             <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
               <Ionicons name="calendar-outline" size={13} color={colors.textMuted} />
               <AppText variant="caption">
-                {profile.birth_year ? `Nascimento: ${profile.birth_year}` : ''}
+                {profile.birth_year ? `Nasc. ${profile.birth_year}` : ''}
                 {profile.sporting_age ? ` • ${profile.sporting_age} anos esportivos` : ''}
               </AppText>
             </View>
@@ -521,7 +539,7 @@ function DependentCard({ link, profile, colors, onEditProfile, onCreateProfile, 
           {(profile.home_city || profile.home_state) ? (
             <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
               <Ionicons name="location-outline" size={13} color={colors.textMuted} />
-              <AppText variant="caption">{[profile.home_city, profile.home_state].filter(Boolean).join('/')}</AppText>
+              <AppText variant="caption">{[profile.home_city, profile.home_state].filter(Boolean).join(' / ')}</AppText>
             </View>
           ) : null}
           {levelLabel ? (
@@ -532,24 +550,43 @@ function DependentCard({ link, profile, colors, onEditProfile, onCreateProfile, 
           ) : null}
         </View>
       ) : (
-        <View style={{ backgroundColor: `${colors.textMuted}10`, borderRadius: 8, padding: 10, marginBottom: 10, alignItems: 'center' }}>
-          <AppText variant="muted" style={{ fontStyle: 'italic' }}>Sem perfil esportivo cadastrado.</AppText>
+        <View style={{ borderRadius: 10, padding: 12, marginBottom: 12, alignItems: 'center', borderWidth: 1, borderColor: colors.borderSubtle, borderStyle: 'dashed' }}>
+          <Ionicons name="person-add-outline" size={20} color={colors.textMuted} style={{ marginBottom: 4 }} />
+          <AppText variant="caption" style={{ color: colors.textMuted }}>Sem perfil esportivo cadastrado</AppText>
         </View>
       )}
 
-      {/* Actions */}
-      <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-        {profile ? (
-          <Button title="Editar perfil" variant="secondary" onPress={onEditProfile} style={{ flex: 1, minWidth: 110 }} />
-        ) : (
-          <Button title="Criar perfil" variant="secondary" onPress={onCreateProfile} style={{ flex: 1, minWidth: 110 }} />
-        )}
-        <Button title="Redefinir senha" variant="ghost" onPress={onResetPassword} style={{ flex: 1, minWidth: 110 }} />
-      </View>
-      <View style={{ marginTop: 8, alignItems: 'flex-end' }}>
+      {/* Primary action */}
+      <Button
+        title={profile ? 'Editar perfil esportivo' : 'Criar perfil esportivo'}
+        variant="secondary"
+        onPress={profile ? onEditProfile : onCreateProfile}
+        style={{ marginBottom: profile && !isActive ? 6 : 0 }}
+      />
+
+      {/* Select as active (only when not active and has profile) */}
+      {profile && !isActive ? (
+        <Button
+          title="Selecionar como perfil ativo"
+          variant="ghost"
+          onPress={onSelectProfile}
+        />
+      ) : null}
+
+      {/* Secondary actions */}
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.borderSubtle }}>
+        <Pressable
+          onPress={onResetPassword}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 4, paddingHorizontal: 6 }}
+          hitSlop={8}
+        >
+          <Ionicons name="key-outline" size={14} color={colors.textMuted} />
+          <AppText variant="caption" style={{ color: colors.textMuted }}>Redefinir senha</AppText>
+        </Pressable>
         <Pressable
           onPress={onRemove}
-          style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4, paddingHorizontal: 8 }}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 4, paddingHorizontal: 6 }}
+          hitSlop={8}
         >
           <Ionicons name="trash-outline" size={14} color={colors.danger} />
           <AppText variant="caption" style={{ color: colors.danger }}>Excluir dependente</AppText>

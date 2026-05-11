@@ -15,6 +15,7 @@ import { closingSoon, compatibleForProfile, listEditions } from '../../services/
 import { PlayerProfile, TournamentEditionList } from '../../types';
 import { pickBestProfile } from '../../utils/profile';
 import { consumeProfileDirty } from '../../utils/profileRefresh';
+import { getActiveProfileId } from '../../utils/activeProfile';
 
 type Props = BottomTabScreenProps<MainTabParamList, 'Home'>;
 type StackNav = NativeStackNavigationProp<MainStackParamList>;
@@ -44,8 +45,12 @@ export function HomeScreen(_: Props) {
         unreadAlerts().catch(() => []),
       ]);
       if (!active.current) return;
-      const primary = pickBestProfile(profiles as PlayerProfile[]);
-      setHasProfile((profiles as PlayerProfile[]).length > 0);
+      const profileList = profiles as PlayerProfile[];
+      const selectedProfileId = user?.role === 'parent' && user?.id ? await getActiveProfileId(user.id) : null;
+      const primary = user?.role === 'parent'
+        ? profileList.find((p) => p.id === selectedProfileId) ?? null
+        : pickBestProfile(profileList);
+      setHasProfile(user?.role === 'parent' ? !!primary : profileList.length > 0);
       setProfile(primary);
       setClosing((closingData as TournamentEditionList[]).slice(0, 6));
       const HIDDEN = ['finished', 'canceled'];
@@ -64,7 +69,7 @@ export function HomeScreen(_: Props) {
     } catch {
       if (active.current) setError('Não foi possível carregar os dados. Verifique sua conexão.');
     }
-  }, []);
+  }, [user?.id, user?.role]);
 
   useFocusEffect(
     useCallback(() => {
@@ -138,11 +143,22 @@ export function HomeScreen(_: Props) {
         </View>
       ) : null}
 
+      {!profile && user?.role === 'parent' ? (
+        <View style={{ borderWidth: 1, borderColor: `${colors.accentBlue}55`, backgroundColor: `${colors.accentBlue}10`, borderRadius: 20, padding: 16, flexDirection: 'row', gap: 12 }}>
+          <Ionicons name="people-outline" size={20} color={colors.accentBlue} />
+          <View style={{ flex: 1 }}>
+            <AppText variant="body" style={{ fontWeight: '600' }}>Selecione um dependente</AppText>
+            <AppText variant="muted" style={{ marginTop: 4 }}>Na aba Perfil, escolha explicitamente qual perfil esportivo deseja usar para ver torneios compatíveis.</AppText>
+          </View>
+          <Button title="Perfil" onPress={() => navigation.navigate('Tabs', { screen: 'Profile' } as never)} />
+        </View>
+      ) : null}
+
       {profile ? (
         <View>
           <SectionHeader
-            title="Compatíveis com você"
-            subtitle="Baseado no seu perfil e categoria"
+            title={user?.role === 'parent' ? `Compatíveis com ${profile.display_name}` : 'Compatíveis com você'}
+            subtitle="Baseado no perfil e categoria"
             action={
               <Pressable onPress={() => { haptic.select(); navigation.navigate('Tabs', { screen: 'Tournaments' } as never); }}>
                 <AppText variant="caption" style={{ color: colors.accentNeon, fontWeight: '700' }}>Ver todos</AppText>
@@ -150,7 +166,11 @@ export function HomeScreen(_: Props) {
             }
           />
           {compat.length === 0
-            ? <EmptyState title="Nenhum torneio compatível com o seu perfil." subtitle="Revise cidade, raio de viagem, classe e categoria no perfil." icon="trophy-outline" />
+            ? <EmptyState
+                title={user?.role === 'parent' ? `Nenhum torneio compatível com ${profile.display_name}.` : 'Nenhum torneio compatível com o seu perfil.'}
+                subtitle="Revise cidade, raio de viagem, classe e categoria no perfil."
+                icon="trophy-outline"
+              />
             : compat.map((ed) => <TournamentCard key={ed.id} edition={ed} showEligibility onPress={() => navigation.navigate('TournamentDetail', { id: ed.id, edition: ed })} />)
           }
         </View>

@@ -1,19 +1,22 @@
 import React, { useEffect, useState } from 'react';
 import { FlaskConical } from 'lucide-react';
+import { User } from '../types';
 
-const BETA_ACK_KEY = 'th_beta_ack';
+const BETA_ACK_PREFIX = 'th_beta_ack';
 
-export const BetaModal: React.FC = () => {
+export const BetaModal: React.FC<{ user: User | null }> = ({ user }) => {
   const [visible, setVisible] = useState(false);
+  const betaAckKey = user ? `${BETA_ACK_PREFIX}_${user.id}` : BETA_ACK_PREFIX;
 
   useEffect(() => {
-    if (!localStorage.getItem(BETA_ACK_KEY)) {
+    if (!user) return;
+    if (!localStorage.getItem(betaAckKey)) {
       setVisible(true);
     }
-  }, []);
+  }, [betaAckKey, user]);
 
   const dismiss = () => {
-    localStorage.setItem(BETA_ACK_KEY, '1');
+    localStorage.setItem(betaAckKey, '1');
     setVisible(false);
   };
 

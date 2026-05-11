@@ -6,8 +6,8 @@ from rest_framework.test import APIClient
 User = get_user_model()
 
 
-def make_user(email='wl@example.com', password='pass123'):
-    return User.objects.create_user(email=email, password=password, full_name='WL User')
+def make_user(email='wl@example.com', password='pass123', role='player'):
+    return User.objects.create_user(email=email, password=password, full_name='WL User', role=role)
 
 
 def make_edition(title='WL Test Edition', org_name='Test Org WL', city='São Paulo', state='SP'):
@@ -68,3 +68,52 @@ class WatchlistSummaryTestCase(TestCase):
         res = self.client.get('/api/watchlist/summary/')
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.data['active_registrations'], 0)
+
+    def test_parent_summary_includes_managed_child_watchlist(self):
+        from apps.accounts.models import ParentChild
+        from apps.players.models import PlayerProfile
+        from apps.watchlist.models import WatchlistItem
+
+        parent = make_user(email='parent-wl@example.com', role='parent')
+        child = make_user(email='child-wl@example.com')
+        ParentChild.objects.create(parent=parent, child=child, is_active=True)
+        profile = PlayerProfile.objects.create(user=child, display_name='Child Profile')
+        edition = make_edition('Child WL Edition', 'Org Child')
+        WatchlistItem.objects.create(
+            user=child,
+            profile=profile,
+            edition=edition,
+            user_status=WatchlistItem.STATUS_REGISTERED,
+        )
+
+        self.client.force_authenticate(user=parent)
+        res = self.client.get('/api/watchlist/summary/')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data['total'], 1)
+        self.assertEqual(res.data['active_registrations'], 1)
+
+    def test_parent_toggle_with_child_profile_creates_child_watchlist_item(self):
+        from apps.accounts.models import ParentChild
+        from apps.players.models import PlayerProfile
+        from apps.watchlist.models import WatchlistItem
+
+        parent = make_user(email='parent-toggle@example.com', role='parent')
+        child = make_user(email='child-toggle@example.com')
+        ParentChild.objects.create(parent=parent, child=child, is_active=True)
+        profile = PlayerProfile.objects.create(user=child, display_name='Child Toggle')
+        edition = make_edition('Child Toggle Edition', 'Org Toggle')
+
+        self.client.force_authenticate(user=parent)
+        res = self.client.post(
+            '/api/watchlist/toggle/',
+            {'edition_id': edition.id, 'profile_id': profile.id},
+            format='json',
+        )
+
+        self.assertEqual(res.status_code, 201)
+        self.assertTrue(
+            WatchlistItem.objects.filter(user=child, profile=profile, edition=edition).exists()
+        )
+        self.assertFalse(
+            WatchlistItem.objects.filter(user=parent, edition=edition).exists()
+        )

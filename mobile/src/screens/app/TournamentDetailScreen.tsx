@@ -4,6 +4,7 @@ import Toast from 'react-native-toast-message';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { MainStackParamList } from '../../navigation/types';
+import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { AppText, Button, Card, EmptyState, LoadingBlock, Screen, SectionHeader } from '../../components/ui';
 import {
@@ -16,6 +17,7 @@ import { getEdition, evaluateEdition, editionHistory } from '../../services/tour
 import { listProfiles, listWatchlist, toggleWatchlist } from '../../services/data';
 import { myRegistrations, withdrawRegistration } from '../../services/registrations';
 import { pickBestProfile } from '../../utils/profile';
+import { getActiveProfileId } from '../../utils/activeProfile';
 import { fmtBRL, fmtDate, fmtDateMaybeTime, fmtDateRange, formatChangeEventDetails, formatChangeEventTitle, translateReason, STATUS_LABELS, SURFACE_LABELS } from '../../utils/format';
 import { extractApiError } from '../../services/api';
 import { hasEmailLike } from '../../utils/sanitize';
@@ -90,6 +92,7 @@ function getRegStatusConfig(colors: ReturnType<typeof import('../../contexts/The
 
 export function TournamentDetailScreen({ route, navigation }: Props) {
   const { colors } = useTheme();
+  const { user } = useAuth();
   const id = route.params.id;
   const preloaded = route.params.edition;
   const [loading, setLoading] = useState(true);
@@ -123,7 +126,11 @@ export function TournamentDetailScreen({ route, navigation }: Props) {
         const item = w as { edition?: number; edition_id?: number };
         return item.edition === id || item.edition_id === id;
       }));
-      const primary = pickBestProfile(profiles as Parameters<typeof pickBestProfile>[0]);
+      const profileList = profiles as Parameters<typeof pickBestProfile>[0];
+      const selectedProfileId = user?.role === 'parent' && user?.id ? await getActiveProfileId(user.id) : null;
+      const primary = user?.role === 'parent'
+        ? profileList.find((p) => p.id === selectedProfileId) ?? null
+        : pickBestProfile(profileList);
       if (primary) {
         const elig = await evaluateEdition(id, primary.id).catch(() => null);
         setEligibility(elig as EditionEligibility | null);
@@ -154,7 +161,15 @@ export function TournamentDetailScreen({ route, navigation }: Props) {
     setTogglingWatch(true);
     try {
       const profiles = await listProfiles().catch(() => []);
-      const primary = pickBestProfile(profiles as Parameters<typeof pickBestProfile>[0]);
+      const profileList = profiles as Parameters<typeof pickBestProfile>[0];
+      const selectedProfileId = user?.role === 'parent' && user?.id ? await getActiveProfileId(user.id) : null;
+      const primary = user?.role === 'parent'
+        ? profileList.find((p) => p.id === selectedProfileId) ?? null
+        : pickBestProfile(profileList);
+      if (user?.role === 'parent' && !primary) {
+        Toast.show({ type: 'info', text1: 'Selecione um dependente', text2: 'Escolha o perfil esportivo na aba Perfil antes de adicionar torneios.' });
+        return;
+      }
       const result = await toggleWatchlist(id, primary?.id);
       setWatching(result.watching);
       Toast.show({ type: 'success', text1: result.watching ? 'Adicionado à agenda' : 'Removido da agenda' });

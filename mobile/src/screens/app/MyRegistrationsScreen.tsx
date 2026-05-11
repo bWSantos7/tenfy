@@ -6,9 +6,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { MainStackParamList } from '../../navigation/types';
 import { useTheme } from '../../contexts/ThemeContext';
 import { AppText, Button, Card, EmptyState, LoadingBlock, Screen, SectionHeader } from '../../components/ui';
-import { TournamentRegistration, RegistrationStatus, WatchlistItem, PlayerProfile } from '../../types';
+import { TournamentRegistration, RegistrationStatus, WatchlistItem, PlayerProfile, ParentChild } from '../../types';
 import { myRegistrations, withdrawRegistration } from '../../services/registrations';
-import { listWatchlist, listProfiles } from '../../services/data';
+import { listChildren, listChildWatchlist, listWatchlist, listProfiles } from '../../services/data';
+import { useAuth } from '../../contexts/AuthContext';
 import { fmtDateRange } from '../../utils/format';
 import { extractApiError } from '../../services/api';
 
@@ -34,43 +35,54 @@ function getPaymentColors(c: ThemeColors): Record<string, string> {
   };
 }
 
-interface ProfileGroup {
-  profileId: number | null;
-  profileName: string;
+interface ChildInscriptionGroup {
+  childName: string;
+  childId: number;
   items: WatchlistItem[];
-}
-
-function groupByProfile(items: WatchlistItem[], profiles: PlayerProfile[]): ProfileGroup[] {
-  const map: Record<string, WatchlistItem[]> = {};
-  for (const item of items) {
-    const key = item.profile != null ? String(item.profile) : 'none';
-    if (!map[key]) map[key] = [];
-    map[key].push(item);
-  }
-  return Object.entries(map).map(([key, its]) => {
-    const profileId = key === 'none' ? null : Number(key);
-    const profile = profileId != null ? profiles.find((p) => p.id === profileId) ?? null : null;
-    return { profileId, profileName: profile?.display_name ?? 'Sem perfil', items: its };
-  }).sort((a, b) => (a.profileId ?? 0) - (b.profileId ?? 0));
 }
 
 export function MyRegistrationsScreen({ navigation }: Props) {
   const { colors } = useTheme();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [registrations, setRegistrations] = useState<TournamentRegistration[]>([]);
   const [withdrawing, setWithdrawing] = useState<number | null>(null);
-  const [profileGroups, setProfileGroups] = useState<ProfileGroup[]>([]);
+  const [childGroups, setChildGroups] = useState<ChildInscriptionGroup[]>([]);
+
+  async function buildGroups(): Promise<{ regs: TournamentRegistration[]; groups: ChildInscriptionGroup[] }> {
+    const regs = await myRegistrations();
+    if (user?.role === 'parent') {
+      const children = await listChildren().catch(() => [] as ParentChild[]);
+      const childList = children as ParentChild[];
+      const childWatchlists = await Promise.all(
+        childList.map((link) => listChildWatchlist(link.child).catch(() => [] as WatchlistItem[])),
+      );
+      const groups: ChildInscriptionGroup[] = childList
+        .map((link, i) => ({
+          childName: link.child_detail.full_name || link.child_detail.email,
+          childId: link.child,
+          items: (childWatchlists[i] as WatchlistItem[]).filter((it) => it.user_status === 'registered_declared'),
+        }))
+        .filter((g) => g.items.length > 0);
+      return { regs, groups };
+    }
+    const [wl, profs] = await Promise.all([listWatchlist(), listProfiles()]);
+    const inscribed = (wl as WatchlistItem[]).filter((i) => i.user_status === 'registered_declared');
+    const groups: ChildInscriptionGroup[] = inscribed.length > 0
+      ? [{ childName: '', childId: 0, items: inscribed }]
+      : [];
+    return { regs, groups };
+  }
 
   async function load() {
     setLoading(true);
     setError(null);
     try {
-      const [regs, wl, profs] = await Promise.all([myRegistrations(), listWatchlist(), listProfiles()]);
+      const { regs, groups } = await buildGroups();
       setRegistrations(regs);
-      const inscribed = (wl as WatchlistItem[]).filter((i) => i.user_status === 'registered_declared');
-      setProfileGroups(groupByProfile(inscribed, profs as PlayerProfile[]));
+      setChildGroups(groups);
     } catch (err) {
       setError(extractApiError(err));
     } finally {
@@ -82,10 +94,9 @@ export function MyRegistrationsScreen({ navigation }: Props) {
     setRefreshing(true);
     setError(null);
     try {
-      const [regs, wl, profs] = await Promise.all([myRegistrations(), listWatchlist(), listProfiles()]);
+      const { regs, groups } = await buildGroups();
       setRegistrations(regs);
-      const inscribed = (wl as WatchlistItem[]).filter((i) => i.user_status === 'registered_declared');
-      setProfileGroups(groupByProfile(inscribed, profs as PlayerProfile[]));
+      setChildGroups(groups);
     } catch (err) {
       setError(extractApiError(err));
     } finally {
@@ -110,7 +121,7 @@ export function MyRegistrationsScreen({ navigation }: Props) {
 
   const active = registrations.filter((r) => !r.is_withdrawn);
   const withdrawn = registrations.filter((r) => r.is_withdrawn);
-  const totalWatchlistInscribed = profileGroups.reduce((acc, g) => acc + g.items.length, 0);
+  const totalWatchlistInscribed = childGroups.reduce((acc, g) => acc + g.items.length, 0);
 
   return (
     <Screen onRefresh={onRefresh} refreshing={refreshing}>
@@ -138,16 +149,16 @@ export function MyRegistrationsScreen({ navigation }: Props) {
         />
       ) : (
         <>
-          {/* Watchlist-based inscriptions grouped by profile */}
-          {profileGroups.length > 0 && (
+          {/* Watchlist-based inscriptions grouped by child */}
+          {childGroups.length > 0 && (
             <View>
               <SectionHeader title="Inscrições declaradas" subtitle={`${totalWatchlistInscribed} torneio${totalWatchlistInscribed > 1 ? 's' : ''}`} />
-              {profileGroups.map((group) => (
-                <View key={group.profileId ?? 'none'}>
-                  {profileGroups.length > 1 ? (
+              {childGroups.map((group) => (
+                <View key={group.childId || 'self'}>
+                  {user?.role === 'parent' ? (
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6, marginTop: 4 }}>
                       <Ionicons name="person-outline" size={14} color={colors.accentBlue} />
-                      <AppText variant="caption" style={{ color: colors.accentBlue, fontWeight: '700' }}>{group.profileName}</AppText>
+                      <AppText variant="caption" style={{ color: colors.accentBlue, fontWeight: '700' }}>{group.childName}</AppText>
                     </View>
                   ) : null}
                   {group.items.map((item) => {

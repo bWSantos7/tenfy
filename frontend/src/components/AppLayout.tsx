@@ -26,7 +26,7 @@ export const AppLayout: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-bg-base flex flex-col">
-      <BetaModal />
+      <BetaModal user={user} />
       <header className="sticky top-0 z-30 bg-bg-card/90 backdrop-blur-lg border-b border-border-subtle shadow-sm">
         <div className="mx-auto max-w-5xl px-4 h-14 flex items-center justify-between">
           <NavLink to="/" className="flex items-center gap-2.5 group">

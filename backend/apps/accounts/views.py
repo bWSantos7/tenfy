@@ -393,7 +393,7 @@ class IsParent(permissions.BasePermission):
 class ParentChildViewSet(viewsets.ModelViewSet):
     """Parents create and manage child player accounts."""
     permission_classes = [IsParent]
-    http_method_names = ['get', 'post', 'head', 'options']
+    http_method_names = ['get', 'post', 'delete', 'head', 'options']
 
     def get_queryset(self):
         return (
@@ -407,6 +407,12 @@ class ParentChildViewSet(viewsets.ModelViewSet):
         if self.request.method == 'POST':
             return ChildAccountCreateSerializer
         return ParentChildSerializer
+
+    def destroy(self, request, *args, **kwargs):
+        return Response(
+            {'detail': 'Para remover um dependente use DELETE /children/{id}/remove/.'},
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
 
     def create(self, request, *args, **kwargs):
         # Enforce role check — only parent/responsible accounts can add dependents

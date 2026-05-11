@@ -12,7 +12,7 @@ import { AuthStackParamList, MainStackParamList } from './types';
 import { BetaModal } from '../components/BetaModal';
 import { storage } from '../services/api';
 
-const BETA_ACK_KEY = 'th_beta_ack';
+const BETA_ACK_PREFIX = 'th_beta_ack';
 import { LoginScreen } from '../screens/auth/LoginScreen';
 import { RegisterScreen } from '../screens/auth/RegisterScreen';
 import { ForgotPasswordScreen } from '../screens/auth/ForgotPasswordScreen';
@@ -97,13 +97,14 @@ function GatedTabs() {
 }
 
 export function RootNavigator() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const [betaVisible, setBetaVisible] = useState(false);
+  const betaAckKey = user ? `${BETA_ACK_PREFIX}_${user.id}` : BETA_ACK_PREFIX;
 
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || !user) return;
     Promise.all([
-      storage.get(BETA_ACK_KEY),
+      storage.get(betaAckKey),
       storage.get('th_just_registered'),
     ]).then(([acked, justReg]) => {
       if (!acked || justReg) {
@@ -111,10 +112,10 @@ export function RootNavigator() {
         setBetaVisible(true);
       }
     });
-  }, [isAuthenticated]);
+  }, [betaAckKey, isAuthenticated, user]);
 
   const dismissBeta = async () => {
-    await storage.set(BETA_ACK_KEY, '1');
+    await storage.set(betaAckKey, '1');
     setBetaVisible(false);
   };
 

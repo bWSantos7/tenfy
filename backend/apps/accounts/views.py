@@ -470,25 +470,26 @@ class ParentChildViewSet(viewsets.ModelViewSet):
 
         from apps.billing.models import Subscription, Plan
         current_dependents = ParentChild.objects.filter(parent=request.user, is_active=True).count()
-        try:
-            sub = request.user.subscription
-            if sub.plan.slug == Plan.SLUG_INDIVIDUAL:
-                return Response(
-                    {'detail': 'O Plano Individual não permite cadastrar dependentes. Faça upgrade para o Plano Família.'},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
-            max_dependents = sub.plan.max_members - 1
-            if current_dependents >= max_dependents:
-                return Response(
-                    {'detail': f'Limite de {max_dependents} dependente(s) atingido para o seu plano.'},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-        except Subscription.DoesNotExist:
-            if current_dependents >= 1:
-                return Response(
-                    {'detail': 'Você precisa de uma assinatura ativa do Plano Família para adicionar mais dependentes.'},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
+        if not request.user.is_staff:
+            try:
+                sub = request.user.subscription
+                if sub.plan.slug == Plan.SLUG_INDIVIDUAL:
+                    return Response(
+                        {'detail': 'O Plano Individual não permite cadastrar dependentes. Faça upgrade para o Plano Família.'},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+                max_dependents = sub.plan.max_members - 1
+                if current_dependents >= max_dependents:
+                    return Response(
+                        {'detail': f'Limite de {max_dependents} dependente(s) atingido para o seu plano.'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+            except Subscription.DoesNotExist:
+                if current_dependents >= 1:
+                    return Response(
+                        {'detail': 'Você precisa de uma assinatura ativa do Plano Família para adicionar mais dependentes.'},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
 
         account_serializer = ChildAccountCreateSerializer(data=request.data, context={'request': request})
         account_serializer.is_valid(raise_exception=True)

@@ -1,5 +1,6 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MainTabParamList } from './types';
 import { HomeScreen } from '../screens/app/HomeScreen';
 import { TournamentsScreen } from '../screens/app/TournamentsScreen';
@@ -23,6 +24,7 @@ const icons: Record<keyof MainTabParamList, any> = {
 
 export function MainTabs() {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   return (
     <Tab.Navigator screenOptions={({ route }) => ({
       headerShown: false,
@@ -33,9 +35,9 @@ export function MainTabs() {
         borderTopWidth: 1,
         borderTopColor: colors.borderSubtle,
         elevation: 0,
-        height: 48,
+        height: 48 + insets.bottom,
         paddingTop: 2,
-        paddingBottom: 0,
+        paddingBottom: insets.bottom,
       },
       tabBarActiveTintColor: colors.accentNeon,
       tabBarInactiveTintColor: colors.textMuted,

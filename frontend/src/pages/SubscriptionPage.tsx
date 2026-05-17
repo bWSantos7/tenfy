@@ -50,7 +50,11 @@ export const SubscriptionPage: React.FC = () => {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [p, s] = await Promise.all([fetchPlans(), fetchSubscription()]);
+      // fetchSubscription() lança 404 quando não há assinatura — tratar como null
+      const [p, s] = await Promise.all([
+        fetchPlans(),
+        fetchSubscription().catch(() => null),
+      ]);
       setPlans(p);
       setSub(s);
     } catch (err) {
@@ -132,6 +136,18 @@ export const SubscriptionPage: React.FC = () => {
         <h1 className="text-2xl font-bold">Assinatura</h1>
         <p className="text-sm text-text-muted">Planos Individual e Família — pagamento via Asaas</p>
       </div>
+
+      {/* Estado vazio — sem assinatura ativa */}
+      {!sub && (
+        <div className="card text-center py-10 space-y-3">
+          <CreditCard className="w-10 h-10 text-text-muted mx-auto" />
+          <div>
+            <p className="font-semibold">Sem assinatura ativa</p>
+            <p className="text-sm text-text-muted mt-1">Você ainda não possui uma assinatura ativa.</p>
+          </div>
+          <p className="text-xs text-text-muted">Escolha um plano abaixo para começar.</p>
+        </div>
+      )}
 
       {/* Current subscription card */}
       {sub && (

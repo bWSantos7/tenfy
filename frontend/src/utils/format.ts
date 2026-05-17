@@ -80,6 +80,36 @@ export function statusBgClass(status: TournamentStatus): string {
   }
 }
 
+export const LEVEL_LABELS: Record<string, string> = {
+  beginner:   'Iniciante',
+  amateur:    'Amador',
+  federated:  'Federado',
+  youth:      'Juvenil',
+  pro:        'Profissional',
+};
+
+export const TENNIS_CLASS_LABELS: Record<string, string> = {
+  '1':   'Classe 1',
+  '2':   'Classe 2',
+  '3':   'Classe 3',
+  '4':   'Classe 4',
+  '5':   'Classe 5',
+  'PR':  'Pré-Ranking',
+  'PRO': 'Profissional',
+};
+
+export const GENDER_LABELS: Record<string, string> = {
+  M: 'Masculino',
+  F: 'Feminino',
+};
+
+export const ROLE_LABELS: Record<string, string> = {
+  player:  'Jogador(a)',
+  coach:   'Treinador(a)',
+  parent:  'Responsável',
+  admin:   'Administrador(a)',
+};
+
 export const STATUS_LABELS: Record<TournamentStatus, string> = {
   unknown: 'Desconhecido',
   announced: 'Anunciado',

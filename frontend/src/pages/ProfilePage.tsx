@@ -7,6 +7,7 @@ import { PlayerProfile } from '../types';
 import { listProfiles, setPrimary, deleteProfile, updateProfile } from '../services/data';
 import { deleteAccount, uploadAvatar } from '../services/auth';
 import { extractApiError, mediaUrl } from '../services/api';
+import { LEVEL_LABELS, GENDER_LABELS, TENNIS_CLASS_LABELS } from '../utils/format';
 
 // ─── Confirm Modal ────────────────────────────────────────────────────────────
 
@@ -206,11 +207,11 @@ export const ProfilePage: React.FC = () => {
                         )}
                       </div>
                       <div className="text-xs text-text-secondary mt-1 space-y-0.5">
-                        {p.birth_year && <div>Nascimento: {p.birth_year} (idade esportiva: {p.sporting_age})</div>}
-                        {p.gender && <div>Gênero: {p.gender === 'M' ? 'Masculino' : 'Feminino'}</div>}
-                        {p.tennis_class && <div>Classe: {p.tennis_class}</div>}
+                        {p.birth_year && <div>Nascimento: {p.birth_year}{p.sporting_age ? ` (idade esportiva: ${p.sporting_age})` : ''}</div>}
+                        {p.gender && <div>Gênero: {GENDER_LABELS[p.gender] ?? p.gender}</div>}
+                        {p.tennis_class && <div>Classe: {TENNIS_CLASS_LABELS[p.tennis_class] ?? p.tennis_class}</div>}
                         {p.home_state && <div>Local: {p.home_city ? `${p.home_city}/` : ''}{p.home_state} (raio {p.travel_radius_km}km)</div>}
-                        <div>Nível: {p.competitive_level}</div>
+                        <div>Nível: {LEVEL_LABELS[p.competitive_level] ?? p.competitive_level}</div>
                       </div>
                     </div>
                     <div className="flex flex-col gap-1">
@@ -346,11 +347,11 @@ const ProfileEditor: React.FC<{
         </select>
         <select className="input-base" value={form.competitive_level}
           onChange={(e) => setForm({ ...form, competitive_level: e.target.value as any })}>
-          <option value="beginner">Principiante</option>
+          <option value="beginner">Iniciante</option>
           <option value="amateur">Amador</option>
           <option value="federated">Federado</option>
           <option value="youth">Juvenil</option>
-          <option value="pro">Pro</option>
+          <option value="pro">Profissional</option>
         </select>
       </div>
       <div className="flex gap-2">

@@ -20,7 +20,7 @@ export const ProtectedRoute: React.FC<{ children: React.ReactNode; admin?: boole
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
   if (admin && !user?.is_staff) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/inicio" replace />;
   }
   return <>{children}</>;
 };
@@ -28,6 +28,6 @@ export const ProtectedRoute: React.FC<{ children: React.ReactNode; admin?: boole
 export const PublicOnlyRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
   if (loading) return null;
-  if (isAuthenticated) return <Navigate to="/" replace />;
+  if (isAuthenticated) return <Navigate to="/inicio" replace />;
   return <>{children}</>;
 };

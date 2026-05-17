@@ -8,7 +8,7 @@ import { unreadAlerts } from '../services/data';
 
 // Mobile: Alertas fica fora do nav inferior — acesso pelo sino no header
 const navItems = [
-  { to: '/', label: 'Início',      icon: Home,     end: true  },
+  { to: '/inicio', label: 'Início',      icon: Home,     end: true  },
   { to: '/torneios', label: 'Torneios',   icon: Calendar, end: false },
   { to: '/watchlist', label: 'Agenda',     icon: Star,     end: false },
   { to: '/resultados', label: 'Resultados', icon: Award,    end: false },
@@ -37,7 +37,7 @@ export const AppLayout: React.FC = () => {
       {/* ─── Header ─────────────────────────────────────────────────────── */}
       <header className="sticky top-0 z-30 bg-bg-card/90 backdrop-blur-lg border-b border-border-subtle shadow-sm">
         <div className="mx-auto max-w-5xl px-4 h-14 flex items-center justify-between">
-          <NavLink to="/" className="flex items-center gap-2.5">
+          <NavLink to="/inicio" className="flex items-center gap-2.5">
             <img src="/logo2.png" alt="Tenfy" className="h-7 object-contain" style={{ maxWidth: 120 }} />
           </NavLink>
 

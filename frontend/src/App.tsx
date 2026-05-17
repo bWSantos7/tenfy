@@ -9,6 +9,7 @@ const ForgotPasswordPage  = React.lazy(() => import('./pages/ForgotPasswordPage'
 const ResetPasswordPage   = React.lazy(() => import('./pages/ResetPasswordPage').then(m => ({ default: m.ResetPasswordPage })));
 const OnboardingPage      = React.lazy(() => import('./pages/OnboardingPage').then(m => ({ default: m.OnboardingPage })));
 const HomePage            = React.lazy(() => import('./pages/HomePage').then(m => ({ default: m.HomePage })));
+const LandingPage         = React.lazy(() => import('./pages/LandingPage').then(m => ({ default: m.LandingPage })));
 const TournamentsPage     = React.lazy(() => import('./pages/TournamentsPage').then(m => ({ default: m.TournamentsPage })));
 const TournamentDetailPage = React.lazy(() => import('./pages/TournamentDetailPage').then(m => ({ default: m.TournamentDetailPage })));
 const WatchlistPage       = React.lazy(() => import('./pages/WatchlistPage').then(m => ({ default: m.WatchlistPage })));
@@ -68,6 +69,8 @@ const App: React.FC = () => {
           }
         />
 
+        <Route path="/" element={<LandingPage />} />
+
         <Route
           element={
             <ProtectedRoute>
@@ -75,7 +78,7 @@ const App: React.FC = () => {
             </ProtectedRoute>
           }
         >
-          <Route index element={<HomePage />} />
+          <Route path="inicio" element={<HomePage />} />
           <Route path="torneios" element={<TournamentsPage />} />
           <Route path="torneios/:id" element={<TournamentDetailPage />} />
           <Route path="watchlist" element={<WatchlistPage />} />

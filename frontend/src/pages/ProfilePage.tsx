@@ -4,7 +4,7 @@ import { StateMultiSelect, loadCitiesForState, ALL_UFS } from '../components/Sta
 import {
   Loader2, Trash2, Mail, Edit2, CheckCircle2, Camera, AlertTriangle,
   Sun, Moon, CreditCard, Ticket, Users, ShieldCheck, Bell, LogOut,
-  MapPin, Trophy, Calendar, User, ChevronRight, Shield, Download, Plus, Eye, EyeOff,
+  MapPin, Trophy, Calendar, User, ChevronRight, Shield, Download, Plus, Eye, EyeOff, Star,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
@@ -191,6 +191,27 @@ export const ProfilePage: React.FC = () => {
         </div>
       </div>
 
+      {/* ─── Meu responsável (só para contas gerenciadas) ─────────────────── */}
+      {user?.managed_by_parent && user?.parent_info && (
+        <div className="card space-y-3">
+          <div className="flex items-center gap-2">
+            <Shield className="w-4 h-4 text-accent-blue" />
+            <h2 className="font-bold text-sm">Meu responsável</h2>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-accent-blue/15 flex items-center justify-center shrink-0">
+              <span className="text-accent-blue font-bold text-base">
+                {(user.parent_info.full_name || 'R').slice(0, 1).toUpperCase()}
+              </span>
+            </div>
+            <div>
+              <div className="font-semibold text-sm">{user.parent_info.full_name || '—'}</div>
+              <div className="text-xs text-text-muted">{user.parent_info.email}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ─── Configurações da conta (menu igual ao mobile) ────────────────── */}
       <div className="card space-y-0 !p-0 overflow-hidden">
         <div className="px-4 py-3 border-b border-border-subtle">
@@ -206,10 +227,19 @@ export const ProfilePage: React.FC = () => {
           <ChevronRight className="w-4 h-4 text-text-muted" />
         </button>
 
-        {/* Assinatura */}
-        <Link to="/assinatura" className="menu-row px-4 flex items-center gap-3">
-          <CreditCard className="w-4 h-4 text-text-muted shrink-0" />
-          <span className="flex-1 text-sm">Minha assinatura</span>
+        {/* Assinatura — não exibir para contas gerenciadas */}
+        {!user?.managed_by_parent && (
+          <Link to="/assinatura" className="menu-row px-4 flex items-center gap-3">
+            <CreditCard className="w-4 h-4 text-text-muted shrink-0" />
+            <span className="flex-1 text-sm">Minha assinatura</span>
+            <ChevronRight className="w-4 h-4 text-text-muted" />
+          </Link>
+        )}
+
+        {/* Inscrições */}
+        <Link to="/inscricoes" className="menu-row px-4 flex items-center gap-3">
+          <Ticket className="w-4 h-4 text-text-muted shrink-0" />
+          <span className="flex-1 text-sm">Minhas inscrições</span>
           <ChevronRight className="w-4 h-4 text-text-muted" />
         </Link>
 
@@ -222,7 +252,7 @@ export const ProfilePage: React.FC = () => {
 
         {/* Watchlist */}
         <Link to="/watchlist" className="menu-row px-4 flex items-center gap-3">
-          <Ticket className="w-4 h-4 text-text-muted shrink-0" />
+          <Star className="w-4 h-4 text-text-muted shrink-0" />
           <span className="flex-1 text-sm">Minha agenda</span>
           <ChevronRight className="w-4 h-4 text-text-muted" />
         </Link>

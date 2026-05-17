@@ -19,6 +19,7 @@ const ResultsPage         = React.lazy(() => import('./pages/ResultsPage').then(
 const CoachPage           = React.lazy(() => import('./pages/CoachPage').then(m => ({ default: m.CoachPage })));
 const SubscriptionPage    = React.lazy(() => import('./pages/SubscriptionPage').then(m => ({ default: m.SubscriptionPage })));
 const PrivacyPolicyPage   = React.lazy(() => import('./pages/PrivacyPolicyPage').then(m => ({ default: m.PrivacyPolicyPage })));
+const InscricoesPage      = React.lazy(() => import('./pages/InscricoesPage').then(m => ({ default: m.InscricoesPage })));
 
 const PageLoader: React.FC = () => (
   <div className="min-h-screen bg-bg-base flex items-center justify-center">
@@ -82,6 +83,7 @@ const App: React.FC = () => {
           <Route path="alertas" element={<AlertsPage />} />
           <Route path="perfil" element={<ProfilePage />} />
           <Route path="assinatura" element={<SubscriptionPage />} />
+          <Route path="inscricoes" element={<InscricoesPage />} />
           <Route path="treinador" element={<CoachPage />} />
           <Route
             path="admin-panel"

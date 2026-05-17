@@ -91,6 +91,31 @@ export interface ParentChild {
   created_at: string;
 }
 
+export type RegistrationStatus = 'confirmed' | 'waiting_list' | 'pending_payment' | 'withdrawn';
+export type PaymentStatus = 'paid' | 'pending' | 'waived' | 'refunded' | 'unknown';
+
+export interface TournamentRegistration {
+  id: number;
+  edition_id: number;
+  edition_title: string;
+  edition_start_date: string | null;
+  edition_end_date: string | null;
+  edition_status: string;
+  category_text: string | null;
+  max_participants: number | null;
+  registered_at: string;
+  ranking_position: number | null;
+  payment_status: PaymentStatus;
+  payment_status_label: string;
+  payment_confirmed_at: string | null;
+  is_withdrawn: boolean;
+  withdrawn_at: string | null;
+  slot_position: number | null;
+  in_draw: boolean | null;
+  registration_status: RegistrationStatus;
+  registration_status_label: string;
+}
+
 export type TournamentStatus =
   | 'unknown' | 'announced' | 'open' | 'closing_soon'
   | 'closed' | 'draws_published' | 'in_progress'

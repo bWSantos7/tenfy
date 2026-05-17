@@ -1,16 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { StateMultiSelect, loadCitiesForState } from '../components/StateMultiSelect';
+import { StateMultiSelect, loadCitiesForState, ALL_UFS } from '../components/StateMultiSelect';
 import {
   Loader2, Trash2, Mail, Edit2, CheckCircle2, Camera, AlertTriangle,
   Sun, Moon, CreditCard, Ticket, Users, ShieldCheck, Bell, LogOut,
-  MapPin, Trophy, Calendar, User, ChevronRight, Shield, Download,
+  MapPin, Trophy, Calendar, User, ChevronRight, Shield, Download, Plus, Eye, EyeOff,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { PlayerProfile } from '../types';
-import { listProfiles, setPrimary, deleteProfile, updateProfile, requestDataExport } from '../services/data';
+import { ParentChild, PlayerProfile } from '../types';
+import { listProfiles, setPrimary, deleteProfile, updateProfile, requestDataExport, listChildren, removeChild, createChildWithProfile } from '../services/data';
 import { deleteAccount, uploadAvatar } from '../services/auth';
 import { extractApiError, mediaUrl } from '../services/api';
 import { LEVEL_LABELS, GENDER_LABELS, TENNIS_CLASS_LABELS, ROLE_LABELS } from '../utils/format';
@@ -56,6 +56,12 @@ export const ProfilePage: React.FC = () => {
   const [exporting, setExporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Dependentes
+  const [children, setChildren] = useState<ParentChild[]>([]);
+  const [loadingChildren, setLoadingChildren] = useState(false);
+  const [showAddChild, setShowAddChild] = useState(false);
+  const [confirmRemoveChild, setConfirmRemoveChild] = useState<number | null>(null);
+
   async function load() {
     setLoading(true);
     try {
@@ -68,7 +74,23 @@ export const ProfilePage: React.FC = () => {
     }
   }
 
+  async function loadChildren() {
+    setLoadingChildren(true);
+    try {
+      const data = await listChildren();
+      setChildren(data);
+    } catch {
+      // silently ignore if endpoint not available
+    } finally {
+      setLoadingChildren(false);
+    }
+  }
+
   useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    if (user?.role === 'parent') loadChildren();
+  }, [user?.role]);
 
   async function makePrimary(id: number) {
     try { await setPrimary(id); toast.success('Perfil principal atualizado'); load(); }
@@ -95,6 +117,13 @@ export const ProfilePage: React.FC = () => {
     try { const updated = await uploadAvatar(file); setUser(updated); toast.success('Foto atualizada'); }
     catch (err) { toast.error(extractApiError(err)); }
     finally { setUploadingAvatar(false); if (fileInputRef.current) fileInputRef.current.value = ''; }
+  }
+
+  async function handleRemoveChildConfirmed() {
+    if (confirmRemoveChild == null) return;
+    try { await removeChild(confirmRemoveChild); toast.success('Dependente removido'); loadChildren(); }
+    catch (err) { toast.error(extractApiError(err)); }
+    finally { setConfirmRemoveChild(null); }
   }
 
   async function handleExport() {
@@ -273,6 +302,64 @@ export const ProfilePage: React.FC = () => {
         )}
       </div>
 
+      {/* ─── Meus dependentes (só para role parent) ───────────────────────── */}
+      {user?.role === 'parent' && (
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h2 className="font-bold">Meus dependentes — Perfil esportivo</h2>
+              <p className="text-xs text-text-muted mt-0.5">Gerencie os dependentes e seus perfis de jogador</p>
+            </div>
+            <button
+              onClick={() => setShowAddChild((v) => !v)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-accent-neon bg-accent-neon/10 border border-accent-neon/30 hover:bg-accent-neon/20 transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" /> Novo
+            </button>
+          </div>
+
+          {showAddChild && (
+            <AddChildForm
+              onAdded={() => { setShowAddChild(false); loadChildren(); }}
+              onCancel={() => setShowAddChild(false)}
+            />
+          )}
+
+          {loadingChildren ? (
+            <div className="py-6 flex justify-center"><Loader2 className="w-5 h-5 text-accent-neon animate-spin" /></div>
+          ) : children.length === 0 && !showAddChild ? (
+            <div className="card text-center py-8 space-y-2">
+              <Users className="w-8 h-8 text-text-muted mx-auto" />
+              <p className="text-sm text-text-muted">Nenhum dependente cadastrado.</p>
+              <button onClick={() => setShowAddChild(true)} className="text-sm text-accent-neon hover:underline font-medium">Adicionar agora</button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {children.map((c) => (
+                <div key={c.id} className="card flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-9 h-9 rounded-full bg-accent-neon/15 flex items-center justify-center shrink-0">
+                      <User className="w-4 h-4 text-accent-neon" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="font-semibold text-sm truncate">{c.child_detail.full_name || '—'}</div>
+                      <div className="text-xs text-text-muted truncate">{c.child_detail.email}</div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setConfirmRemoveChild(c.id)}
+                    className="shrink-0 p-1.5 rounded-lg bg-bg-elevated hover:bg-red-500/15 text-text-muted hover:text-red-400 transition-colors"
+                    title="Remover dependente"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ─── Privacidade e dados (LGPD) — igual ao mobile ─────────────────── */}
       <div className="card space-y-3">
         <div className="flex items-center gap-2">
@@ -317,6 +404,16 @@ export const ProfilePage: React.FC = () => {
           danger
           onConfirm={handleDeleteAccountConfirmed}
           onCancel={() => setConfirmDelete(false)}
+        />
+      )}
+      {confirmRemoveChild != null && (
+        <ConfirmModal
+          title="Remover dependente"
+          message="O vínculo com este dependente será removido. Deseja continuar?"
+          confirmLabel="Remover"
+          danger
+          onConfirm={handleRemoveChildConfirmed}
+          onCancel={() => setConfirmRemoveChild(null)}
         />
       )}
     </div>
@@ -518,6 +615,199 @@ const ProfileEditor: React.FC<{
         <button className="btn-primary flex-1" onClick={save} disabled={saving}>
           {saving ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Salvar'}
         </button>
+      </div>
+    </div>
+  );
+};
+
+// ─── AddChildForm — Novo dependente (igual ao mobile) ─────────────────────────
+
+const UF_OPTIONS = ALL_UFS;
+
+const AddChildForm: React.FC<{
+  onAdded: () => void;
+  onCancel: () => void;
+}> = ({ onAdded, onCancel }) => {
+  const [account, setAccount] = useState({
+    full_name: '',
+    email: '',
+    password: '',
+    confirm_password: '',
+  });
+  const [profile, setProfile] = useState({
+    display_name: '',
+    birth_year: '',
+    gender: '' as '' | 'M' | 'F',
+    home_state: 'SP',
+    home_city: '',
+    travel_states: [] as string[],
+    competitive_level: 'amateur',
+    tennis_class: '',
+  });
+  const [showPwd, setShowPwd] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [cities, setCities] = useState<{ value: string; label: string }[]>([]);
+  const [loadingCities, setLoadingCities] = useState(false);
+
+  useEffect(() => {
+    setLoadingCities(true);
+    loadCitiesForState(profile.home_state)
+      .then(setCities)
+      .finally(() => setLoadingCities(false));
+  }, [profile.home_state]);
+
+  async function handleSubmit() {
+    if (!account.full_name.trim()) { toast.error('Informe o nome completo.'); return; }
+    if (!account.email.trim()) { toast.error('Informe o e-mail.'); return; }
+    if (account.password.length < 8) { toast.error('Senha deve ter pelo menos 8 caracteres.'); return; }
+    if (account.password !== account.confirm_password) { toast.error('As senhas não conferem.'); return; }
+    if (!profile.birth_year) { toast.error('Informe o ano de nascimento.'); return; }
+    setSaving(true);
+    try {
+      await createChildWithProfile(
+        { full_name: account.full_name, email: account.email, password: account.password, password_confirm: account.confirm_password },
+        {
+          display_name: profile.display_name || account.full_name,
+          birth_year: Number(profile.birth_year),
+          gender: profile.gender || undefined,
+          home_state: profile.home_state,
+          home_city: profile.home_city,
+          travel_states: profile.travel_states,
+          competitive_level: profile.competitive_level as any,
+          tennis_class: profile.tennis_class,
+          is_primary: true,
+        },
+      );
+      toast.success('Dependente adicionado!');
+      onAdded();
+    } catch (err) { toast.error(extractApiError(err)); }
+    finally { setSaving(false); }
+  }
+
+  return (
+    <div className="card space-y-4 mb-3">
+      <div>
+        <h3 className="font-bold text-base">Novo dependente</h3>
+        <p className="text-xs text-text-secondary mt-1">Preencha os dados de acesso e o perfil esportivo. Campos com * são obrigatórios.</p>
+      </div>
+      <hr className="border-border-subtle" />
+
+      {/* Dados de acesso */}
+      <div className="space-y-3">
+        <h4 className="text-xs font-bold text-text-muted uppercase tracking-wide">Dados de acesso</h4>
+        <div>
+          <label className="text-xs text-text-secondary mb-1 block">Nome completo *</label>
+          <input className="input-base" placeholder="Nome do dependente"
+            value={account.full_name} onChange={(e) => setAccount({ ...account, full_name: e.target.value })} />
+        </div>
+        <div>
+          <label className="text-xs text-text-secondary mb-1 block">E-mail *</label>
+          <input className="input-base" type="email" placeholder="email@exemplo.com"
+            value={account.email} onChange={(e) => setAccount({ ...account, email: e.target.value })} />
+        </div>
+        <div>
+          <label className="text-xs text-text-secondary mb-1 block">Senha inicial *</label>
+          <div className="relative">
+            <input className="input-base pr-10" type={showPwd ? 'text' : 'password'} placeholder="Mínimo 8 caracteres"
+              value={account.password} onChange={(e) => setAccount({ ...account, password: e.target.value })} />
+            <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
+              onClick={() => setShowPwd((v) => !v)}>
+              {showPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
+        </div>
+        <div>
+          <label className="text-xs text-text-secondary mb-1 block">Confirmar senha *</label>
+          <div className="relative">
+            <input className="input-base pr-10" type={showConfirm ? 'text' : 'password'} placeholder="Repita a senha"
+              value={account.confirm_password} onChange={(e) => setAccount({ ...account, confirm_password: e.target.value })} />
+            <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
+              onClick={() => setShowConfirm((v) => !v)}>
+              {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <hr className="border-border-subtle" />
+
+      {/* Perfil esportivo */}
+      <div className="space-y-3">
+        <h4 className="text-xs font-bold text-text-muted uppercase tracking-wide">Perfil esportivo</h4>
+        <div>
+          <label className="text-xs text-text-secondary mb-1 block">Nome do atleta</label>
+          <input className="input-base" placeholder="Deixe em branco para usar o nome completo"
+            value={profile.display_name} onChange={(e) => setProfile({ ...profile, display_name: e.target.value })} />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-xs text-text-secondary mb-1 block">Ano de nascimento *</label>
+            <input className="input-base" type="number" min={1900} max={new Date().getFullYear()} placeholder="Ex: 2010"
+              value={profile.birth_year} onChange={(e) => setProfile({ ...profile, birth_year: e.target.value })} />
+          </div>
+          <div>
+            <label className="text-xs text-text-secondary mb-1 block">Gênero *</label>
+            <select className="input-base" value={profile.gender}
+              onChange={(e) => setProfile({ ...profile, gender: e.target.value as '' | 'M' | 'F' })}>
+              <option value="">Selecione...</option>
+              <option value="M">Masculino</option>
+              <option value="F">Feminino</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2">
+          <div>
+            <label className="text-xs text-text-secondary mb-1 block">Estado (UF) *</label>
+            <select className="input-base" value={profile.home_state}
+              onChange={(e) => setProfile({ ...profile, home_state: e.target.value, home_city: '' })}>
+              {UF_OPTIONS.map((uf) => <option key={uf} value={uf}>{uf}</option>)}
+            </select>
+          </div>
+          <div className="col-span-2">
+            <label className="text-xs text-text-secondary mb-1 block">Cidade</label>
+            {cities.length > 0 ? (
+              <select className="input-base" value={profile.home_city}
+                onChange={(e) => setProfile({ ...profile, home_city: e.target.value })}>
+                <option value="">{loadingCities ? 'Carregando...' : 'Selecione a cidade'}</option>
+                {cities.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+              </select>
+            ) : (
+              <input className="input-base" placeholder={loadingCities ? 'Carregando...' : 'Cidade'} value={profile.home_city}
+                onChange={(e) => setProfile({ ...profile, home_city: e.target.value })} />
+            )}
+          </div>
+        </div>
+
+        <StateMultiSelect
+          values={profile.travel_states}
+          onChange={(vals) => setProfile({ ...profile, travel_states: vals })}
+        />
+
+        <div>
+          <label className="text-xs text-text-secondary mb-1 block">Nível competitivo *</label>
+          <select className="input-base" value={profile.competitive_level}
+            onChange={(e) => setProfile({ ...profile, competitive_level: e.target.value })}>
+            {Object.entries(LEVEL_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs text-text-secondary mb-1 block">Classe</label>
+          <select className="input-base" value={profile.tennis_class}
+            onChange={(e) => setProfile({ ...profile, tennis_class: e.target.value })}>
+            <option value="">Sem classe definida</option>
+            {Object.entries(TENNIS_CLASS_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2 pt-1">
+        <button className="btn-primary w-full flex items-center justify-center gap-2" onClick={handleSubmit} disabled={saving}>
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+          Adicionar dependente
+        </button>
+        <button className="btn-secondary w-full" onClick={onCancel}>Cancelar</button>
       </div>
     </div>
   );

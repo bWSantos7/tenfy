@@ -35,12 +35,15 @@ export const LoginPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-bg-base flex flex-col items-center justify-center px-4">
       <div className="w-full max-w-sm">
-        <div className="flex flex-col items-center mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-accent-neon flex items-center justify-center shadow-glow mb-4 overflow-hidden">
-            <img src="/icons/logo.png" alt="Tenfy" className="w-12 h-12 object-contain" />
-          </div>
-          <h1 className="text-2xl font-bold tracking-tight">Tenfy</h1>
-          <p className="text-text-muted text-sm mt-1">Seu calendário inteligente de torneios</p>
+
+        {/* Logo largo — igual ao mobile */}
+        <div className="flex justify-center mb-8">
+          <img
+            src="/logo2.png"
+            alt="Tenfy"
+            className="h-12 object-contain"
+            style={{ maxWidth: 200 }}
+          />
         </div>
 
         <form onSubmit={onSubmit} className="card space-y-4">
@@ -85,12 +88,8 @@ export const LoginPage: React.FC = () => {
             {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
             Entrar
           </button>
-
           <div className="text-center">
-            <Link
-              to="/recuperar-senha"
-              className="text-xs text-text-muted hover:text-accent-neon transition-colors"
-            >
+            <Link to="/recuperar-senha" className="text-xs text-text-muted hover:text-accent-neon transition-colors">
               Esqueceu a senha?
             </Link>
           </div>
@@ -98,9 +97,7 @@ export const LoginPage: React.FC = () => {
 
         <div className="text-center mt-4 text-sm text-text-secondary">
           Novo por aqui?{' '}
-          <Link to="/register" className="text-accent-neon font-medium hover:underline">
-            Criar conta
-          </Link>
+          <Link to="/register" className="text-accent-neon font-medium hover:underline">Criar conta</Link>
         </div>
       </div>
     </div>

@@ -115,3 +115,9 @@ export async function markAlertRead(id: number) {
 export async function markAllAlertsRead() {
   return api.post('/api/alerts/mark-all-read/');
 }
+
+// ----- LGPD -----
+export async function requestDataExport(): Promise<object> {
+  const res = await api.get<object>('/api/auth/data-export/');
+  return res.data;
+}

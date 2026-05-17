@@ -290,14 +290,18 @@ export const ProfilePage: React.FC = () => {
         <div className="flex items-center justify-between mb-3">
           <div>
             <h2 className="font-bold">Perfil esportivo</h2>
-            <p className="text-xs text-text-muted mt-0.5">Gerencie seu perfil de jogador</p>
+            <p className="text-xs text-text-muted mt-0.5">
+              {user?.managed_by_parent ? 'Seu perfil de jogador (gerenciado pelo responsável)' : 'Gerencie seu perfil de jogador'}
+            </p>
           </div>
-          <Link
-            to="/onboarding"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-accent-neon bg-accent-neon/10 border border-accent-neon/30 hover:bg-accent-neon/20 transition-colors"
-          >
-            + {profiles.length === 0 ? 'Criar' : 'Novo'}
-          </Link>
+          {!user?.managed_by_parent && (
+            <Link
+              to="/onboarding"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-accent-neon bg-accent-neon/10 border border-accent-neon/30 hover:bg-accent-neon/20 transition-colors"
+            >
+              + {profiles.length === 0 ? 'Criar' : 'Novo'}
+            </Link>
+          )}
         </div>
 
         {loading ? (
@@ -325,6 +329,7 @@ export const ProfilePage: React.FC = () => {
                   onEdit={() => setEditing(p)}
                   onMakePrimary={() => makePrimary(p.id)}
                   onRemove={() => setConfirmRemove(p.id)}
+                  readOnly={!!user?.managed_by_parent}
                 />
               )
             )}
@@ -457,7 +462,8 @@ const ProfileCard: React.FC<{
   onEdit: () => void;
   onMakePrimary: () => void;
   onRemove: () => void;
-}> = ({ profile: p, onEdit, onMakePrimary, onRemove }) => {
+  readOnly?: boolean;
+}> = ({ profile: p, onEdit, onMakePrimary, onRemove, readOnly = false }) => {
   const levelLabel = LEVEL_LABELS[p.competitive_level] ?? p.competitive_level;
   const classLabel = p.tennis_class ? (TENNIS_CLASS_LABELS[p.tennis_class] ?? `Classe ${p.tennis_class}`) : null;
   const genderLabel = p.gender ? (GENDER_LABELS[p.gender] ?? p.gender) : null;
@@ -473,9 +479,11 @@ const ProfileCard: React.FC<{
             </span>
           )}
         </div>
-        <button className="btn-ghost !p-1.5" onClick={onEdit} title="Editar">
-          <Edit2 className="w-4 h-4" />
-        </button>
+        {!readOnly && (
+          <button className="btn-ghost !p-1.5" onClick={onEdit} title="Editar">
+            <Edit2 className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
       {/* Rows com ícones — igual ao mobile ProfileCard */}
@@ -508,15 +516,17 @@ const ProfileCard: React.FC<{
         </div>
       </div>
 
-      <div className="flex gap-2 pt-1">
-        <button className="btn-secondary flex-1 !text-sm !py-2" onClick={onEdit}>Editar</button>
-        {!p.is_primary && (
-          <button className="btn-ghost flex-1 !text-sm !py-2 border border-border-subtle" onClick={onMakePrimary}>Selecionar</button>
-        )}
-        <button className="btn-primary flex-1 !text-sm !py-2 !bg-red-500 !border-red-500/60 shadow-none hover:!bg-red-600" onClick={onRemove}>
-          <Trash2 className="w-3.5 h-3.5 inline mr-1" />Remover
-        </button>
-      </div>
+      {!readOnly && (
+        <div className="flex gap-2 pt-1">
+          <button className="btn-secondary flex-1 !text-sm !py-2" onClick={onEdit}>Editar</button>
+          {!p.is_primary && (
+            <button className="btn-ghost flex-1 !text-sm !py-2 border border-border-subtle" onClick={onMakePrimary}>Selecionar</button>
+          )}
+          <button className="btn-primary flex-1 !text-sm !py-2 !bg-red-500 !border-red-500/60 shadow-none hover:!bg-red-600" onClick={onRemove}>
+            <Trash2 className="w-3.5 h-3.5 inline mr-1" />Remover
+          </button>
+        </div>
+      )}
     </div>
   );
 };

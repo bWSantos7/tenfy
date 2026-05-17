@@ -13,6 +13,9 @@ export interface User {
   marketing_consent: boolean;
   is_staff: boolean;
   created_at: string;
+  // Campos de conta gerenciada (parent/filho)
+  managed_by_parent?: boolean;
+  parent_info?: { full_name: string; email: string } | null;
 }
 
 export interface AuthTokens {
@@ -59,6 +62,7 @@ export interface PlayerProfileCategory {
 
 export interface PlayerProfile {
   id: number;
+  user_id?: number;
   display_name: string;
   birth_year: number | null;
   birth_date: string | null;
@@ -66,6 +70,7 @@ export interface PlayerProfile {
   home_state: string;
   home_city: string;
   travel_radius_km: number;
+  travel_states: string[];       // Array de UFs — fonte da verdade para filtros
   competitive_level: 'beginner' | 'amateur' | 'federated' | 'youth' | 'pro';
   dominant_hand: 'R' | 'L' | '';
   tennis_class: string;
@@ -75,6 +80,15 @@ export interface PlayerProfile {
   sporting_age: number | null;
   created_at: string;
   updated_at: string;
+}
+
+// Relação responsável ↔ dependente
+export interface ParentChild {
+  id: number;
+  child: number;
+  child_detail: User;
+  is_active: boolean;
+  created_at: string;
 }
 
 export type TournamentStatus =
@@ -180,8 +194,6 @@ export interface EligibilityResult {
   rule_version_id: number | null;
   category_code: string | null;
   category_label: string | null;
-  // Ranking metadata — informational only. Backend never marks compatible
-  // based on ranking, only adds context.
   ranking_check?: RankingCheck;
   ranking_note?: string;
 }

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { StateMultiSelect, loadCitiesForState } from '../components/StateMultiSelect';
 import {
   Loader2, Trash2, Mail, Edit2, CheckCircle2, Camera, AlertTriangle,
   Sun, Moon, CreditCard, Ticket, Users, ShieldCheck, Bell, LogOut,
@@ -393,9 +394,9 @@ const ProfileCard: React.FC<{
   );
 };
 
-// ─── ProfileEditor — edição completa com selects ──────────────────────────────
+// ─── ProfileEditor — edição completa com states multiselect ──────────────────
 
-const STATES = [
+const UF_OPTIONS_EDITOR = [
   'AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB',
   'PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO',
 ];
@@ -406,16 +407,25 @@ const ProfileEditor: React.FC<{
   onCancel: () => void;
 }> = ({ profile, onSaved, onCancel }) => {
   const [form, setForm] = useState({
-    display_name: profile.display_name,
-    birth_year:   profile.birth_year ? String(profile.birth_year) : '',
-    gender:       profile.gender ?? '',
-    home_state:   profile.home_state ?? 'SP',
-    home_city:    profile.home_city ?? '',
-    travel_radius_km: profile.travel_radius_km ?? 100,
-    tennis_class: profile.tennis_class ?? '',
+    display_name:      profile.display_name,
+    birth_year:        profile.birth_year ? String(profile.birth_year) : '',
+    gender:            profile.gender ?? '' as '' | 'M' | 'F',
+    home_state:        profile.home_state ?? 'SP',
+    home_city:         profile.home_city ?? '',
+    travel_states:     profile.travel_states ?? [],
+    tennis_class:      profile.tennis_class ?? '',
     competitive_level: profile.competitive_level ?? 'amateur',
   });
   const [saving, setSaving] = useState(false);
+  const [cities, setCities] = useState<{ value: string; label: string }[]>([]);
+  const [loadingCities, setLoadingCities] = useState(false);
+
+  useEffect(() => {
+    setLoadingCities(true);
+    loadCitiesForState(form.home_state)
+      .then(setCities)
+      .finally(() => setLoadingCities(false));
+  }, [form.home_state]);
 
   async function save() {
     setSaving(true);
@@ -447,7 +457,8 @@ const ProfileEditor: React.FC<{
         </div>
         <div>
           <label className="text-xs text-text-secondary mb-1 block">Gênero</label>
-          <select className="input-base" value={form.gender} onChange={(e) => setForm({ ...form, gender: e.target.value as '' | 'M' | 'F' })}>
+          <select className="input-base" value={form.gender}
+            onChange={(e) => setForm({ ...form, gender: e.target.value as '' | 'M' | 'F' })}>
             <option value="">—</option>
             <option value="M">Masculino</option>
             <option value="F">Feminino</option>
@@ -458,37 +469,45 @@ const ProfileEditor: React.FC<{
       <div className="grid grid-cols-3 gap-2">
         <div>
           <label className="text-xs text-text-secondary mb-1 block">UF</label>
-          <select className="input-base" value={form.home_state} onChange={(e) => setForm({ ...form, home_state: e.target.value })}>
-            {STATES.map((uf) => <option key={uf} value={uf}>{uf}</option>)}
+          <select className="input-base" value={form.home_state}
+            onChange={(e) => setForm({ ...form, home_state: e.target.value, home_city: '' })}>
+            {UF_OPTIONS_EDITOR.map((uf) => <option key={uf} value={uf}>{uf}</option>)}
           </select>
         </div>
         <div className="col-span-2">
           <label className="text-xs text-text-secondary mb-1 block">Cidade</label>
-          <input className="input-base" placeholder="Cidade" value={form.home_city}
-            onChange={(e) => setForm({ ...form, home_city: e.target.value })} />
+          {cities.length > 0 ? (
+            <select className="input-base" value={form.home_city}
+              onChange={(e) => setForm({ ...form, home_city: e.target.value })}>
+              <option value="">{loadingCities ? 'Carregando...' : 'Selecione'}</option>
+              {cities.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+            </select>
+          ) : (
+            <input className="input-base" placeholder={loadingCities ? 'Carregando...' : 'Cidade'} value={form.home_city}
+              onChange={(e) => setForm({ ...form, home_city: e.target.value })} />
+          )}
         </div>
       </div>
 
-      <div>
-        <label className="text-xs text-text-secondary mb-1 block">
-          Raio de viagem: <span className="text-accent-neon font-semibold">{form.travel_radius_km} km</span>
-        </label>
-        <input type="range" min={25} max={1000} step={25} value={form.travel_radius_km}
-          onChange={(e) => setForm({ ...form, travel_radius_km: Number(e.target.value) })}
-          className="w-full accent-accent-neon" />
-      </div>
+      {/* Estados onde aceita jogar — sem raio de km */}
+      <StateMultiSelect
+        values={form.travel_states}
+        onChange={(vals) => setForm({ ...form, travel_states: vals })}
+      />
 
       <div className="grid grid-cols-2 gap-2">
         <div>
           <label className="text-xs text-text-secondary mb-1 block">Nível</label>
-          <select className="input-base" value={form.competitive_level} onChange={(e) => setForm({ ...form, competitive_level: e.target.value as any })}>
+          <select className="input-base" value={form.competitive_level}
+            onChange={(e) => setForm({ ...form, competitive_level: e.target.value as any })}>
             {Object.entries(LEVEL_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
         </div>
         <div>
           <label className="text-xs text-text-secondary mb-1 block">Classe</label>
-          <select className="input-base" value={form.tennis_class} onChange={(e) => setForm({ ...form, tennis_class: e.target.value })}>
-            <option value="">—</option>
+          <select className="input-base" value={form.tennis_class}
+            onChange={(e) => setForm({ ...form, tennis_class: e.target.value })}>
+            <option value="">Sem classe</option>
             {Object.entries(TENNIS_CLASS_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
         </div>

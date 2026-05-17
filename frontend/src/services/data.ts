@@ -1,5 +1,5 @@
 import api from './api';
-import { Alert, CoachAthlete, Paginated, PlayerCategory, PlayerProfile, WatchlistItem } from '../types';
+import { Alert, CoachAthlete, Paginated, ParentChild, PlayerCategory, PlayerProfile, WatchlistItem } from '../types';
 
 // ----- Players -----
 export async function listProfiles() {
@@ -74,6 +74,47 @@ export async function saveResult(watchlistItemId: number, data: {
 }) {
   const res = await api.post(`/api/watchlist/${watchlistItemId}/result/`, data);
   return res.data;
+}
+
+// ----- Parent / Children -----
+
+export async function listChildren(): Promise<ParentChild[]> {
+  const res = await api.get<Paginated<ParentChild> | ParentChild[]>('/api/auth/children/');
+  const d = res.data as Paginated<ParentChild>;
+  return d.results ?? (res.data as ParentChild[]);
+}
+
+export async function removeChild(linkId: number): Promise<void> {
+  await api.delete(`/api/auth/children/${linkId}/`);
+}
+
+export async function listChildProfiles(childUserId: number): Promise<PlayerProfile[]> {
+  const res = await api.get<Paginated<PlayerProfile> | PlayerProfile[]>(`/api/players/profiles/?user_id=${childUserId}`);
+  const d = res.data as Paginated<PlayerProfile>;
+  return d.results ?? (res.data as PlayerProfile[]);
+}
+
+export async function listChildWatchlist(childUserId: number): Promise<WatchlistItem[]> {
+  const res = await api.get<Paginated<WatchlistItem> | WatchlistItem[]>(`/api/watchlist/?user_id=${childUserId}`);
+  const d = res.data as Paginated<WatchlistItem>;
+  return d.results ?? (res.data as WatchlistItem[]);
+}
+
+export async function createChildProfile(linkId: number, data: Partial<PlayerProfile>): Promise<PlayerProfile> {
+  const res = await api.post<PlayerProfile>(`/api/auth/children/${linkId}/profile/`, data);
+  return res.data;
+}
+
+export async function createChildWithProfile(
+  accountData: { full_name: string; email: string; password: string; password_confirm: string },
+  profileData: Partial<PlayerProfile>,
+): Promise<{ user: import('../types').User; profile: PlayerProfile }> {
+  const res = await api.post('/api/auth/children/create-with-profile/', { ...accountData, profile: profileData });
+  return res.data;
+}
+
+export async function sendChildPasswordReset(linkId: number): Promise<void> {
+  await api.post(`/api/auth/children/${linkId}/password-reset/`);
 }
 
 // ----- Coach -----

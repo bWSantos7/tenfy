@@ -62,6 +62,19 @@ export async function deleteAccount() {
   localStorage.removeItem(USER_KEY);
 }
 
+// ─── Child / Dependent accounts ─────────────────────────────────────────────
+
+export async function createChildAccount(payload: {
+  full_name: string;
+  email: string;
+  phone?: string;
+  password: string;
+  password_confirm: string;
+}): Promise<import('../types').User> {
+  const res = await api.post<import('../types').User>('/api/auth/children/create/', payload);
+  return res.data;
+}
+
 // ─── OTP ────────────────────────────────────────────────────────────────────
 
 export async function sendEmailOtp(): Promise<void> {

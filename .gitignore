@@ -29,6 +29,7 @@ staticfiles/
 *.env.backup.*
 *.env.backup.local
 !.env.example
+!.env.test.example
 .env.local
 .env.production
 .env.development
@@ -45,6 +46,10 @@ builds/
 coverage/
 *.tsbuildinfo
 
+# Vite build artifacts
+vite.config.js
+vite.config.d.ts
+
 # IDE
 .idea/
 .vscode/
@@ -60,9 +65,6 @@ nul
 scraper_cache/
 logs/*.log
 *.pyc
-.claude
-.tools/
-.contexto/
 
 # Local exports / temp files
 cbt-targets.json
@@ -82,11 +84,12 @@ Sync*.json
 # Claude / local tools
 .claude/
 .tools/
+.contexto/
 
+# Documents / local assets
 escopo_contrato.pdf
 contexto/
 *.pdf
 ai-team/
 design/
 scripts/
-

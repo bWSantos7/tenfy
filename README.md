@@ -194,7 +194,6 @@ tenfy/
 │
 ├── docs/
 ├── CLAUDE.md
-├── AI_CONTEXT.md
 └── README.md
 ```
 
@@ -573,7 +572,6 @@ Ler:
 
 ```text
 CLAUDE.md
-AI_CONTEXT.md
 ```
 
 ### Fluxo recomendado

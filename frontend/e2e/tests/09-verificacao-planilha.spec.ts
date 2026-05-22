@@ -441,7 +441,7 @@ test.describe('DEPENDENTE — Segundo dependente e email existente (TC-013/014)'
     }
   });
 
-  test('DEP-03 — Ao digitar email de usuário existente, sistema oferece opção de vínculo', async ({ page }) => {
+  test('DEP-03 — Ao tentar cadastrar email existente, sistema oferece opção de vínculo', async ({ page }) => {
     const auth = new AuthPage(page);
     await auth.login(PARENT.email, PARENT.password);
     await page.goto('/perfil');
@@ -456,14 +456,37 @@ test.describe('DEPENDENTE — Segundo dependente e email existente (TC-013/014)'
     await addBtn.click();
     await page.waitForTimeout(500);
 
-    // Digitar email de usuário que já existe (child1)
+    // Preencher email de usuário existente + dados mínimos para passar a validação local
     const emailField = page.locator('input[type="email"]').first();
     await emailField.fill(CHILD1.email);
-    await page.waitForTimeout(3000); // aguardar debounce/verificação
+
+    const nameField = page.locator('input').filter({ hasText: '' }).first();
+    const allInputs = await page.locator('input[type="text"], input:not([type])').all();
+    for (const inp of allInputs) {
+      const ph = (await inp.getAttribute('placeholder') ?? '').toLowerCase();
+      if (ph.includes('nome')) { await inp.fill('Teste Vínculo'); break; }
+    }
+
+    const pwFields = await page.locator('input[type="password"]').all();
+    if (pwFields[0]) await pwFields[0].fill('TestPass2026!');
+    if (pwFields[1]) await pwFields[1].fill('TestPass2026!');
+
+    // Preencher ano de nascimento obrigatório
+    const birthInput = page.locator('input[type="number"], input[placeholder*="ano" i]').first();
+    if (await birthInput.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await birthInput.fill('2010');
+    }
+
+    // Submeter — backend retorna erro de email duplicado → frontend mostra opção de vínculo
+    const saveBtn = page.getByRole('button', { name: /salvar|cadastrar dependente|confirmar|adicionar/i }).last();
+    if (await saveBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await saveBtn.click();
+      await page.waitForTimeout(4000);
+    }
 
     const bodyText = await page.locator('body').innerText();
-    console.log('Corpo após digitar email existente:', bodyText.slice(0, 500));
-    // Deve mostrar alguma opção de vínculo ou mensagem
+    console.log('Corpo após submit com email existente:', bodyText.slice(0, 600));
+    // Backend retorna erro de email duplicado → frontend exibe "já possui cadastro" + botão vincular
     expect(bodyText.toLowerCase()).toMatch(/vincular|existente|já possui|cadastro/i);
   });
 });

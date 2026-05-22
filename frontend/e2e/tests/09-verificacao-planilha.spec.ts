@@ -338,18 +338,46 @@ test.describe('AGENDA — Organização por data (TC-011)', () => {
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(2000);
 
-    const bodyText = await page.locator('body').innerText();
-    console.log('Agenda body:', bodyText.slice(0, 600));
+    const MONTH_RE = /janeiro|fevereiro|março|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro/i;
 
-    const hasItems = (await page.locator('.card').count()) > 0;
-    if (hasItems) {
-      // Com itens, deve ter agrupamento por mês (Jan, Fev, Mar, etc.)
-      const hasMonth = /janeiro|fevereiro|março|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro/i.test(bodyText);
-      console.log('Tem agrupamento por mês:', hasMonth);
-      expect(hasMonth).toBeTruthy();
+    // Verificar aba "próximos" (tab padrão)
+    let bodyText = await page.locator('body').innerText();
+    console.log('Agenda body (próximos):', bodyText.slice(0, 600));
+
+    const upcomingEmpty = /nenhum torneio próximo/i.test(bodyText);
+    const noItemsAtAll  = /nenhum torneio na agenda/i.test(bodyText);
+
+    if (noItemsAtAll) {
+      // Agenda completamente vazia → estado vazio amigável é válido
+      console.log('Agenda vazia — estado vazio OK');
+      expect(bodyText.toLowerCase()).toMatch(/agenda|torneio|nenhum/i);
+      return;
+    }
+
+    if (!MONTH_RE.test(bodyText) && upcomingEmpty) {
+      // Aba próximos vazia — verificar aba "passados"
+      const pastTab = page.getByRole('button', { name: /passad/i }).first();
+      if (await pastTab.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await pastTab.click();
+        await page.waitForTimeout(1500);
+        bodyText = await page.locator('body').innerText();
+        console.log('Agenda body (passados):', bodyText.slice(0, 600));
+      }
+    }
+
+    // Com itens em qualquer aba: deve ter agrupamento por mês OU "Sem data definida"
+    const hasMonth   = MONTH_RE.test(bodyText);
+    const hasSemData = /sem data definida/i.test(bodyText);
+    const tabEmpty   = /nenhum torneio (próximo|passado) na agenda/i.test(bodyText);
+
+    console.log('Tem mês:', hasMonth, '| Sem data:', hasSemData, '| Tab vazia:', tabEmpty);
+
+    if (tabEmpty) {
+      // Ambas as abas vazias → estado vazio amigável é válido
+      expect(bodyText.toLowerCase()).toMatch(/agenda|torneio|nenhum/i);
     } else {
-      // Sem itens, estado vazio amigável
-      expect(bodyText.toLowerCase()).toMatch(/agenda|torneio|inscri/i);
+      // Itens existem → devem ter agrupamento
+      expect(hasMonth || hasSemData).toBeTruthy();
     }
   });
 });

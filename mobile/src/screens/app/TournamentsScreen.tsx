@@ -230,6 +230,27 @@ function FilterHeader({
 }
 
 const MONTHS_PT = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+
+const STATUS_SORT_PRIORITY: Record<string, number> = {
+  open: 0,
+  closing_soon: 0,
+  announced: 1,
+  in_progress: 1,
+  draws_published: 1,
+  closed: 2,
+  finished: 3,
+  canceled: 4,
+  unknown: 5,
+};
+
+function sortTournaments(list: TournamentEditionList[]): TournamentEditionList[] {
+  return [...list].sort((a, b) => {
+    const pa = STATUS_SORT_PRIORITY[a.status ?? 'unknown'] ?? 5;
+    const pb = STATUS_SORT_PRIORITY[b.status ?? 'unknown'] ?? 5;
+    if (pa !== pb) return pa - pb;
+    return (a.start_date || '').localeCompare(b.start_date || '');
+  });
+}
 const WEEKDAYS_PT = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
 const TODAY = new Date().toISOString().slice(0, 10);
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -347,6 +368,23 @@ const SURFACE_OPTIONS: { value: string; label: string }[] = [
   { value: 'carpet', label: 'Carpete' },
 ];
 
+// Module-level cache — survives back navigation within same session
+interface FilterCache {
+  query: string;
+  statusFilter: string;
+  federationFilter?: number;
+  categoryFilter: string;
+  stateFilter: string;
+  cityFilter: string;
+  fromDate: string;
+  toDate: string;
+  modalityFilter: string;
+  surfaceFilter: string;
+  nearMe: boolean;
+  showAdvanced: boolean;
+}
+let _filterCache: FilterCache | null = null;
+
 export function TournamentsScreen({ route }: Props) {
   const { colors } = useTheme();
   const navigation = useNavigation<StackNav>();
@@ -364,22 +402,23 @@ export function TournamentsScreen({ route }: Props) {
   const [totalCount, setTotalCount] = useState<number | null>(null);
   const [calendarMap, setCalendarMap] = useState<Record<string, TournamentEditionList[]>>({});
 
-  // Filters
-  const [query, setQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  // Filters — restored from module-level cache on mount (survives back navigation)
+  const c = _filterCache;
+  const [query, setQuery] = useState(c?.query ?? '');
+  const [statusFilter, setStatusFilter] = useState(c?.statusFilter ?? '');
   const [federations, setFederations] = useState<Organization[]>([]);
-  const [federationFilter, setFederationFilter] = useState<number | undefined>(route.params?.organization);
-  const [categoryFilter, setCategoryFilter] = useState('');
-  const [stateFilter, setStateFilter] = useState('');
-  const [cityFilter, setCityFilter] = useState('');
-  const [fromDate, setFromDate] = useState('');
-  const [toDate, setToDate] = useState('');
-  const [modalityFilter, setModalityFilter] = useState('');
-  const [surfaceFilter, setSurfaceFilter] = useState('');
-  const [nearMe, setNearMe] = useState(false);
+  const [federationFilter, setFederationFilter] = useState<number | undefined>(route.params?.organization ?? c?.federationFilter);
+  const [categoryFilter, setCategoryFilter] = useState(c?.categoryFilter ?? '');
+  const [stateFilter, setStateFilter] = useState(c?.stateFilter ?? '');
+  const [cityFilter, setCityFilter] = useState(c?.cityFilter ?? '');
+  const [fromDate, setFromDate] = useState(c?.fromDate ?? '');
+  const [toDate, setToDate] = useState(c?.toDate ?? '');
+  const [modalityFilter, setModalityFilter] = useState(c?.modalityFilter ?? '');
+  const [surfaceFilter, setSurfaceFilter] = useState(c?.surfaceFilter ?? '');
+  const [nearMe, setNearMe] = useState(c?.nearMe ?? false);
   const [primaryProfileId, setPrimaryProfileId] = useState<number | null>(null);
   const [primaryProfile, setPrimaryProfile] = useState<PlayerProfile | null>(null);
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(c?.showAdvanced ?? false);
 
   // Calendar UI state
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -444,10 +483,11 @@ export function TournamentsScreen({ route }: Props) {
         ...appliedFilters,
         page,
         page_size: 20,
+        ordering: 'status_priority,start_date',
       });
       if (myVersion !== reloadVersion.current) return;
-      const results = data.results || [];
-      setItems((prev) => page === 1 ? results : [...prev, ...results]);
+      const results = sortTournaments(data.results || []);
+      setItems((prev) => page === 1 ? results : [...prev, ...sortTournaments(results)]);
       setNextPage(data.next ? page + 1 : null);
       if (page === 1) setTotalCount(data.count ?? results.length);
     } catch {
@@ -528,6 +568,19 @@ export function TournamentsScreen({ route }: Props) {
       .catch(() => setFederations([]));
   }, []);
 
+  // Persist filters in module-level cache so they survive back navigation
+  useEffect(() => {
+    _filterCache = {
+      query, statusFilter, federationFilter, categoryFilter,
+      stateFilter, cityFilter, fromDate, toDate, modalityFilter, surfaceFilter,
+      nearMe, showAdvanced,
+    };
+  }, [
+    query, statusFilter, federationFilter, categoryFilter,
+    stateFilter, cityFilter, fromDate, toDate, modalityFilter, surfaceFilter,
+    nearMe, showAdvanced,
+  ]);
+
   // Reload list/calendar whenever any filter or view mode changes (debounced for free-text fields)
   useEffect(() => {
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
@@ -564,6 +617,7 @@ export function TournamentsScreen({ route }: Props) {
     setModalityFilter('');
     setSurfaceFilter('');
     setNearMe(false);
+    _filterCache = null;
   }
 
   // Stable callbacks for FilterHeader — avoids creating new lambdas in render

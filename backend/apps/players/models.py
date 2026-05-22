@@ -118,6 +118,12 @@ class PlayerProfile(TimestampedModel):
         default=list,
         help_text='UFs where the player accepts travelling to compete (e.g. ["SP","RJ","MG"]). Empty = not set.',
     )
+    preferred_modality = models.CharField(
+        max_length=50,
+        blank=True,
+        default='',
+        help_text='Preferred tournament modality: tennis, beach_tennis, padel, wheelchair. Empty = not set.',
+    )
 
     class Meta:
         ordering = ['-is_primary', '-created_at']

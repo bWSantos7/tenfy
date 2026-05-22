@@ -10,7 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { MainStackParamList, MainTabParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { deleteAccount, uploadAvatar } from '../../services/auth';
+import { deleteAccount, uploadAvatar, linkExistingChild } from '../../services/auth';
 import {
   createChildProfile, createChildWithProfile, deleteProfile, listChildren, listChildProfiles,
   listProfiles, removeChild, requestDataExport, sendChildPasswordReset, setPrimary, updateProfile,
@@ -19,6 +19,7 @@ import { extractApiError, mediaUrl } from '../../services/api';
 import { ParentChild, PlayerProfile } from '../../types';
 import { GENDER_LABELS, LEVEL_LABELS, ROLE_LABELS, TENNIS_CLASS_LABELS } from '../../utils/format';
 import { markProfileDirty } from '../../utils/profileRefresh';
+import { getProfileModality, setProfileModality, MODALITY_OPTIONS } from '../../utils/profileModality';
 import { getActiveProfileId, setActiveProfileId } from '../../utils/activeProfile';
 import { AppText, Button, Card, EmptyState, Input, LoadingBlock, Screen, SectionHeader, SelectField, MultiSelectField } from '../../components/ui';
 
@@ -602,6 +603,7 @@ function AddDependentForm({ onSuccess, onCancel }: { onSuccess: () => Promise<vo
   const { colors } = useTheme();
   const [submitting, setSubmitting] = useState(false);
   const [account, setAccount] = useState({ full_name: '', email: '', password: '', password_confirm: '' });
+  const [duplicateEmail, setDuplicateEmail] = useState(false);
   const [profile, setProfile] = useState({
     display_name: '',
     birth_year: '',
@@ -655,6 +657,7 @@ function AddDependentForm({ onSuccess, onCancel }: { onSuccess: () => Promise<vo
     if (!profile.competitive_level) return Toast.show({ type: 'error', text1: 'Selecione o nível competitivo' });
 
     setSubmitting(true);
+    setDuplicateEmail(false);
     try {
       await createChildWithProfile(
         {
@@ -677,7 +680,26 @@ function AddDependentForm({ onSuccess, onCancel }: { onSuccess: () => Promise<vo
       Toast.show({ type: 'success', text1: 'Dependente adicionado!', text2: `${account.full_name} pode fazer login com o e-mail informado.` });
       await onSuccess();
     } catch (err) {
-      Toast.show({ type: 'error', text1: 'Erro ao adicionar dependente', text2: extractApiError(err), visibilityTime: 6000 });
+      const msg = extractApiError(err).toLowerCase();
+      const isEmailConflict = msg.includes('email') && (msg.includes('existe') || msg.includes('already') || msg.includes('cadastro') || msg.includes('used'));
+      if (isEmailConflict) {
+        setDuplicateEmail(true);
+      } else {
+        Toast.show({ type: 'error', text1: 'Erro ao adicionar dependente', text2: extractApiError(err), visibilityTime: 6000 });
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleLinkExisting() {
+    setSubmitting(true);
+    try {
+      await linkExistingChild(account.email.trim().toLowerCase());
+      Toast.show({ type: 'success', text1: 'Dependente vinculado!', text2: 'A conta existente foi vinculada ao seu perfil.' });
+      await onSuccess();
+    } catch (err) {
+      Toast.show({ type: 'error', text1: 'Erro ao vincular', text2: extractApiError(err), visibilityTime: 6000 });
     } finally {
       setSubmitting(false);
     }
@@ -702,11 +724,41 @@ function AddDependentForm({ onSuccess, onCancel }: { onSuccess: () => Promise<vo
       <Input
         label="E-mail *"
         value={account.email}
-        onChangeText={(v) => setAccount({ ...account, email: v })}
+        onChangeText={(v) => { setAccount({ ...account, email: v }); setDuplicateEmail(false); }}
         autoCapitalize="none"
         keyboardType="email-address"
         placeholder="email@exemplo.com"
       />
+
+      {duplicateEmail ? (
+        <View style={{ backgroundColor: `${colors.statusClosing}18`, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: `${colors.statusClosing}44`, marginBottom: 4 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 10 }}>
+            <Ionicons name="warning-outline" size={18} color={colors.statusClosing} style={{ marginTop: 1 }} />
+            <View style={{ flex: 1 }}>
+              <AppText variant="caption" style={{ fontWeight: '700', color: colors.statusClosing }}>Este e-mail já possui cadastro no Tenfy.</AppText>
+              <AppText variant="muted" style={{ marginTop: 3, fontSize: 12 }}>Deseja vincular esta conta existente como dependente do seu perfil?</AppText>
+            </View>
+          </View>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Pressable
+              onPress={handleLinkExisting}
+              disabled={submitting}
+              style={{ flex: 1, paddingVertical: 10, borderRadius: 10, backgroundColor: colors.accentNeon, alignItems: 'center' }}
+            >
+              <AppText variant="caption" style={{ color: colors.bgBase, fontWeight: '700' }}>
+                {submitting ? 'Vinculando...' : 'Vincular como dependente'}
+              </AppText>
+            </Pressable>
+            <Pressable
+              onPress={() => setDuplicateEmail(false)}
+              style={{ paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, backgroundColor: colors.bgElevated, borderWidth: 1, borderColor: colors.borderSubtle }}
+            >
+              <AppText variant="caption">Cancelar</AppText>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
+
       <Input
         label="Senha inicial *"
         value={account.password}
@@ -1048,6 +1100,8 @@ function ProfileCard({ profile: p, colors, onEdit, onMakePrimary, onRemove, rest
 
 // ── ProfileEditor ─────────────────────────────────────────────────────────────
 
+const MOBILE_MODALITY_OPTIONS = MODALITY_OPTIONS.map(({ value, label }) => ({ value, label }));
+
 function ProfileEditor({ profile, onSaved, onCancel, restrictedMode = false }: { profile: PlayerProfile; onSaved: () => Promise<void>; onCancel: () => void; restrictedMode?: boolean; }) {
   const [form, setForm] = useState({
     display_name: profile.display_name,
@@ -1059,6 +1113,7 @@ function ProfileEditor({ profile, onSaved, onCancel, restrictedMode = false }: {
     tennis_class: profile.tennis_class ?? '',
     competitive_level: profile.competitive_level ?? 'amateur',
   });
+  const [modality, setModality] = React.useState(profile.preferred_modality ?? '');
 
   function handleTravelStatesSelect(vals: string[]) {
     if (vals.includes('__ALL__')) {
@@ -1093,7 +1148,9 @@ function ProfileEditor({ profile, onSaved, onCancel, restrictedMode = false }: {
       await updateProfile(profile.id, {
         ...form,
         birth_year: form.birth_year ? Number(form.birth_year) : null,
+        preferred_modality: modality,
       } as any);
+      await setProfileModality(profile.id, modality);
       markProfileDirty();
       Toast.show({ type: 'success', text1: 'Perfil atualizado' });
       await onSaved();
@@ -1143,6 +1200,7 @@ function ProfileEditor({ profile, onSaved, onCancel, restrictedMode = false }: {
           />
           <SelectField label="Nível competitivo" value={form.competitive_level} options={LEVEL_OPTIONS} onSelect={(v) => setForm({ ...form, competitive_level: v as PlayerProfile['competitive_level'] })} />
           <SelectField label="Classe" value={form.tennis_class} options={CLASS_OPTIONS} onSelect={(v) => setForm({ ...form, tennis_class: v })} />
+          <SelectField label="Modalidade principal" value={modality} options={MOBILE_MODALITY_OPTIONS} onSelect={setModality} placeholder="Selecione a modalidade" />
         </>
       ) : null}
       <Button title="Salvar alterações" onPress={save} loading={saving} />

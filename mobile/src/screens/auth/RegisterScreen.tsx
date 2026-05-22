@@ -13,6 +13,7 @@ import { createChildAccount, register, sendEmailOtp, verifyEmailOtp } from '../.
 import { checkout, fetchPlans, Plan } from '../../services/billing';
 import { User } from '../../types';
 import { LEVEL_LABELS, TENNIS_CLASS_LABELS } from '../../utils/format';
+import { MODALITY_OPTIONS, setProfileModality } from '../../utils/profileModality';
 import { AppText, Button, Card, Checkbox, Input, MultiSelectField, Screen, SelectField } from '../../components/ui';
 
 type AppColors = ReturnType<typeof import('../../contexts/ThemeContext').useTheme>['colors'];
@@ -64,6 +65,7 @@ const CLASS_OPTIONS = [
   { value: '', label: 'Sem classe definida' },
   ...Object.entries(TENNIS_CLASS_LABELS).map(([value, label]) => ({ value, label })),
 ];
+const MOBILE_MODALITY_OPTIONS = MODALITY_OPTIONS.map(({ value, label }) => ({ value, label }));
 const ALL_STATES_OPTION = { value: '__ALL__', label: 'Todo o Brasil (todos os estados)' };
 const TRAVEL_STATE_OPTIONS = [ALL_STATES_OPTION, ...UF_OPTIONS];
 const GENDER_OPTIONS = [{ value: 'M', label: 'Masculino' }, { value: 'F', label: 'Feminino' }];
@@ -108,6 +110,7 @@ export function RegisterScreen({ navigation }: Props) {
     travel_states: [] as string[],
     competitive_level: 'amateur',
     tennis_class: '',
+    modality: '',
   });
 
   function handleTravelStatesSelect(vals: string[]) {
@@ -266,7 +269,7 @@ export function RegisterScreen({ navigation }: Props) {
   async function onFinish() {
     setSubmitting(true);
     try {
-      await createProfile({
+      const created = await createProfile({
         display_name: profile.display_name || form.full_name || 'Jogador',
         birth_year: profile.birth_year ? Number(profile.birth_year) : null,
         gender: (profile.gender || undefined) as any,
@@ -275,8 +278,10 @@ export function RegisterScreen({ navigation }: Props) {
         travel_states: profile.travel_states,
         competitive_level: profile.competitive_level as any,
         tennis_class: profile.tennis_class || '',
+        preferred_modality: profile.modality || '',
         is_primary: true,
       } as any);
+      if (profile.modality && created?.id) await setProfileModality(created.id, profile.modality);
       markProfileDirty();
       await storage.set('th_just_registered', '1');
       if (registeredUser) setUser(registeredUser);
@@ -628,6 +633,7 @@ export function RegisterScreen({ navigation }: Props) {
             <SelectField label="Estado (UF)" value={profile.home_state} options={UF_OPTIONS} onSelect={(v) => setProfile({ ...profile, home_state: v, home_city: '' })} />
             <SelectField label="Cidade" value={profile.home_city} options={cities} onSelect={(v) => setProfile({ ...profile, home_city: v })} placeholder={loadingCities ? 'Carregando...' : 'Selecione a cidade'} loading={loadingCities} searchable />
             <MultiSelectField label="Estados onde aceita jogar" values={profile.travel_states} options={TRAVEL_STATE_OPTIONS} onSelect={handleTravelStatesSelect} placeholder="Selecione os estados..." searchable />
+            <SelectField label="Modalidade principal" value={profile.modality} options={MOBILE_MODALITY_OPTIONS} onSelect={(v) => setProfile({ ...profile, modality: v })} placeholder="Selecione a modalidade" />
             <SelectField label="Nivel competitivo" value={profile.competitive_level} options={LEVEL_OPTIONS} onSelect={(v) => setProfile({ ...profile, competitive_level: v })} />
             <SelectField label="Classe (FPT/CBT)" value={profile.tennis_class} options={CLASS_OPTIONS} onSelect={(v) => setProfile({ ...profile, tennis_class: v })} placeholder="Opcional" />
 

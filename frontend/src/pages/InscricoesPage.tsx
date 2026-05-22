@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Loader2, CheckCircle, ChevronRight, Ticket, User, Calendar, Trophy, CreditCard, XCircle, Clock } from 'lucide-react';
+import { Loader2, CheckCircle, ChevronRight, Ticket, User, Calendar, Trophy, CreditCard, XCircle, Clock, AlertCircle, ShieldCheck } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { TournamentRegistration, WatchlistItem, ParentChild } from '../types';
 import { myRegistrations, withdrawRegistration } from '../services/registrations';
@@ -102,7 +102,16 @@ export const InscricoesPage: React.FC = () => {
     <div className="space-y-4 pb-4">
       <div>
         <h1 className="text-2xl font-bold">Minhas Inscrições</h1>
-        <p className="text-sm text-text-muted">Torneios em que você declarou inscrição</p>
+        <p className="text-sm text-text-muted">Inscrições oficiais e declaradas por você</p>
+      </div>
+
+      {/* Banner informativo sobre sincronização oficial */}
+      <div className="flex items-start gap-2.5 bg-accent-blue/8 border border-accent-blue/25 rounded-xl px-3 py-2.5">
+        <AlertCircle className="w-4 h-4 text-accent-blue mt-0.5 shrink-0" />
+        <p className="text-xs text-text-secondary leading-relaxed">
+          <span className="font-semibold text-accent-blue">Reconhecimento automático em desenvolvimento.</span>{' '}
+          Inscrições marcadas como "declaradas" foram informadas por você. Inscrições "oficiais" foram importadas da fonte do torneio quando disponível.
+        </p>
       </div>
 
       {!hasAnything ? (
@@ -120,8 +129,11 @@ export const InscricoesPage: React.FC = () => {
           {childGroups.length > 0 && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <h2 className="font-bold text-sm">Inscrições declaradas</h2>
-                <span className="text-xs text-text-muted">{totalDeclared} torneio{totalDeclared !== 1 ? 's' : ''}</span>
+                <div className="flex items-center gap-1.5">
+                  <AlertCircle className="w-3.5 h-3.5 text-text-muted" />
+                  <h2 className="font-bold text-sm">Inscrições declaradas por você</h2>
+                </div>
+                <span className="text-xs text-text-muted">{totalDeclared}</span>
               </div>
 
               {childGroups.map((group) => (
@@ -146,7 +158,7 @@ export const InscricoesPage: React.FC = () => {
                               {fmtDateRange(ed.start_date, ed.end_date)}
                             </div>
                           )}
-                          <span className="inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-accent-neon/15 text-accent-neon">Inscrito</span>
+                          <span className="inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-text-muted/15 text-text-muted">Declarado por você</span>
                         </div>
                         <ChevronRight className="w-4 h-4 text-text-muted shrink-0" />
                       </Link>
@@ -161,8 +173,11 @@ export const InscricoesPage: React.FC = () => {
           {activeRegs.length > 0 && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <h2 className="font-bold text-sm">Inscrições oficiais</h2>
-                <span className="text-xs text-text-muted">{activeRegs.length} inscrição{activeRegs.length !== 1 ? 'ões' : ''}</span>
+                <div className="flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-status-open" />
+                  <h2 className="font-bold text-sm">Inscrições oficiais</h2>
+                </div>
+                <span className="text-xs text-text-muted">{activeRegs.length}</span>
               </div>
               {activeRegs.map((reg) => (
                 <RegistrationCard

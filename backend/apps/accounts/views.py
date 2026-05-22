@@ -539,6 +539,82 @@ class ParentChildViewSet(viewsets.ModelViewSet):
             status=status.HTTP_201_CREATED,
         )
 
+    @viewset_action(detail=False, methods=['post'], url_path='link')
+    def link_existing_child(self, request):
+        """
+        Link an *existing* user account as a child/dependent.
+        Accepts { "email": "<existing-user-email>" }.
+        Used when the child already has a Tenfy account and the parent
+        wants to manage it under the Família plan.
+        """
+        email = (request.data.get('email') or '').strip().lower()
+        if not email:
+            return Response({'detail': 'E-mail obrigatório.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Plan limit check — same rules as create / create_with_profile
+        from apps.billing.models import Subscription, Plan
+        current_dependents = ParentChild.objects.filter(parent=request.user, is_active=True).count()
+        if not request.user.is_staff:
+            try:
+                sub = request.user.subscription
+                if sub.plan.slug == Plan.SLUG_INDIVIDUAL:
+                    return Response(
+                        {'detail': 'O Plano Individual não permite cadastrar dependentes. Faça upgrade para o Plano Família.'},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+                max_dependents = sub.plan.max_members - 1
+                if current_dependents >= max_dependents:
+                    return Response(
+                        {'detail': f'Limite de {max_dependents} dependente(s) atingido para o seu plano.'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+            except Subscription.DoesNotExist:
+                if current_dependents >= 1:
+                    return Response(
+                        {'detail': 'Você precisa de uma assinatura ativa do Plano Família para adicionar mais dependentes.'},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+
+        try:
+            child = User.objects.get(email=email, is_active=True)
+        except User.DoesNotExist:
+            return Response(
+                {'detail': 'Nenhum usuário encontrado com esse e-mail.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if child == request.user:
+            return Response(
+                {'detail': 'Você não pode vincular-se como seu próprio dependente.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # If the link already exists and is active, return it directly
+        existing = ParentChild.objects.filter(parent=request.user, child=child).first()
+        if existing:
+            if existing.is_active:
+                return Response(
+                    ParentChildSerializer(existing, context={'request': request}).data,
+                    status=status.HTTP_200_OK,
+                )
+            # Re-activate a previously deactivated link
+            existing.is_active = True
+            existing.save(update_fields=['is_active'])
+            return Response(
+                ParentChildSerializer(existing, context={'request': request}).data,
+                status=status.HTTP_200_OK,
+            )
+
+        link = ParentChild.objects.create(parent=request.user, child=child)
+        logger.info(
+            'ParentChild link created: parent=%s -> child=%s (existing account)',
+            request.user.id, child.id,
+        )
+        return Response(
+            ParentChildSerializer(link, context={'request': request}).data,
+            status=status.HTTP_201_CREATED,
+        )
+
     @viewset_action(detail=True, methods=['delete'], url_path='remove')
     def remove_child(self, request, pk=None):
         """Deactivate the parent-child link. Child account remains active but is no longer managed."""

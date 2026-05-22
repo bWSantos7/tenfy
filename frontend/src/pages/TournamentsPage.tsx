@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Search, Filter, Loader2, X, MapPin, List, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 import { TournamentEditionList } from '../types';
 import {
@@ -11,6 +11,8 @@ import {
 import { listProfiles } from '../services/data';
 import { TournamentCard } from '../components/TournamentCard';
 import { pickBestProfile } from '../utils/profile';
+import { useAuth } from '../contexts/AuthContext';
+import { getActiveProfileId } from '../utils/activeProfile';
 
 const STATES = [
   '', 'SP','RJ','MG','RS','SC','PR','BA','PE','CE','DF','GO','ES',
@@ -32,37 +34,100 @@ const MONTHS_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho'
 const WEEKDAYS_PT = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
 const TODAY = new Date().toISOString().slice(0, 10);
 
+// Priority: open/closing_soon first, then upcoming, then past/canceled
+const STATUS_SORT_PRIORITY: Record<string, number> = {
+  open: 0,
+  closing_soon: 0,
+  announced: 1,
+  in_progress: 1,
+  draws_published: 1,
+  closed: 2,
+  finished: 3,
+  canceled: 4,
+  unknown: 5,
+};
+
+function sortTournaments(list: TournamentEditionList[]): TournamentEditionList[] {
+  return [...list].sort((a, b) => {
+    const pa = STATUS_SORT_PRIORITY[a.status ?? 'unknown'] ?? 5;
+    const pb = STATUS_SORT_PRIORITY[b.status ?? 'unknown'] ?? 5;
+    if (pa !== pb) return pa - pb;
+    return (a.start_date || '').localeCompare(b.start_date || '');
+  });
+}
+
 type ViewMode = 'list' | 'calendar';
 
+const FILTER_SESSION_KEY = 'tenfy_tournament_filters';
+
+interface PersistedFilters {
+  filters: TournamentFilters;
+  q: string;
+  nearMe: boolean;
+  showFilters: boolean;
+  page: number;
+}
+
+function loadSavedFilters(): PersistedFilters | null {
+  try {
+    const raw = sessionStorage.getItem(FILTER_SESSION_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+function saveFilters(state: PersistedFilters) {
+  try { sessionStorage.setItem(FILTER_SESSION_KEY, JSON.stringify(state)); } catch {}
+}
+
 export const TournamentsPage: React.FC = () => {
+  const { user } = useAuth();
+  const saved = useRef<PersistedFilters | null>(loadSavedFilters());
+
   const [viewMode, setViewMode] = useState<ViewMode>('list');
 
   // List state
   const [items, setItems] = useState<TournamentEditionList[]>([]);
   const [loading, setLoading] = useState(true);
   const [totalPages, setTotalPages] = useState(1);
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(saved.current?.page ?? 1);
 
   // Calendar state
   const [calendarMap, setCalendarMap] = useState<Record<string, TournamentEditionList[]>>({});
   const [calMonth, setCalMonth] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
-  // Filters
-  const [filters, setFilters] = useState<TournamentFilters>({ status: '', state: '' });
-  const [showFilters, setShowFilters] = useState(false);
-  const [q, setQ] = useState('');
-  const [nearMe, setNearMe] = useState(false);
+  // Filters — restored from session on mount
+  const [filters, setFilters] = useState<TournamentFilters>(saved.current?.filters ?? { status: '', state: '' });
+  const [showFilters, setShowFilters] = useState(saved.current?.showFilters ?? false);
+  const [q, setQ] = useState(saved.current?.q ?? '');
+  const [nearMe, setNearMe] = useState(saved.current?.nearMe ?? false);
   const [primaryProfileId, setPrimaryProfileId] = useState<number | null>(null);
   const [organizations, setOrganizations] = useState<OrganizationOption[]>([]);
+  const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     listProfiles().then((profiles) => {
-      const primary = pickBestProfile(Array.isArray(profiles) ? profiles : (profiles as any).results ?? []);
+      const list = Array.isArray(profiles) ? profiles : (profiles as any).results ?? [];
+      let primary = null;
+      if (user?.role === 'parent' && user.id) {
+        const activeId = getActiveProfileId(user.id);
+        if (activeId) primary = list.find((p: any) => p.id === activeId) ?? null;
+      }
+      if (!primary) primary = pickBestProfile(list);
       if (primary) setPrimaryProfileId(primary.id);
     }).catch(() => {});
     listOrganizations().then(setOrganizations).catch(() => setOrganizations([]));
-  }, []);
+  }, [user?.id, user?.role]);
+
+  // Auto-apply text search after 400ms debounce
+  useEffect(() => {
+    if (searchDebounce.current) clearTimeout(searchDebounce.current);
+    searchDebounce.current = setTimeout(() => {
+      setFilters((f) => ({ ...f, q: q.trim() || undefined }));
+      setPage(1);
+    }, 400);
+    return () => { if (searchDebounce.current) clearTimeout(searchDebounce.current); };
+  }, [q]);
 
   const hasAnyFilter = useMemo(
     () => !!(
@@ -73,16 +138,21 @@ export const TournamentsPage: React.FC = () => {
     [filters],
   );
 
+  // Persist filters in sessionStorage so they survive navigation to detail and back
+  useEffect(() => {
+    saveFilters({ filters, q, nearMe, showFilters, page });
+  }, [filters, q, nearMe, showFilters, page]);
+
   // Load list view
   useEffect(() => {
     if (viewMode !== 'list') return;
     let cancel = false;
     setLoading(true);
     const nearFilter = nearMe && primaryProfileId ? { near_profile: primaryProfileId } : {};
-    listEditions({ ...filters, ...nearFilter, page, page_size: 20 })
+    listEditions({ ...filters, ...nearFilter, page, page_size: 20, ordering: 'status_priority,start_date' })
       .then((data) => {
         if (cancel) return;
-        setItems(data.results);
+        setItems(sortTournaments(data.results));
         setTotalPages(data.total_pages || 1);
       })
       .catch(() => setItems([]))
@@ -124,7 +194,9 @@ export const TournamentsPage: React.FC = () => {
   function clearFilters() {
     setQ('');
     setFilters({ status: '', state: '' });
+    setNearMe(false);
     setPage(1);
+    try { sessionStorage.removeItem(FILTER_SESSION_KEY); } catch {}
   }
 
   function switchMode(mode: ViewMode) {
@@ -208,6 +280,15 @@ export const TournamentsPage: React.FC = () => {
             <span className="absolute -top-1 -right-1 bg-accent-neon w-2 h-2 rounded-full" />
           )}
         </button>
+        {(hasAnyFilter || nearMe) && (
+          <button
+            className="text-xs text-accent-blue flex items-center gap-1 px-2 hover:underline shrink-0"
+            onClick={clearFilters}
+            title="Limpar todos os filtros"
+          >
+            <X className="w-3 h-3" /> Limpar
+          </button>
+        )}
       </div>
 
       {showFilters && (

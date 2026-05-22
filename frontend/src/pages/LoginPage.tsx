@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { login } from '../services/auth';
 import { useAuth } from '../contexts/AuthContext';
-import { extractApiError } from '../services/api';
 
 export const LoginPage: React.FC = () => {
   const nav = useNavigate();
@@ -14,19 +13,21 @@ export const LoginPage: React.FC = () => {
   const [password, setPassword] = useState('');
   const [showPwd, setShowPwd] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
 
   const from = (location.state as { from?: { pathname: string } } | null)?.from?.pathname ?? '/';
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setLoginError(null);
     setSubmitting(true);
     try {
       const data = await login(email.trim(), password);
       setUser(data.user);
       toast.success('Bem-vindo de volta!');
       nav(from, { replace: true });
-    } catch (err) {
-      toast.error(extractApiError(err));
+    } catch {
+      setLoginError('E-mail ou senha incorretos. Verifique os dados ou redefina sua senha.');
     } finally {
       setSubmitting(false);
     }
@@ -80,6 +81,12 @@ export const LoginPage: React.FC = () => {
               </button>
             </div>
           </div>
+          {loginError && (
+            <div className="flex items-start gap-2 bg-red-500/10 border border-red-500/30 rounded-xl px-3 py-2.5">
+              <AlertCircle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
+              <span className="text-sm text-red-400">{loginError}</span>
+            </div>
+          )}
           <button
             type="submit"
             disabled={submitting}

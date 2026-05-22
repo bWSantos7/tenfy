@@ -16,6 +16,7 @@ import { PlayerProfile, TournamentEditionList } from '../../types';
 import { pickBestProfile } from '../../utils/profile';
 import { consumeProfileDirty } from '../../utils/profileRefresh';
 import { getActiveProfileId } from '../../utils/activeProfile';
+import { getProfileModality, syncModalityFromProfile } from '../../utils/profileModality';
 
 type Props = BottomTabScreenProps<MainTabParamList, 'Home'>;
 type StackNav = NativeStackNavigationProp<MainStackParamList>;
@@ -57,7 +58,9 @@ export function HomeScreen(_: Props) {
       setRecent(((recentData.results || []) as TournamentEditionList[]).filter((ed) => !HIDDEN.includes(ed.dynamic_status || ed.status)).slice(0, 6));
       setUnreadCount((alerts || []).length);
       if (primary) {
-        const compatData = await compatibleForProfile(primary.id, { page_size: 20 }).catch(() => ({ results: [] as TournamentEditionList[] }));
+        await syncModalityFromProfile(primary);
+        const modality = await getProfileModality(primary.id);
+        const compatData = await compatibleForProfile(primary.id, { page_size: 20, ...(modality ? { modality } : {}) }).catch(() => ({ results: [] as TournamentEditionList[] }));
         if (!active.current) return;
         const ACTIVE_STATUSES = ['open', 'closing_soon', 'announced'];
         const filtered = (compatData.results || [])

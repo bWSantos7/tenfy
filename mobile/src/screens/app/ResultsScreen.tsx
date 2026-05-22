@@ -10,8 +10,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { AppText, Button, EmptyState, LoadingBlock, Screen, SectionHeader, SelectField } from '../../components/ui';
 import { TournamentListSkeleton } from '../../components/Skeleton';
-import { listProfiles, listWatchlist, saveResult } from '../../services/data';
-import { PlayerProfile, WatchlistItem } from '../../types';
+import { listChildren, listChildProfiles, listChildWatchlist, listProfiles, listWatchlist, saveResult } from '../../services/data';
+import { ParentChild, PlayerProfile, WatchlistItem } from '../../types';
 
 type Props = BottomTabScreenProps<MainTabParamList, 'Results'>;
 type Nav = NativeStackNavigationProp<MainStackParamList>;
@@ -278,16 +278,44 @@ export function ResultsScreen(_: Props) {
   const [editingItem, setEditingItem] = useState<WatchlistItem | null>(null);
   const [profileNames, setProfileNames] = useState<Record<number, string>>({});
 
+  async function buildData(): Promise<{ allItems: WatchlistItem[]; nameMap: Record<number, string> }> {
+    if (user?.role === 'parent') {
+      const [children, ownProfs] = await Promise.all([
+        listChildren().catch(() => [] as ParentChild[]),
+        listProfiles().catch(() => [] as PlayerProfile[]),
+      ]);
+      const childWatchlists = await Promise.all(
+        (children as ParentChild[]).map((c) => listChildWatchlist(c.child).catch(() => [] as WatchlistItem[])),
+      );
+      const childProfileArrays = await Promise.all(
+        (children as ParentChild[]).map((c) => listChildProfiles(c.child).catch(() => [] as PlayerProfile[])),
+      );
+      const allItems = (children as ParentChild[]).flatMap((_, i) =>
+        (childWatchlists[i] as WatchlistItem[]).filter((it) => it.user_status === 'registered_declared' || !!it.result),
+      );
+      const nameMap: Record<number, string> = {};
+      (ownProfs as PlayerProfile[]).forEach((p) => { nameMap[p.id] = p.display_name; });
+      (children as ParentChild[]).forEach((link, i) => {
+        (childProfileArrays[i] as PlayerProfile[]).forEach((p) => {
+          nameMap[p.id] = `${link.child_detail.full_name || link.child_detail.email} — ${p.display_name}`;
+        });
+      });
+      return { allItems, nameMap };
+    }
+    const [list, profs] = await Promise.all([listWatchlist(), listProfiles().catch(() => [] as PlayerProfile[])]);
+    return {
+      allItems: (list as WatchlistItem[]).filter((it) => it.user_status === 'registered_declared' || !!it.result),
+      nameMap: Object.fromEntries((profs as PlayerProfile[]).map((p) => [p.id, p.display_name])),
+    };
+  }
+
   async function load() {
     setLoading(true);
     setError(null);
     try {
-      const [list, profs] = await Promise.all([listWatchlist(), listProfiles().catch(() => [] as PlayerProfile[])]);
-      // Show ALL inscribed tournaments (registered_declared) — with or without result
-      setItems((list as WatchlistItem[]).filter(
-        (item) => item.user_status === 'registered_declared' || !!item.result,
-      ));
-      setProfileNames(Object.fromEntries((profs as PlayerProfile[]).map((p) => [p.id, p.display_name])));
+      const { allItems, nameMap } = await buildData();
+      setItems(allItems);
+      setProfileNames(nameMap);
     } catch {
       setError('Não foi possível carregar seus resultados agora.');
     } finally {
@@ -299,11 +327,9 @@ export function ResultsScreen(_: Props) {
     setRefreshing(true);
     setError(null);
     try {
-      const [list, profs] = await Promise.all([listWatchlist(), listProfiles().catch(() => [] as PlayerProfile[])]);
-      setItems((list as WatchlistItem[]).filter(
-        (item) => item.user_status === 'registered_declared' || !!item.result,
-      ));
-      setProfileNames(Object.fromEntries((profs as PlayerProfile[]).map((p) => [p.id, p.display_name])));
+      const { allItems, nameMap } = await buildData();
+      setItems(allItems);
+      setProfileNames(nameMap);
     } catch {
       setError('Não foi possível atualizar seus resultados agora.');
     } finally {

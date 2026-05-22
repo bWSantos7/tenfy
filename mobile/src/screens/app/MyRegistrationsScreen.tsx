@@ -1,14 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { MainStackParamList } from '../../navigation/types';
 import { useTheme } from '../../contexts/ThemeContext';
 import { AppText, Button, Card, EmptyState, LoadingBlock, Screen, SectionHeader } from '../../components/ui';
-import { TournamentRegistration, RegistrationStatus, WatchlistItem, PlayerProfile, ParentChild } from '../../types';
+import { TournamentRegistration, RegistrationStatus, WatchlistItem, ParentChild } from '../../types';
 import { myRegistrations, withdrawRegistration } from '../../services/registrations';
-import { listChildren, listChildWatchlist, listWatchlist, listProfiles } from '../../services/data';
+import { listChildren, listChildWatchlist, listWatchlist } from '../../services/data';
 import { useAuth } from '../../contexts/AuthContext';
 import { fmtDateRange } from '../../utils/format';
 import { extractApiError } from '../../services/api';
@@ -68,7 +69,7 @@ export function MyRegistrationsScreen({ navigation }: Props) {
         .filter((g) => g.items.length > 0);
       return { regs, groups };
     }
-    const [wl, profs] = await Promise.all([listWatchlist(), listProfiles()]);
+    const wl = await listWatchlist();
     const inscribed = (wl as WatchlistItem[]).filter((i) => i.user_status === 'registered_declared');
     const groups: ChildInscriptionGroup[] = inscribed.length > 0
       ? [{ childName: '', childId: 0, items: inscribed }]
@@ -104,7 +105,9 @@ export function MyRegistrationsScreen({ navigation }: Props) {
     }
   }
 
-  useEffect(() => { load(); }, []);
+  useFocusEffect(useCallback(() => {
+    load();
+  }, []));
 
   async function handleWithdraw(reg: TournamentRegistration) {
     setWithdrawing(reg.id);

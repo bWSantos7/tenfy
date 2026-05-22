@@ -8,7 +8,11 @@
     "build": "tsc -b && vite build",
     "preview": "serve -s dist --listen tcp://0.0.0.0:${PORT:-4173}",
     "lint": "eslint . --ext ts,tsx",
-    "start": "serve -s dist --listen tcp://0.0.0.0:${PORT:-4173}"
+    "start": "serve -s dist --listen tcp://0.0.0.0:${PORT:-4173}",
+    "test:e2e": "playwright test",
+    "test:e2e:prod": "PLAYWRIGHT_BASE_URL=https://www.tennis.app.br playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:report": "playwright show-report playwright-report"
   },
   "dependencies": {
     "axios": "^1.7.9",
@@ -23,13 +27,14 @@
     "zustand": "^4.5.2"
   },
   "devDependencies": {
-    "serve": "^14.2.4",
+    "@playwright/test": "^1.60.0",
     "@types/node": "^20.14.0",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.0",
     "autoprefixer": "^10.4.19",
     "postcss": "^8.4.38",
+    "serve": "^14.2.4",
     "tailwindcss": "^3.4.3",
     "typescript": "^5.4.5",
     "vite": "^5.2.11",

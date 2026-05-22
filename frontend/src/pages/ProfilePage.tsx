@@ -11,9 +11,10 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { ParentChild, PlayerProfile } from '../types';
 import { listProfiles, setPrimary, deleteProfile, updateProfile, requestDataExport, listChildren, removeChild, createChildWithProfile } from '../services/data';
-import { deleteAccount, uploadAvatar } from '../services/auth';
+import { deleteAccount, uploadAvatar, linkExistingChild } from '../services/auth';
 import { extractApiError, mediaUrl } from '../services/api';
 import { LEVEL_LABELS, GENDER_LABELS, TENNIS_CLASS_LABELS, ROLE_LABELS } from '../utils/format';
+import { getProfileModality, setProfileModality, MODALITY_OPTIONS } from '../utils/profileModality';
 
 // ─── Confirm Modal ─────────────────────────────────────────────────────────────
 
@@ -553,6 +554,7 @@ const ProfileEditor: React.FC<{
     tennis_class:      profile.tennis_class ?? '',
     competitive_level: profile.competitive_level ?? 'amateur',
   });
+  const [modality, setModality] = useState(() => getProfileModality(profile.id));
   const [saving, setSaving] = useState(false);
   const [cities, setCities] = useState<{ value: string; label: string }[]>([]);
   const [loadingCities, setLoadingCities] = useState(false);
@@ -570,7 +572,9 @@ const ProfileEditor: React.FC<{
       await updateProfile(profile.id, {
         ...form,
         birth_year: form.birth_year ? Number(form.birth_year) : null,
+        preferred_modality: modality,
       } as any);
+      setProfileModality(profile.id, modality);
       toast.success('Perfil atualizado');
       onSaved();
     } catch (err) { toast.error(extractApiError(err)); }
@@ -632,6 +636,14 @@ const ProfileEditor: React.FC<{
         onChange={(vals) => setForm({ ...form, travel_states: vals })}
       />
 
+      <div>
+        <label className="text-xs text-text-secondary mb-1 block">Modalidade principal</label>
+        <select className="input-base" value={modality} onChange={(e) => setModality(e.target.value)}>
+          {MODALITY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+        <p className="text-[10px] text-text-muted mt-0.5">Usado para filtrar torneios compatíveis</p>
+      </div>
+
       <div className="grid grid-cols-2 gap-2">
         <div>
           <label className="text-xs text-text-secondary mb-1 block">Nível</label>
@@ -641,7 +653,7 @@ const ProfileEditor: React.FC<{
           </select>
         </div>
         <div>
-          <label className="text-xs text-text-secondary mb-1 block">Classe</label>
+          <label className="text-xs text-text-secondary mb-1 block">Classe (FPT/CBT)</label>
           <select className="input-base" value={form.tennis_class}
             onChange={(e) => setForm({ ...form, tennis_class: e.target.value })}>
             <option value="">Sem classe</option>
@@ -689,6 +701,8 @@ const AddChildForm: React.FC<{
   const [saving, setSaving] = useState(false);
   const [cities, setCities] = useState<{ value: string; label: string }[]>([]);
   const [loadingCities, setLoadingCities] = useState(false);
+  // TC-013/014: link existing account flow
+  const [duplicateEmailDetected, setDuplicateEmailDetected] = useState(false);
 
   useEffect(() => {
     setLoadingCities(true);
@@ -697,6 +711,11 @@ const AddChildForm: React.FC<{
       .finally(() => setLoadingCities(false));
   }, [profile.home_state]);
 
+  function isEmailDuplicateError(err: unknown): boolean {
+    const msg = extractApiError(err).toLowerCase();
+    return msg.includes('email') && (msg.includes('existe') || msg.includes('already') || msg.includes('cadastro') || msg.includes('used'));
+  }
+
   async function handleSubmit() {
     if (!account.full_name.trim()) { toast.error('Informe o nome completo.'); return; }
     if (!account.email.trim()) { toast.error('Informe o e-mail.'); return; }
@@ -704,6 +723,7 @@ const AddChildForm: React.FC<{
     if (account.password !== account.confirm_password) { toast.error('As senhas não conferem.'); return; }
     if (!profile.birth_year) { toast.error('Informe o ano de nascimento.'); return; }
     setSaving(true);
+    setDuplicateEmailDetected(false);
     try {
       await createChildWithProfile(
         { full_name: account.full_name, email: account.email, password: account.password, password_confirm: account.confirm_password },
@@ -721,8 +741,28 @@ const AddChildForm: React.FC<{
       );
       toast.success('Dependente adicionado!');
       onAdded();
-    } catch (err) { toast.error(extractApiError(err)); }
+    } catch (err) {
+      if (isEmailDuplicateError(err)) {
+        setDuplicateEmailDetected(true);
+      } else {
+        toast.error(extractApiError(err));
+      }
+    }
     finally { setSaving(false); }
+  }
+
+  async function handleLinkExisting() {
+    if (!account.email.trim()) return;
+    setSaving(true);
+    try {
+      await linkExistingChild(account.email.trim());
+      toast.success('Dependente vinculado com sucesso!');
+      onAdded();
+    } catch (err) {
+      toast.error(extractApiError(err));
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -744,8 +784,39 @@ const AddChildForm: React.FC<{
         <div>
           <label className="text-xs text-text-secondary mb-1 block">E-mail *</label>
           <input className="input-base" type="email" placeholder="email@exemplo.com"
-            value={account.email} onChange={(e) => setAccount({ ...account, email: e.target.value })} />
+            value={account.email}
+            onChange={(e) => { setAccount({ ...account, email: e.target.value }); setDuplicateEmailDetected(false); }} />
         </div>
+
+        {duplicateEmailDetected && (
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 space-y-2">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-amber-400">Este e-mail já possui cadastro no Tenfy.</p>
+                <p className="text-xs text-text-secondary mt-0.5">Deseja vincular esta conta existente como dependente do seu perfil?</p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className="btn-primary flex-1 !text-xs !py-1.5"
+                onClick={handleLinkExisting}
+                disabled={saving}
+              >
+                {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin mx-auto" /> : 'Sim, vincular como dependente'}
+              </button>
+              <button
+                type="button"
+                className="btn-secondary !text-xs !py-1.5"
+                onClick={() => setDuplicateEmailDetected(false)}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
+
         <div>
           <label className="text-xs text-text-secondary mb-1 block">Senha inicial *</label>
           <div className="relative">

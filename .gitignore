@@ -93,3 +93,11 @@ contexto/
 ai-team/
 design/
 scripts/
+
+# Playwright / E2E artifacts
+frontend/playwright-report/
+frontend/test-results/
+frontend/e2e/fixtures/beta-storage-state.json
+
+# Test plan files
+*.xlsx

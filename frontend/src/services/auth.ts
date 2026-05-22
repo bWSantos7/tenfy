@@ -75,6 +75,11 @@ export async function createChildAccount(payload: {
   return res.data;
 }
 
+export async function linkExistingChild(email: string): Promise<{ id: number; child: number; child_detail: { full_name: string; email: string } }> {
+  const res = await api.post('/api/auth/children/link/', { email });
+  return res.data;
+}
+
 // ─── OTP ────────────────────────────────────────────────────────────────────
 
 export async function sendEmailOtp(): Promise<void> {

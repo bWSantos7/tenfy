@@ -2,11 +2,11 @@ import React, { useState } from 'react';
 import { Image, Pressable, View } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
 import { AuthStackParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { login } from '../../services/auth';
-import { extractApiError } from '../../services/api';
 import { AppText, Button, Card, Input, Screen } from '../../components/ui';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
@@ -17,14 +17,12 @@ export function LoginScreen({ navigation }: Props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
 
   async function onSubmit() {
+    setLoginError(null);
     if (!email.trim() || !password) {
-      Toast.show({
-        type: 'error',
-        text1: 'Preencha e-mail e senha',
-        text2: 'Os dois campos são obrigatórios para entrar.',
-      });
+      setLoginError('Preencha e-mail e senha para continuar.');
       return;
     }
     setSubmitting(true);
@@ -32,10 +30,8 @@ export function LoginScreen({ navigation }: Props) {
       const data = await login(email.trim(), password);
       setUser(data.user);
       Toast.show({ type: 'success', text1: 'Bem-vindo de volta!' });
-    } catch (err) {
-      const message = extractApiError(err);
-      console.warn('Login failed:', message);
-      Toast.show({ type: 'error', text1: 'Erro ao entrar', text2: message, visibilityTime: 6000 });
+    } catch {
+      setLoginError('E-mail ou senha incorretos. Verifique os dados ou redefina sua senha.');
     } finally {
       setSubmitting(false);
     }
@@ -52,8 +48,14 @@ export function LoginScreen({ navigation }: Props) {
           />
         </View>
         <Card>
-          <Input label="E-mail" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" placeholder="voce@exemplo.com" />
-          <Input label="Senha" value={password} onChangeText={setPassword} secureTextEntry placeholder="••••••••" />
+          <Input label="E-mail" value={email} onChangeText={(v) => { setLoginError(null); setEmail(v); }} autoCapitalize="none" keyboardType="email-address" placeholder="voce@exemplo.com" />
+          <Input label="Senha" value={password} onChangeText={(v) => { setLoginError(null); setPassword(v); }} secureTextEntry placeholder="••••••••" />
+          {loginError ? (
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: `${colors.danger}18`, borderRadius: 10, padding: 12, borderWidth: 1, borderColor: `${colors.danger}44` }}>
+              <Ionicons name="alert-circle-outline" size={16} color={colors.danger} style={{ marginTop: 1 }} />
+              <AppText variant="caption" style={{ flex: 1, color: colors.danger, lineHeight: 18 }}>{loginError}</AppText>
+            </View>
+          ) : null}
           <Button title="Entrar" onPress={onSubmit} loading={submitting} />
           <Pressable onPress={() => navigation.navigate('ForgotPassword')} style={{ alignItems: 'center' }}>
             <AppText variant="caption">Esqueceu a senha?</AppText>

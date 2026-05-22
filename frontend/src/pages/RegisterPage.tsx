@@ -13,6 +13,7 @@ import { extractApiError } from '../services/api';
 import { User as UserType } from '../types';
 import { LEVEL_LABELS } from '../utils/format';
 import { StateMultiSelect, ALL_UFS, loadCitiesForState } from '../components/StateMultiSelect';
+import { MODALITY_OPTIONS, setProfileModality } from '../utils/profileModality';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -59,7 +60,7 @@ const CLASSES = ['1', '2', '3', '4', '5', 'PR'];
 
 export const RegisterPage: React.FC = () => {
   const nav = useNavigate();
-  const { setUser } = useAuth();
+  const { setUser, isAuthenticated } = useAuth();
 
   const [step, setStep] = useState<Step>('plan');
   const [registeredUser, setRegisteredUser] = useState<UserType | null>(null);
@@ -104,6 +105,7 @@ export const RegisterPage: React.FC = () => {
     travel_states: [] as string[],
     competitive_level: 'amateur',
     tennis_class: '',
+    modality: '',
   });
 
   // IBGE cities
@@ -254,7 +256,7 @@ export const RegisterPage: React.FC = () => {
   async function onFinish() {
     setSubmitting(true);
     try {
-      await createProfile({
+      const created = await createProfile({
         display_name: profile.display_name || form.full_name || 'Jogador',
         birth_year: profile.birth_year ? Number(profile.birth_year) : null,
         gender: profile.gender || undefined,
@@ -263,17 +265,19 @@ export const RegisterPage: React.FC = () => {
         travel_states: profile.travel_states,
         competitive_level: profile.competitive_level as any,
         tennis_class: profile.tennis_class,
+        preferred_modality: profile.modality || '',
         is_primary: true,
       } as any);
-      toast.success('Perfil criado! Bem-vindo!');
+      if (profile.modality && created?.id) setProfileModality(created.id, profile.modality);
+      toast.success('Perfil criado! Bem-vindo ao Tenfy!');
       if (registeredUser) setUser(registeredUser);
-      nav('/', { replace: true });
+      nav('/inicio', { replace: true });
     } catch (err) {
       const httpStatus = (err as any)?.response?.status;
       if (!httpStatus || httpStatus >= 500) {
         toast('Perfil não configurado. Complete em "Meu Perfil".');
         if (registeredUser) setUser(registeredUser);
-        nav('/', { replace: true });
+        nav('/inicio', { replace: true });
       } else {
         toast.error(extractApiError(err));
       }
@@ -296,8 +300,9 @@ export const RegisterPage: React.FC = () => {
         password: depForm.password,
         password_confirm: depForm.password_confirm,
       });
+      toast.success('Dependente cadastrado! Bem-vindo ao Tenfy!');
       if (registeredUser) setUser(registeredUser);
-      toast.success('Dependente cadastrado!');
+      nav('/inicio', { replace: true });
     } catch (err) {
       toast.error(extractApiError(err));
     } finally { setSubmitting(false); }
@@ -597,7 +602,7 @@ export const RegisterPage: React.FC = () => {
                 </div>
                 <button className="btn-primary w-full" onClick={proceedAfterPayment}>Já paguei — continuar</button>
                 <button className="w-full text-xs text-text-muted hover:text-text-secondary text-center"
-                  onClick={() => { if (registeredUser) setUser(registeredUser); }}>
+                  onClick={() => { if (registeredUser) setUser(registeredUser); nav('/inicio', { replace: true }); }}>
                   Pagar depois (entrar no app)
                 </button>
               </>
@@ -631,8 +636,8 @@ export const RegisterPage: React.FC = () => {
                 3. Preencha os dados do seu filho ou dependente
               </p>
             </div>
-            <button className="btn-primary w-full" onClick={() => { if (registeredUser) setUser(registeredUser); nav('/', { replace: true }); }}>
-              Entrar no app
+            <button className="btn-primary w-full" onClick={() => { if (registeredUser) setUser(registeredUser); nav('/inicio', { replace: true }); }}>
+              Ir para o painel
             </button>
           </div>
         )}
@@ -677,7 +682,7 @@ export const RegisterPage: React.FC = () => {
               Cadastrar dependente
             </button>
             <button className="w-full text-xs text-text-muted hover:text-text-secondary text-center"
-              onClick={() => { if (registeredUser) setUser(registeredUser); nav('/', { replace: true }); }}>
+              onClick={() => { if (registeredUser) setUser(registeredUser); nav('/inicio', { replace: true }); }}>
               Pular por enquanto
             </button>
           </div>
@@ -746,6 +751,14 @@ export const RegisterPage: React.FC = () => {
             />
 
             <div>
+              <label className="text-xs text-text-secondary mb-1 block">Modalidade principal</label>
+              <select className="input-base" value={profile.modality}
+                onChange={(e) => setProfile({ ...profile, modality: e.target.value })}>
+                {MODALITY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+
+            <div>
               <label className="text-xs text-text-secondary mb-1 block">Nível competitivo</label>
               <select className="input-base" value={profile.competitive_level}
                 onChange={(e) => setProfile({ ...profile, competitive_level: e.target.value })}>
@@ -754,7 +767,7 @@ export const RegisterPage: React.FC = () => {
             </div>
 
             <div>
-              <label className="text-xs text-text-secondary mb-1 block">Classe (FPT / federação)</label>
+              <label className="text-xs text-text-secondary mb-1 block">Classe (FPT/CBT)</label>
               <select className="input-base" value={profile.tennis_class}
                 onChange={(e) => setProfile({ ...profile, tennis_class: e.target.value })}>
                 <option value="">Sem classe definida</option>
@@ -767,7 +780,7 @@ export const RegisterPage: React.FC = () => {
               Finalizar cadastro
             </button>
             <button className="w-full text-xs text-text-muted hover:text-text-secondary text-center"
-              onClick={() => { if (registeredUser) setUser(registeredUser); nav('/', { replace: true }); }}>
+              onClick={() => { if (registeredUser) setUser(registeredUser); nav('/inicio', { replace: true }); }}>
               Pular (configurar depois)
             </button>
           </div>
@@ -776,7 +789,13 @@ export const RegisterPage: React.FC = () => {
         {(step === 'plan' || step === 'form') && (
           <div className="text-center mt-4 text-sm text-text-secondary">
             Já possui conta?{' '}
-            <Link to="/login" className="text-accent-neon font-medium hover:underline">Entrar</Link>
+            <button
+              type="button"
+              className="text-accent-neon font-medium hover:underline"
+              onClick={() => nav(isAuthenticated ? '/inicio' : '/login')}
+            >
+              Entrar
+            </button>
           </div>
         )}
       </div>

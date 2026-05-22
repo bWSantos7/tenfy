@@ -1,50 +1,108 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronRight, Clock, Sparkles, Bell, Loader2, CalendarDays } from 'lucide-react';
+import { ChevronRight, Clock, Sparkles, Bell, Loader2, CalendarDays, User } from 'lucide-react';
 import { TournamentEditionList, PlayerProfile } from '../types';
 import { closingSoon, compatibleForProfile, listEditions } from '../services/tournaments';
-import { listProfiles, unreadAlerts } from '../services/data';
+import { listChildren, listProfiles, unreadAlerts } from '../services/data';
 import { TournamentCard } from '../components/TournamentCard';
 import { useAuth } from '../contexts/AuthContext';
 import { pickBestProfile } from '../utils/profile';
+import { getActiveProfileId } from '../utils/activeProfile';
+import { consumeProfileDirty } from '../utils/profileRefresh';
+import { getProfileModality, syncModalityFromProfile } from '../utils/profileModality';
+
+const ACTIVE_STATUSES = new Set(['open', 'closing_soon', 'announced', 'in_progress']);
 
 export const HomePage: React.FC = () => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<PlayerProfile | null>(null);
+  const [activeChildName, setActiveChildName] = useState<string | null>(null);
   const [hasProfile, setHasProfile] = useState(false);
   const [compat, setCompat] = useState<TournamentEditionList[]>([]);
   const [closing, setClosing] = useState<TournamentEditionList[]>([]);
   const [recent, setRecent] = useState<TournamentEditionList[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const hasLoadedRef = useRef(false);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const [profiles, closingData, recentData, alerts] = await Promise.all([
-          listProfiles().catch(() => []),
-          closingSoon(14).catch(() => []),
-          listEditions({ page_size: 8, ordering: '-created_at' }).catch(() => ({ results: [] } as any)),
-          unreadAlerts().catch(() => []),
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const [closingData, recentData, alerts] = await Promise.all([
+        closingSoon(14).catch(() => [] as TournamentEditionList[]),
+        listEditions({ page_size: 8, ordering: '-created_at' }).catch(() => ({ results: [] as TournamentEditionList[] })),
+        unreadAlerts().catch(() => [] as any[]),
+      ]);
+
+      setClosing((closingData as TournamentEditionList[]).filter((t) => ACTIVE_STATUSES.has(t.status ?? '')).slice(0, 6));
+      setRecent(((recentData as any).results || []).slice(0, 6));
+      setUnreadCount((alerts || []).length);
+
+      // Parent users: use the stored active child profile
+      let primary: PlayerProfile | null = null;
+      let childName: string | null = null;
+
+      if (user?.role === 'parent' && user.id) {
+        const [profiles, children] = await Promise.all([
+          listProfiles().catch(() => [] as PlayerProfile[]),
+          listChildren().catch(() => []),
         ]);
-        const primary = pickBestProfile(profiles);
-        setHasProfile(profiles.length > 0);
-        setProfile(primary);
-        setClosing((closingData as TournamentEditionList[]).slice(0, 6));
-        setRecent((recentData.results || []).slice(0, 6));
-        setUnreadCount((alerts || []).length);
-
-        if (primary) {
-          const compatData = await compatibleForProfile(primary.id, { page_size: 8 }).catch(
-            () => ({ results: [] as TournamentEditionList[] }),
-          );
-          setCompat((compatData.results || []).slice(0, 8));
+        const activeId = getActiveProfileId(user.id);
+        if (activeId) {
+          primary = profiles.find((p) => p.id === activeId) ?? null;
+          const link = children.find((c: any) => {
+            return profiles.some((p) => p.id === activeId && p.user_id === c.child);
+          }) as any;
+          childName = link?.child_detail?.full_name ?? null;
+          if (!childName && primary) childName = primary.display_name;
         }
-      } finally {
-        setLoading(false);
+        if (!primary) primary = pickBestProfile(profiles);
+        setHasProfile(profiles.length > 0);
+      } else {
+        const profiles = await listProfiles().catch(() => [] as PlayerProfile[]);
+        primary = pickBestProfile(profiles);
+        setHasProfile(profiles.length > 0);
       }
-    })();
-  }, []);
+
+      setProfile(primary);
+      setActiveChildName(childName);
+
+      if (primary) {
+        syncModalityFromProfile(primary);
+        const modality = getProfileModality(primary.id);
+        const compatData = await compatibleForProfile(primary.id, {
+          page_size: 20,
+          ...(modality ? { modality } : {}),
+        }).catch(() => ({ results: [] as TournamentEditionList[] }));
+        const filtered = (compatData.results || [])
+          .filter((t) => ACTIVE_STATUSES.has(t.status ?? ''))
+          .slice(0, 8);
+        setCompat(filtered);
+      } else {
+        setCompat([]);
+      }
+    } finally {
+      setLoading(false);
+      hasLoadedRef.current = true;
+    }
+  }, [user?.id, user?.role]);
+
+  // Initial load + reload when user changes
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // Reload when returning to this tab (browser visibility change)
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        const wasEdited = consumeProfileDirty();
+        if (wasEdited || hasLoadedRef.current) loadData();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [loadData]);
 
   if (loading) {
     return (
@@ -65,10 +123,15 @@ export const HomePage: React.FC = () => {
               {user?.full_name || profile?.display_name || user?.email?.split('@')[0] || 'Jogador'}
             </h1>
             {profile && (
-              <div className="text-xs text-text-secondary mt-1">
-                {profile.tennis_class && `Classe ${profile.tennis_class}`}
-                {profile.sporting_age ? ` • ${profile.sporting_age} anos esportivos` : ''}
-                {profile.home_state && ` • ${profile.home_state}`}
+              <div className="text-xs text-text-secondary mt-1 flex items-center gap-1 flex-wrap">
+                {activeChildName && (
+                  <span className="flex items-center gap-1 text-accent-blue font-semibold">
+                    <User className="w-3 h-3" />{activeChildName}
+                  </span>
+                )}
+                {profile.tennis_class && <span>Classe {profile.tennis_class}</span>}
+                {profile.sporting_age ? <span>• {profile.sporting_age} anos</span> : null}
+                {profile.home_state && <span>• {profile.home_state}</span>}
               </div>
             )}
           </div>
@@ -102,10 +165,10 @@ export const HomePage: React.FC = () => {
       {/* ── Compatible tournaments (only when profile exists) ── */}
       {profile && (
         <Section
-          title="Compatíveis com você"
-          subtitle="Baseado no seu perfil, categoria e localização"
+          title={activeChildName ? `Compatíveis — ${activeChildName}` : 'Compatíveis com você'}
+          subtitle="Baseado no perfil ativo: categoria, modalidade e localização"
           icon={<Sparkles className="w-4 h-4 text-accent-neon" />}
-          emptyText="Nenhum torneio compatível encontrado ainda. Verifique se seu perfil está completo ou aguarde novas ingestões (a cada hora)."
+          emptyText="Nenhum torneio compatível encontrado. Verifique se o perfil está completo (modalidade, classe, UF) ou aguarde novas ingestões (a cada hora)."
           items={compat}
           viewAll="/torneios"
           accent

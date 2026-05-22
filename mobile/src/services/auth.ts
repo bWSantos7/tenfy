@@ -75,6 +75,11 @@ export async function createChildAccount(payload: {
   return res.data;
 }
 
+export async function linkExistingChild(email: string): Promise<ParentChild> {
+  const res = await api.post<ParentChild>('/api/auth/children/link/', { email });
+  return res.data;
+}
+
 export async function uploadAvatar(asset: { uri: string; fileName?: string | null; mimeType?: string | null; }): Promise<User> {
   const form = new FormData();
   form.append('avatar', { uri: asset.uri, name: asset.fileName || 'avatar.jpg', type: asset.mimeType || 'image/jpeg' } as any);

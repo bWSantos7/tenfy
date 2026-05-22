@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Award, Trophy, Loader2, Plus, Check, X, Edit2, User } from 'lucide-react';
+import { Award, Trophy, Loader2, Plus, Check, X, Edit2, User, AlertCircle, PenLine } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { WatchlistItem, PlayerProfile } from '../types';
-import { listWatchlist, saveResult, listProfiles } from '../services/data';
+import { WatchlistItem, PlayerProfile, ParentChild } from '../types';
+import { listWatchlist, saveResult, listProfiles, listChildren, listChildWatchlist, listChildProfiles } from '../services/data';
 import { extractApiError } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { fmtDateRange } from '../utils/format';
@@ -49,13 +49,37 @@ export const ResultsPage: React.FC = () => {
   async function load() {
     setLoading(true);
     try {
-      const [data, profs] = await Promise.all([
-        listWatchlist(),
-        listProfiles().catch(() => [] as PlayerProfile[]),
-      ]);
-      // Show inscribed (declared) OR tournaments with existing results
-      setItems(data.filter((i) => i.user_status === 'registered_declared' || !!i.result));
-      setProfileNames(Object.fromEntries(profs.map((p) => [p.id, p.display_name])));
+      if (user?.role === 'parent') {
+        const [children, ownProfs] = await Promise.all([
+          listChildren().catch(() => [] as ParentChild[]),
+          listProfiles().catch(() => [] as PlayerProfile[]),
+        ]);
+        const childWatchlists = await Promise.all(
+          children.map((c) => listChildWatchlist(c.child).catch(() => [] as WatchlistItem[])),
+        );
+        const childProfileArrays = await Promise.all(
+          children.map((c) => listChildProfiles(c.child).catch(() => [] as PlayerProfile[])),
+        );
+        const allItems = children.flatMap((_, i) =>
+          childWatchlists[i].filter((it) => it.user_status === 'registered_declared' || !!it.result),
+        );
+        const nameMap: Record<number, string> = {};
+        ownProfs.forEach((p) => { nameMap[p.id] = p.display_name; });
+        children.forEach((link, i) => {
+          childProfileArrays[i].forEach((p) => {
+            nameMap[p.id] = `${link.child_detail.full_name || link.child_detail.email} — ${p.display_name}`;
+          });
+        });
+        setItems(allItems);
+        setProfileNames(nameMap);
+      } else {
+        const [data, profs] = await Promise.all([
+          listWatchlist(),
+          listProfiles().catch(() => [] as PlayerProfile[]),
+        ]);
+        setItems(data.filter((i) => i.user_status === 'registered_declared' || !!i.result));
+        setProfileNames(Object.fromEntries(profs.map((p) => [p.id, p.display_name])));
+      }
     } catch (err) {
       toast.error(extractApiError(err));
     } finally {
@@ -223,10 +247,15 @@ export const ResultsPage: React.FC = () => {
             {item.result.notes && (
               <p className="text-xs text-text-muted italic">"{item.result.notes}"</p>
             )}
-            <button onClick={() => startEdit(item)}
-              className="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs text-text-muted hover:text-accent-neon border border-dashed border-border-subtle rounded-xl transition-colors">
-              <Edit2 className="w-3 h-3" /> Editar resultado
-            </button>
+            <div className="flex items-center justify-between gap-2 pt-1">
+              <span className="flex items-center gap-1 text-[10px] text-text-muted px-2 py-0.5 rounded-md bg-bg-elevated border border-border-subtle">
+                <PenLine className="w-2.5 h-2.5" /> Inserido manualmente
+              </span>
+              <button onClick={() => startEdit(item)}
+                className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs text-text-muted hover:text-accent-neon border border-dashed border-border-subtle rounded-xl transition-colors">
+                <Edit2 className="w-3 h-3" /> Editar
+              </button>
+            </div>
           </div>
         ) : (
           <button onClick={() => startEdit(item)}
@@ -251,6 +280,15 @@ export const ResultsPage: React.FC = () => {
       <div>
         <h1 className="text-2xl font-bold">Resultados</h1>
         <p className="text-sm text-text-muted">Torneios inscritos e resultados</p>
+      </div>
+
+      {/* Aviso: resultados são inseridos manualmente */}
+      <div className="flex items-start gap-2.5 bg-text-muted/8 border border-border-subtle rounded-xl px-3 py-2.5">
+        <PenLine className="w-4 h-4 text-text-muted mt-0.5 shrink-0" />
+        <p className="text-xs text-text-muted leading-relaxed">
+          <span className="font-semibold text-text-secondary">Resultados inseridos manualmente.</span>{' '}
+          Dados abaixo foram declarados por você. Sincronização automática de resultados oficiais está em desenvolvimento.
+        </p>
       </div>
 
       {items.length > 0 && (

@@ -22,6 +22,27 @@ interface ChildWatchlistGroup {
 
 const TODAY = new Date().toISOString().slice(0, 10);
 
+const MONTHS_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+function sortByDate(a: WatchlistItem, b: WatchlistItem): number {
+  return (a.edition_detail.start_date || '').localeCompare(b.edition_detail.start_date || '');
+}
+
+function groupByMonth(list: WatchlistItem[]): { monthLabel: string; key: string; items: WatchlistItem[] }[] {
+  const map = new Map<string, WatchlistItem[]>();
+  list.forEach((item) => {
+    const date = item.edition_detail.start_date || '';
+    const key = date ? date.slice(0, 7) : 'sem-data';
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(item);
+  });
+  return Array.from(map.entries()).map(([key, items]) => {
+    const [year, month] = key.split('-');
+    const label = key === 'sem-data' ? 'Sem data definida' : `${MONTHS_PT[Number(month) - 1]} ${year}`;
+    return { monthLabel: label, key, items };
+  });
+}
+
 function isPast(item: WatchlistItem): boolean {
   const ed = item.edition_detail;
   const endDate = ed.end_date || ed.start_date;
@@ -187,8 +208,10 @@ export function WatchlistScreen(_: Props) {
     }
   }
 
-  const activeItems = items.filter((i) => !isPast(i));
-  const pastItems   = items.filter((i) => isPast(i));
+  const activeItems = items.filter((i) => !isPast(i)).sort(sortByDate);
+  const pastItems   = items.filter((i) => isPast(i)).sort(sortByDate);
+  const activeGroups = groupByMonth(activeItems);
+  const pastGroups   = groupByMonth(pastItems);
 
   function renderGrouped(itemsToRender: WatchlistItem[]) {
     if (user?.role !== 'parent' || childGroups.length === 0) {
@@ -238,7 +261,7 @@ export function WatchlistScreen(_: Props) {
             borderWidth: 1, borderTopWidth: 0,
             borderColor: colors.borderSubtle,
           }}>
-            {/* Inscrito button */}
+            {/* Declarar inscrição button — informativo, não validado pela fonte oficial */}
             <Pressable
               onPress={() => !isInscrito && handleMarkInscrito(item)}
               disabled={marking === item.id}
@@ -257,7 +280,7 @@ export function WatchlistScreen(_: Props) {
                 : <Ionicons name={isInscrito ? 'checkmark-circle' : 'add-circle-outline'} size={16} color={isInscrito ? colors.statusOpen : colors.accentNeon} />
               }
               <AppText variant="caption" style={{ color: isInscrito ? colors.statusOpen : colors.accentNeon, fontWeight: '700', fontSize: 12 }}>
-                Inscrito
+                {isInscrito ? 'Inscrito (declarado)' : 'Declarar inscrição'}
               </AppText>
             </Pressable>
             {/* Remove button */}
@@ -327,15 +350,24 @@ export function WatchlistScreen(_: Props) {
         />
       ) : (
         <>
-          {/* Upcoming / active */}
+          {/* Upcoming / active — grouped by month */}
           {activeItems.length > 0 && (
             <>
               <SectionHeader title="Próximos" subtitle={`${activeItems.length} torneio${activeItems.length > 1 ? 's' : ''}`} />
-              {renderGrouped(activeItems)}
+              {activeGroups.map((group) => (
+                <View key={group.key}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6, marginTop: 4 }}>
+                    <AppText variant="caption" style={{ fontWeight: '700', textTransform: 'uppercase', color: colors.textMuted, fontSize: 11, letterSpacing: 0.8 }}>{group.monthLabel}</AppText>
+                    <View style={{ flex: 1, height: 1, backgroundColor: colors.borderSubtle }} />
+                    <AppText variant="caption" style={{ color: colors.textMuted, fontSize: 10 }}>{group.items.length}</AppText>
+                  </View>
+                  {renderGrouped(group.items)}
+                </View>
+              ))}
             </>
           )}
 
-          {/* Past tournaments */}
+          {/* Past tournaments — grouped by month, collapsible */}
           {pastItems.length > 0 && (
             <>
               <Pressable
@@ -345,7 +377,16 @@ export function WatchlistScreen(_: Props) {
                 <SectionHeader title="Passados" subtitle={`${pastItems.length} torneio${pastItems.length > 1 ? 's' : ''}`} />
                 <Ionicons name={showPast ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textMuted} />
               </Pressable>
-              {showPast && renderGrouped(pastItems)}
+              {showPast && pastGroups.map((group) => (
+                <View key={group.key}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6, marginTop: 4 }}>
+                    <AppText variant="caption" style={{ fontWeight: '700', textTransform: 'uppercase', color: colors.textMuted, fontSize: 11, letterSpacing: 0.8 }}>{group.monthLabel}</AppText>
+                    <View style={{ flex: 1, height: 1, backgroundColor: colors.borderSubtle }} />
+                    <AppText variant="caption" style={{ color: colors.textMuted, fontSize: 10 }}>{group.items.length}</AppText>
+                  </View>
+                  {renderGrouped(group.items)}
+                </View>
+              ))}
             </>
           )}
         </>

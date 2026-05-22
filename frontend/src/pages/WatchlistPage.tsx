@@ -24,6 +24,27 @@ interface ChildGroup {
 
 const TODAY = new Date().toISOString().slice(0, 10);
 
+const MONTHS_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+function sortByDate(a: WatchlistItem, b: WatchlistItem): number {
+  return (a.edition_detail.start_date || '').localeCompare(b.edition_detail.start_date || '');
+}
+
+function groupByMonth(list: WatchlistItem[]): { monthLabel: string; key: string; items: WatchlistItem[] }[] {
+  const map = new Map<string, WatchlistItem[]>();
+  list.forEach((item) => {
+    const date = item.edition_detail.start_date || '';
+    const key = date ? date.slice(0, 7) : 'sem-data';
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(item);
+  });
+  return Array.from(map.entries()).map(([key, items]) => {
+    const [year, month] = key.split('-');
+    const label = key === 'sem-data' ? 'Sem data definida' : `${MONTHS_PT[Number(month) - 1]} ${year}`;
+    return { monthLabel: label, key, items };
+  });
+}
+
 function detectConflicts(items: WatchlistItem[]): Set<number> {
   const conflicting = new Set<number>();
   const active = items.filter((i) => i.edition_detail.start_date);
@@ -123,9 +144,10 @@ export const WatchlistPage: React.FC = () => {
   }
 
   const now = TODAY;
-  const upcoming = items.filter((i) => !i.edition_detail.end_date || i.edition_detail.end_date >= now);
-  const past     = items.filter((i) => i.edition_detail.end_date && i.edition_detail.end_date < now);
+  const upcoming = items.filter((i) => !i.edition_detail.end_date || i.edition_detail.end_date >= now).sort(sortByDate);
+  const past     = items.filter((i) => i.edition_detail.end_date && i.edition_detail.end_date < now).sort(sortByDate);
   const displayed = tab === 'upcoming' ? upcoming : past;
+  const displayedGroups = groupByMonth(displayed);
 
   function renderGrouped(itemsToRender: WatchlistItem[]) {
     if (!isParent || childGroups.length === 0) {
@@ -171,10 +193,10 @@ export const WatchlistPage: React.FC = () => {
                   ? 'bg-status-open/15 border-status-open/40 text-status-open'
                   : 'bg-bg-card border-border-subtle text-text-muted hover:text-accent-neon hover:border-accent-neon/40'
               }`}
-              title={isRegistered ? 'Remover status de inscrito' : 'Marcar como inscrito'}
+              title={isRegistered ? 'Remover declaração de inscrição' : 'Declarar que você está inscrito neste torneio (informativo, não validado pela fonte oficial)'}
             >
               <CheckCircle className="w-3.5 h-3.5" />
-              {isRegistered ? 'Inscrito' : 'Marcar inscrito'}
+              {isRegistered ? 'Inscrito (declarado)' : 'Declarar inscrição'}
             </button>
 
             {confirmRemove === item.id ? (
@@ -289,8 +311,19 @@ export const WatchlistPage: React.FC = () => {
               {tab === 'upcoming' ? 'Nenhum torneio próximo na agenda.' : 'Nenhum torneio passado na agenda.'}
             </div>
           ) : (
-            <div className="space-y-3">
-              {renderGrouped(displayed)}
+            <div className="space-y-1">
+              {displayedGroups.map((group) => (
+                <div key={group.key}>
+                  <div className="flex items-center gap-2 px-1 pt-3 pb-1.5">
+                    <span className="text-xs font-bold text-text-muted uppercase tracking-wide">{group.monthLabel}</span>
+                    <div className="flex-1 h-px bg-border-subtle" />
+                    <span className="text-xs text-text-muted">{group.items.length}</span>
+                  </div>
+                  <div className="space-y-3">
+                    {renderGrouped(group.items)}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </>

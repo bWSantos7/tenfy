@@ -148,10 +148,17 @@ export interface TournamentEditionList {
   fetched_at: string | null;
   data_confidence: 'low' | 'med' | 'high';
   categories_count: number;
+  organization_logo_url: string | null;
+  validation_errors: string[];
   eligibility?: {
     compatible_count: number;
     unknown_count: number;
+    not_normalized_count: number;
+    parseable_unknown_count: number;
     total_count: number;
+    distance_status?: string;
+    distance_message?: string;
+    circuit_hint?: string | null;
   };
 }
 

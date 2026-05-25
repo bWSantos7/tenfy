@@ -23,6 +23,13 @@ export const TournamentCard: React.FC<Props> = ({ edition, showEligibility = fal
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 mb-1">
+            {edition.organization_logo_url && (
+              <img
+                src={edition.organization_logo_url}
+                alt={edition.organization_short || edition.organization_name}
+                className="w-4 h-4 object-contain rounded-sm shrink-0"
+              />
+            )}
             <span className="text-[10px] font-semibold text-accent-blue uppercase tracking-wider">
               {edition.organization_short || edition.organization_name}
             </span>
@@ -65,7 +72,7 @@ export const TournamentCard: React.FC<Props> = ({ edition, showEligibility = fal
       </div>
 
       {showEligibility && edition.eligibility && (
-        <div className="mt-3 flex items-center gap-3 text-xs">
+        <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
           <span className="flex items-center gap-1 text-accent-neon font-medium">
             <CheckCircle2 className="w-4 h-4" />
             {edition.eligibility.compatible_count} compatíveis
@@ -75,6 +82,12 @@ export const TournamentCard: React.FC<Props> = ({ edition, showEligibility = fal
               <Circle className="w-4 h-4" />
               {edition.eligibility.unknown_count} a verificar
             </span>
+          )}
+          {edition.eligibility.circuit_hint === 'cosat_ranking_required' && (
+            <span className="text-text-muted italic">Requer ranking COSAT</span>
+          )}
+          {edition.eligibility.circuit_hint === 'itf_ranking_required' && (
+            <span className="text-text-muted italic">Requer ranking ITF</span>
           )}
         </div>
       )}

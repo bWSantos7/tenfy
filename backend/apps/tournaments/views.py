@@ -18,6 +18,7 @@ from .serializers import (
     TournamentEditionAdminSerializer,
     TournamentEditionDetailSerializer,
     TournamentEditionListSerializer,
+    TournamentEditionSyncSerializer,
     TournamentSerializer,
 )
 
@@ -268,6 +269,7 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
                 'total_count': result['total_count'],
                 'distance_status': loc['status'],
                 'distance_message': loc['message'],
+                'circuit_hint': result.get('circuit_hint'),
             }
             compatible.append(data)
 
@@ -322,6 +324,27 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
         edition = self.get_object()
         events = edition.change_events.all().order_by('-detected_at')[:100]
         return Response(TournamentChangeEventSerializer(events, many=True).data)
+
+    @action(detail=True, methods=['patch'], url_path='sync-state')
+    def sync_state(self, request, pk=None):
+        """
+        PATCH /api/tournaments/editions/{id}/sync-state/
+        Called by n8n after successful entry sync to update needs_sync and last_synced_at.
+        Auth: same as other tournament endpoints (IsAuthenticated).
+        Accepts: needs_sync, last_synced_at, entries_source_url, candidate_entry_links,
+                 sync_priority, parser_available, parser_limitation.
+        """
+        from apps.registrations.views import _check_import_auth
+        if not (_check_import_auth(request) or request.user.is_staff):
+            return Response(
+                {'detail': 'Autenticação necessária.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        edition = self.get_object()
+        serializer = TournamentEditionSyncSerializer(edition, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response({'detail': 'Sync state atualizado.', 'edition_id': edition.id})
 
 
 class TournamentEditionAdminViewSet(viewsets.ModelViewSet):

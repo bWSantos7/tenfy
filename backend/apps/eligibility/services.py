@@ -47,6 +47,8 @@ REASON_NO_CLASS = 'no_class'
 REASON_NO_RULE = 'no_rule_available'
 REASON_NOT_NORMALIZED = 'category_not_normalized'
 REASON_MATCH = 'matches_profile'
+REASON_COSAT_RANKING_REQUIRED = 'cosat_ranking_required'
+REASON_ITF_RANKING_REQUIRED = 'itf_ranking_required'
 
 # Ranking check states (informational — do not flip the main eligibility status).
 RANKING_NOT_APPLICABLE = 'not_applicable'   # Categoria sem max_participants
@@ -455,6 +457,22 @@ class EligibilityEngine:
 
     # ---------- Edition summary ----------
 
+    def _get_circuit_hint(self, edition: TournamentEdition) -> Optional[str]:
+        """
+        Return an informational hint when the tournament requires a federation ranking
+        that the profile does not have. Never blocks eligibility — only informational.
+        """
+        circuit = (edition.tournament.circuit or '').upper()
+        ext = getattr(self.profile, 'external_ids', None) or {}
+        if 'COSAT' in circuit and not ext.get('cosat_id'):
+            return REASON_COSAT_RANKING_REQUIRED
+        modality = (edition.tournament.modality or '').lower()
+        title_lower = edition.title.lower()
+        if 'itf' in circuit or ('itf' in title_lower and 'junior' in title_lower):
+            if not ext.get('itf_id'):
+                return REASON_ITF_RANKING_REQUIRED
+        return None
+
     def evaluate_edition(self, edition: TournamentEdition) -> dict:
         results = []
         compatible_count = 0
@@ -477,6 +495,8 @@ class EligibilityEngine:
                 unknown_count += 1
                 if REASON_NOT_NORMALIZED in r.reasons:
                     not_normalized_count += 1
+
+        circuit_hint = self._get_circuit_hint(edition)
         return {
             'edition_id': edition.id,
             'profile_id': self.profile.id,
@@ -486,5 +506,6 @@ class EligibilityEngine:
             'incompatible_count': incompatible_count,
             'unknown_count': unknown_count,
             'not_normalized_count': not_normalized_count,
+            'circuit_hint': circuit_hint,
             'categories': results,
         }

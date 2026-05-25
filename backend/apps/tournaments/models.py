@@ -170,6 +170,42 @@ class TournamentEdition(TimestampedModel):
         help_text='False = oculto da listagem pública (admin pode editar e republicar).',
     )
 
+    # Federation sync tracking
+    entries_source_url = models.URLField(
+        max_length=500, blank=True,
+        help_text='Melhor URL conhecida para a página de inscritos/chaves desta edição.',
+    )
+    candidate_entry_links = models.JSONField(
+        default=list, blank=True,
+        help_text='Lista de URLs candidatas para inscritos/chaves (derivadas ou extraídas).',
+    )
+    needs_sync = models.BooleanField(
+        default=True, db_index=True,
+        help_text='True quando os dados de inscritos precisam ser sincronizados.',
+    )
+    last_synced_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text='Última vez que os inscritos foram sincronizados com a fonte externa.',
+    )
+    sync_priority = models.PositiveSmallIntegerField(
+        default=5,
+        help_text='Prioridade de sincronização (0=menor, 30=urgente). Computado pelo backend.',
+    )
+    parser_available = models.BooleanField(
+        default=False,
+        help_text='True quando existe conector/parser capaz de extrair inscritos desta fonte.',
+    )
+    parser_limitation = models.CharField(
+        max_length=300, blank=True,
+        help_text='Descrição da limitação do parser para esta fonte, quando aplicável.',
+    )
+
+    # Data quality
+    validation_errors = models.JSONField(
+        default=list, blank=True,
+        help_text='Erros de validação detectados na ingestão (email em cidade, UF inválida, etc.).',
+    )
+
     class Meta:
         ordering = ['-start_date', '-entry_close_at']
         indexes = [

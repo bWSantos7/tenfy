@@ -29,6 +29,37 @@ from apps.tournaments.models import TournamentEdition
 
 logger = logging.getLogger('apps.registrations.integration')
 
+
+def _bulk_update_sync_fields(updates: list):
+    """
+    Bulk-update sync tracking fields on TournamentEdition rows.
+    Each item in updates must have 'id' plus any subset of:
+      entries_source_url, candidate_entry_links, needs_sync,
+      sync_priority, parser_available, parser_limitation.
+    Skips rows where is_manual_override=True to avoid overwriting admin data.
+    """
+    if not updates:
+        return
+    update_fields = [
+        'entries_source_url', 'candidate_entry_links', 'needs_sync',
+        'sync_priority', 'parser_available', 'parser_limitation',
+    ]
+    id_map = {u['id']: u for u in updates}
+    editions = list(
+        TournamentEdition.objects
+        .filter(pk__in=id_map.keys(), is_manual_override=False)
+        .only('id', *update_fields)
+    )
+    for edition in editions:
+        upd = id_map[edition.id]
+        for field in update_fields:
+            if field in upd:
+                setattr(edition, field, upd[field])
+    if editions:
+        TournamentEdition.objects.bulk_update(editions, update_fields)
+        logger.debug('federation_sync_targets: bulk-updated %d editions', len(editions))
+
+
 # Statuses worth syncing (exclude finished/canceled)
 _SYNC_STATUSES = {
     TournamentEdition.STATUS_OPEN,
@@ -368,6 +399,7 @@ def federation_sync_targets(request):
     )
 
     results = []
+    _editions_to_update = []
     for edition in qs[:limit * 3]:
         source = _edition_source(edition)
         dynamic_status = edition.compute_dynamic_status()
@@ -394,6 +426,12 @@ def federation_sync_targets(request):
             or edition.official_source_url
         )
 
+        parser_avail = bool(get_parser(source))
+        parser_limit = get_limitation(source) if source != 'manual' else (
+            get_limitation(infer_source_from_url(edition.official_source_url))
+            or get_limitation('manual')
+        )
+
         results.append({
             'edition_id': edition.id,
             'tournament_name': edition.title,
@@ -411,17 +449,32 @@ def federation_sync_targets(request):
             'last_synced_at': last_synced,
             'needs_sync': needs_sync,
             'sync_priority': priority,
-            'parser_available': bool(get_parser(source)),
-            'parser_limitation': get_limitation(source) if source != 'manual' else (
-                get_limitation(infer_source_from_url(edition.official_source_url))
-                or get_limitation('manual')
-            ),
+            'parser_available': parser_avail,
+            'parser_limitation': parser_limit,
+        })
+
+        # Persist computed sync fields to model (bulk-update below to avoid N+1 saves)
+        _editions_to_update.append({
+            'id': edition.id,
+            'entries_source_url': entries_url[:500] if entries_url else '',
+            'candidate_entry_links': candidate_links[:5],
+            'needs_sync': needs_sync,
+            'sync_priority': priority,
+            'parser_available': parser_avail,
+            'parser_limitation': (parser_limit or '')[:300],
         })
         # Note: source is already inferred — 'manual' only when truly unrecognised
 
     results.sort(
         key=lambda r: (-r['sync_priority'], r['entry_close_at'] or now.replace(year=2099)),
     )
+
+    # Bulk-persist computed sync fields back to the model (fire-and-forget, non-blocking)
+    if _editions_to_update:
+        try:
+            _bulk_update_sync_fields(_editions_to_update)
+        except Exception as exc:
+            logger.warning('federation_sync_targets: bulk sync field update failed: %s', exc)
 
     return Response({
         'count': len(results[:limit]),

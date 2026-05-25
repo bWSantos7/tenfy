@@ -59,32 +59,52 @@ def _dedup_fingerprint(title: str, start_date, city: str, state: str) -> str:
 _YOUTH_KEYWORDS = {
     'infantojuvenil', 'infanto', 'juvenil', 'junior', 'júnior',
     'sub-', 'kids', 'mirim', 'petiz', 'escolinha', 'infantil',
+    'youth', 'boys', 'girls',
 }
 
+# COSAT event codes that indicate youth categories (BS/GS/BD/GD = Boys/Girls Singles/Doubles)
+_COSAT_YOUTH_CAT_PATTERN = re.compile(r'\b(BS|GS|BD|GD)\s*[Uu]?\s*\d{1,2}\b', re.IGNORECASE)
 
-def _classify_is_youth(circuit: str, title: str, categories: list) -> bool:
+# ITF Junior grade patterns: J1–J5, ITF Junior, ITF Boys/Girls
+_ITF_JUNIOR_PATTERN = re.compile(r'\b(J[1-5]|Junior|Boys|Girls|Youth)\b', re.IGNORECASE)
+
+
+def _classify_is_youth(circuit: str, title: str, categories: list, source_name: str = '') -> bool:
     """Return True if the tournament appears to be for players up to 18 years old."""
-    import re as _re
-    combined = (circuit + ' ' + title).lower()
+    combined = (circuit + ' ' + title + ' ' + source_name).lower()
+
+    # COSAT tournaments are predominantly youth (the platform focuses on juniors)
+    if 'cosat' in combined:
+        return True
+
+    # ITF Junior grade
+    if 'itf' in combined and _ITF_JUNIOR_PATTERN.search(title):
+        return True
+
     if any(kw in combined for kw in _YOUTH_KEYWORDS):
         return True
+
     # Age in title: "14 anos" (PT), "14 años" (ES), "U14", "Sub-16"
-    if _re.search(r'\b(8|9|10|11|12|13|14|15|16|17|18)\s*a[ñn]os?\b', combined):
+    if re.search(r'\b(8|9|10|11|12|13|14|15|16|17|18)\s*a[ñn]os?\b', combined):
         return True
-    if _re.search(r'\b[Uu](8|9|10|11|12|13|14|15|16|17|18)\b', combined):
+    if re.search(r'\b[Uu](8|9|10|11|12|13|14|15|16|17|18)\b', combined):
         return True
-    if _re.search(r'\bsub[- ]?(8|9|10|11|12|13|14|15|16|17|18)\b', combined):
+    if re.search(r'\bsub[- ]?(8|9|10|11|12|13|14|15|16|17|18)\b', combined):
         return True
+
     for cat in categories:
         cat_text = (cat.get('source_text') or '').lower()
         if any(kw in cat_text for kw in _YOUTH_KEYWORDS):
             return True
+        # COSAT compact codes: BS U12, GS U14, BD16, etc.
+        if _COSAT_YOUTH_CAT_PATTERN.search(cat.get('source_text') or ''):
+            return True
         # Category descriptions with specific age ≤ 18 (PT + ES + U-prefix)
-        if _re.search(r'\b(8|9|10|11|12|13|14|15|16|17|18)\s*a[ñn]os?\b', cat_text):
+        if re.search(r'\b(8|9|10|11|12|13|14|15|16|17|18)\s*a[ñn]os?\b', cat_text):
             return True
-        if _re.search(r'\b[Uu](8|9|10|11|12|13|14|15|16|17|18)\b', cat_text):
+        if re.search(r'\b[Uu](8|9|10|11|12|13|14|15|16|17|18)\b', cat_text):
             return True
-        if _re.search(r'\bsub[- ]?(8|9|10|11|12|13|14|15|16|17|18)\b', cat_text):
+        if re.search(r'\bsub[- ]?(8|9|10|11|12|13|14|15|16|17|18)\b', cat_text):
             return True
     return False
 
@@ -168,6 +188,7 @@ class TournamentPersister:
             data.get('circuit', ''),
             data.get('title', ''),
             data.get('categories') or [],
+            source_name=data.get('source_name', '') or getattr(self.data_source, 'source_name', ''),
         )
 
         v_city = (data.get('venue') or {}).get('city', '')

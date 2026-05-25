@@ -25,7 +25,7 @@ class TournamentEditionFilter(filters.FilterSet):
     modality = filters.CharFilter(field_name='tournament__modality', lookup_expr='iexact')
     circuit = filters.CharFilter(field_name='tournament__circuit', lookup_expr='icontains')
     surface = filters.CharFilter(field_name='surface')
-    status = filters.CharFilter(field_name='status')
+    status = filters.CharFilter(field_name='status', lookup_expr='iexact')
     q = filters.CharFilter(method='filter_search')
     near_profile = filters.NumberFilter(method='filter_near_profile')
 

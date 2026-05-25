@@ -3,7 +3,7 @@ from datetime import timedelta
 import hashlib
 
 from django.core.cache import cache
-from django.db.models import Count, Q
+from django.db.models import Case, Count, IntegerField, Q, When
 from django.utils import timezone
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
@@ -38,15 +38,34 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
     filterset_class = TournamentEditionFilter
     search_fields = ('title', 'tournament__canonical_name')
-    ordering_fields = ('start_date', 'entry_close_at', 'created_at')
-    ordering = ('-start_date',)  # most recent tournament date first by default
+    ordering_fields = ('start_date', 'entry_close_at', 'created_at', 'status_priority')
+    ordering = ('status_priority', 'start_date')
+
+    # Status priority for ordering: open/closing_soon first, then announced/in_progress,
+    # then closed, then finished/canceled last.
+    _STATUS_PRIORITY = Case(
+        When(status='open',          then=0),
+        When(status='closing_soon',  then=0),
+        When(status='announced',     then=1),
+        When(status='in_progress',   then=1),
+        When(status='draws_published', then=1),
+        When(status='closed',        then=2),
+        When(status='unknown',       then=3),
+        When(status='finished',      then=4),
+        When(status='canceled',      then=5),
+        default=3,
+        output_field=IntegerField(),
+    )
 
     def get_queryset(self):
         qs = (
             TournamentEdition.objects
             .select_related('tournament', 'tournament__organization', 'venue', 'data_source')
             .prefetch_related('categories__normalized_category', 'links')
-            .annotate(categories_count=Count('categories'))
+            .annotate(
+                categories_count=Count('categories'),
+                status_priority=self._STATUS_PRIORITY,
+            )
         )
         # Default: only show youth/junior tournaments.
         # is_youth=True  → classificado como juvenil → mostrar
@@ -76,6 +95,12 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
         # Always include editions that have unnormalized categories (COSAT, duplas, etc.)
         # The eligibility engine evaluates them via raw text extraction.
         category_filter |= Q(categories__normalized_category__isnull=True)
+
+        # Modality filter: if profile has preferred_modality set, only show tournaments
+        # of that modality. This prevents beach_tennis appearing for tennis players, etc.
+        preferred_modality = (profile.preferred_modality or '').strip()
+        if preferred_modality:
+            category_filter = Q(tournament__modality__iexact=preferred_modality) & category_filter
 
         sporting_age = profile.sporting_age
         if sporting_age is not None:

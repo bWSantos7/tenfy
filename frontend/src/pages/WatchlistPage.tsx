@@ -38,10 +38,18 @@ function groupByMonth(list: WatchlistItem[]): { monthLabel: string; key: string;
     if (!map.has(key)) map.set(key, []);
     map.get(key)!.push(item);
   });
-  return Array.from(map.entries()).map(([key, items]) => {
+  const groups = Array.from(map.entries()).map(([key, items]) => {
     const [year, month] = key.split('-');
     const label = key === 'sem-data' ? 'Sem data definida' : `${MONTHS_PT[Number(month) - 1]} ${year}`;
-    return { monthLabel: label, key, items };
+    // Sort items within each group by start_date ascending (upcoming first)
+    const sortedItems = [...items].sort(sortByDate);
+    return { monthLabel: label, key, items: sortedItems };
+  });
+  // Sort groups chronologically; 'sem-data' always last
+  return groups.sort((a, b) => {
+    if (a.key === 'sem-data') return 1;
+    if (b.key === 'sem-data') return -1;
+    return a.key.localeCompare(b.key);
   });
 }
 

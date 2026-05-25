@@ -695,6 +695,7 @@ const AddChildForm: React.FC<{
     travel_states: [] as string[],
     competitive_level: 'amateur',
     tennis_class: '',
+    preferred_modality: 'tennis',
   });
   const [showPwd, setShowPwd] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -736,6 +737,7 @@ const AddChildForm: React.FC<{
           travel_states: profile.travel_states,
           competitive_level: profile.competitive_level as any,
           tennis_class: profile.tennis_class,
+          preferred_modality: profile.preferred_modality,
           is_primary: true,
         },
       );
@@ -904,7 +906,14 @@ const AddChildForm: React.FC<{
           </select>
         </div>
         <div>
-          <label className="text-xs text-text-secondary mb-1 block">Classe</label>
+          <label className="text-xs text-text-secondary mb-1 block">Modalidade *</label>
+          <select className="input-base" value={profile.preferred_modality}
+            onChange={(e) => setProfile({ ...profile, preferred_modality: e.target.value })}>
+            {MODALITY_OPTIONS.filter((o) => o.value).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs text-text-secondary mb-1 block">Classe (FPT/CBT)</label>
           <select className="input-base" value={profile.tennis_class}
             onChange={(e) => setProfile({ ...profile, tennis_class: e.target.value })}>
             <option value="">Sem classe definida</option>

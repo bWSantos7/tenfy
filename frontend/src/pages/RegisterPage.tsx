@@ -198,8 +198,10 @@ export const RegisterPage: React.FC = () => {
       toast.success('E-mail verificado!');
 
       if (planSlug === 'tester') {
-        // Tester: cria assinatura em background, sem pagamento
-        checkout({ plan_slug: 'individual' as any, billing_period: 'monthly', payment_method: 'pix' }).catch(() => {});
+        // Tester: cria assinatura em background, sem pagamento.
+        // Usar 'tester' para que responsáveis possam cadastrar múltiplos dependentes
+        // (tester tem max_members=4; 'individual' bloquearia o segundo dependente).
+        checkout({ plan_slug: 'tester' as any, billing_period: 'monthly', payment_method: 'pix' }).catch(() => {});
         if (role === 'parent') {
           setStep('done_parent');
         } else {
@@ -691,9 +693,16 @@ export const RegisterPage: React.FC = () => {
         {/* ─── PROFILE ──────────────────────────────────────────────────── */}
         {step === 'profile' && (
           <div className="card space-y-3">
+            <div className="rounded-xl bg-accent-neon/10 border border-accent-neon/30 px-4 py-3 flex items-start gap-2">
+              <CheckCircle className="w-4 h-4 text-accent-neon mt-0.5 shrink-0" />
+              <div>
+                <p className="text-sm font-bold text-accent-neon">Conta criada com sucesso!</p>
+                <p className="text-xs text-text-secondary mt-0.5">Preencha seu perfil esportivo para encontrar torneios compatíveis. Você pode pular e configurar depois no painel.</p>
+              </div>
+            </div>
             <div>
               <h2 className="text-xl font-bold mb-0.5">Perfil esportivo</h2>
-              <p className="text-sm text-text-secondary">Preencha seus dados para encontrar torneios compatíveis. Pode pular e configurar depois.</p>
+              <p className="text-sm text-text-secondary">Dados usados para recomendar torneios compatíveis com você.</p>
             </div>
 
             <div>

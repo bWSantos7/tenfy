@@ -69,7 +69,10 @@ export const HomePage: React.FC = () => {
 
       if (primary) {
         syncModalityFromProfile(primary);
-        const modality = getProfileModality(primary.id);
+        // Prefer preferred_modality from the API response; fall back to localStorage cache.
+        // This ensures the modality filter is always up-to-date even after profile changes
+        // on another device, and correctly filters compatible tournaments per dependent profile.
+        const modality = primary.preferred_modality || getProfileModality(primary.id);
         const compatData = await compatibleForProfile(primary.id, {
           page_size: 20,
           ...(modality ? { modality } : {}),

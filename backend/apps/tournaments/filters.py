@@ -22,7 +22,7 @@ class TournamentEditionFilter(filters.FilterSet):
     city = filters.CharFilter(field_name='venue__city', lookup_expr='icontains')
     organization = filters.NumberFilter(field_name='tournament__organization_id')
     organization_slug = filters.CharFilter(method='filter_org_slug')
-    modality = filters.CharFilter(field_name='tournament__modality')
+    modality = filters.CharFilter(field_name='tournament__modality', lookup_expr='iexact')
     circuit = filters.CharFilter(field_name='tournament__circuit', lookup_expr='icontains')
     surface = filters.CharFilter(field_name='surface')
     status = filters.CharFilter(field_name='status')

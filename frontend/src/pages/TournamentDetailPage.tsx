@@ -3,10 +3,14 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   ArrowLeft, Calendar, MapPin, Clock, ExternalLink, Star, CheckCircle2,
   XCircle, HelpCircle, Loader2, AlertTriangle, FileText, History, Share2,
-  Users, ChevronDown, ChevronUp, Trophy, Clock3,
+  Users, ChevronDown, ChevronUp, RefreshCw, ShieldCheck, Info, AlertCircle,
+  CheckCircle, CreditCard, UserX, UserCheck, UserPlus,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { TournamentEditionDetail, EditionEligibility, PlayerProfile, EditionRegistrants, RegistrantCategory } from '../types';
+import {
+  TournamentEditionDetail, EditionEligibility, PlayerProfile,
+  EditionRegistrants, RegistrantCategory, FederationEntryItem,
+} from '../types';
 import { getEdition, evaluateEdition } from '../services/tournaments';
 import { listProfiles, toggleWatchlist, listWatchlist } from '../services/data';
 import { getEditionRegistrants } from '../services/registrations';
@@ -16,6 +20,33 @@ import {
 } from '../utils/format';
 import { extractApiError } from '../services/api';
 import { pickBestProfile } from '../utils/profile';
+
+const STALE_HOURS = 24;
+function isStale(syncedAt: string | null): boolean {
+  if (!syncedAt) return false;
+  return Date.now() - new Date(syncedAt).getTime() > STALE_HOURS * 3600 * 1000;
+}
+
+const STATUS_CONFIG: Record<string, { icon: React.ReactNode; color: string; label: string }> = {
+  confirmed:       { icon: <CheckCircle  className="w-3.5 h-3.5" />, color: 'text-accent-neon',    label: 'Confirmado na chave' },
+  waiting_list:    { icon: <Clock        className="w-3.5 h-3.5" />, color: 'text-status-closing', label: 'Lista de espera' },
+  pending_payment: { icon: <CreditCard   className="w-3.5 h-3.5" />, color: 'text-accent-blue',    label: 'Aguardando pagamento' },
+  registered:      { icon: <UserPlus     className="w-3.5 h-3.5" />, color: 'text-text-secondary', label: 'Inscrito' },
+  removed:         { icon: <UserX        className="w-3.5 h-3.5" />, color: 'text-status-canceled',label: 'Removido' },
+};
+
+const PAYMENT_COLOR: Record<string, string> = {
+  paid:    'text-accent-neon',
+  pending: 'text-status-closing',
+  unknown: 'text-text-muted',
+};
+
+const CONFIDENCE_CONFIG: Record<string, { icon: React.ReactNode; color: string; label: string }> = {
+  high:   { icon: <ShieldCheck className="w-2.5 h-2.5" />, color: 'text-accent-neon',    label: 'Fonte oficial' },
+  medium: { icon: <Info        className="w-2.5 h-2.5" />, color: 'text-status-closing', label: 'Fonte pública' },
+  med:    { icon: <Info        className="w-2.5 h-2.5" />, color: 'text-status-closing', label: 'Fonte pública' },
+  low:    { icon: <AlertCircle className="w-2.5 h-2.5" />, color: 'text-status-canceled',label: 'Dado inferido' },
+};
 
 export const TournamentDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -30,16 +61,13 @@ export const TournamentDetailPage: React.FC = () => {
   const [registrants, setRegistrants] = useState<EditionRegistrants | null>(null);
   const [registrantsLoading, setRegistrantsLoading] = useState(false);
   const [registrantsOpen, setRegistrantsOpen] = useState(false);
+  const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
 
   async function handleShare() {
     const url = window.location.href;
     const title = ed?.title ?? 'Torneio';
     if (navigator.share) {
-      try {
-        await navigator.share({ title, url });
-      } catch {
-        // user cancelled
-      }
+      try { await navigator.share({ title, url }); } catch { /* cancelled */ }
     } else {
       await navigator.clipboard.writeText(url);
       toast.success('Link copiado!');
@@ -67,9 +95,7 @@ export const TournamentDetailPage: React.FC = () => {
           try {
             const e = await evaluateEdition(edId, primary.id);
             setElig(e);
-          } catch {
-            // Ignore eligibility errors and keep the rest of the page usable.
-          }
+          } catch { /* ignore */ }
         }
       } catch (err) {
         toast.error(extractApiError(err));
@@ -80,24 +106,44 @@ export const TournamentDetailPage: React.FC = () => {
     })();
   }, [id, nav]);
 
-  async function handleLoadRegistrants() {
+  async function loadRegistrants(edId: number) {
+    setRegistrantsLoading(true);
+    try {
+      const data = await getEditionRegistrants(edId);
+      setRegistrants(data);
+      if (data.categories.length > 0) {
+        setExpandedCats(new Set([data.categories[0].category_text]));
+      }
+    } catch {
+      toast.error('Não foi possível carregar os inscritos.');
+    } finally {
+      setRegistrantsLoading(false);
+    }
+  }
+
+  async function handleToggleRegistrants() {
     if (!ed) return;
-    if (registrantsOpen && registrants) {
+    if (registrantsOpen) {
       setRegistrantsOpen(false);
       return;
     }
     setRegistrantsOpen(true);
-    if (registrants) return;
-    setRegistrantsLoading(true);
-    try {
-      const data = await getEditionRegistrants(ed.id);
-      setRegistrants(data);
-    } catch {
-      toast.error('Não foi possível carregar os inscritos.');
-      setRegistrantsOpen(false);
-    } finally {
-      setRegistrantsLoading(false);
-    }
+    if (!registrants) await loadRegistrants(ed.id);
+  }
+
+  async function handleRefreshRegistrants() {
+    if (!ed) return;
+    setRegistrants(null);
+    setExpandedCats(new Set());
+    await loadRegistrants(ed.id);
+  }
+
+  function toggleCat(text: string) {
+    setExpandedCats((prev) => {
+      const next = new Set(prev);
+      if (next.has(text)) next.delete(text); else next.add(text);
+      return next;
+    });
   }
 
   async function handleWatch() {
@@ -137,12 +183,18 @@ export const TournamentDetailPage: React.FC = () => {
   const unknownCats = (elig?.categories || []).filter((c) => c.result.status === 'unknown');
   const incompatCats = (elig?.categories || []).filter((c) => c.result.status === 'incompatible');
 
+  // Staleness / sync info from registrants
+  const firstEntry = registrants?.categories[0]?.entries[0];
+  const syncedAt = firstEntry?.synced_at ?? null;
+  const sourceLabel = firstEntry?.source_label || firstEntry?.source || null;
+
   return (
     <div className="space-y-4 pb-4">
       <button onClick={() => nav(-1)} className="btn-ghost flex items-center gap-1 -ml-2">
         <ArrowLeft className="w-4 h-4" /> Voltar
       </button>
 
+      {/* ── Main info card ── */}
       <div className="card space-y-3">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
@@ -159,27 +211,15 @@ export const TournamentDetailPage: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-2 gap-3 text-sm pt-2">
-          <Stat
-            icon={<Calendar className="w-4 h-4" />}
-            label="Período"
-            value={fmtDateRange(ed.start_date, ed.end_date)}
-          />
-          <Stat
-            icon={<MapPin className="w-4 h-4" />}
-            label="Local"
-            value={location || '—'}
-          />
-          <Stat
-            icon={<Clock className="w-4 h-4" />}
-            label="Prazo de inscrição"
+          <Stat icon={<Calendar className="w-4 h-4" />} label="Período"
+            value={fmtDateRange(ed.start_date, ed.end_date)} />
+          <Stat icon={<MapPin className="w-4 h-4" />} label="Local"
+            value={location || '—'} />
+          <Stat icon={<Clock className="w-4 h-4" />} label="Prazo de inscrição"
             value={ed.entry_close_at ? fmtDateTime(ed.entry_close_at) : '—'}
-            accent={!!ed.entry_close_at}
-          />
-          <Stat
-            icon={<FileText className="w-4 h-4" />}
-            label="Valor base"
-            value={fmtBRL(ed.base_price_brl)}
-          />
+            accent={!!ed.entry_close_at} />
+          <Stat icon={<FileText className="w-4 h-4" />} label="Valor base"
+            value={fmtBRL(ed.base_price_brl)} />
         </div>
 
         {ed.venue_detail?.address && (
@@ -201,23 +241,17 @@ export const TournamentDetailPage: React.FC = () => {
           </div>
         )}
 
+        {/* Action buttons */}
         <div className="grid grid-cols-2 gap-2 pt-1">
           {regURL && (
-            <a
-              href={regURL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="btn-primary flex items-center justify-center gap-2"
-            >
+            <a href={regURL} target="_blank" rel="noopener noreferrer"
+              className="btn-primary flex items-center justify-center gap-2">
               <ExternalLink className="w-4 h-4" /> Inscrição oficial
             </a>
           )}
           <button
-            className={`btn-secondary flex items-center justify-center gap-2 ${
-              watching ? '!border-accent-neon !text-accent-neon' : ''
-            }`}
-            onClick={handleWatch}
-            disabled={togglingWatch}
+            className={`btn-secondary flex items-center justify-center gap-2 ${watching ? '!border-accent-neon !text-accent-neon' : ''}`}
+            onClick={handleWatch} disabled={togglingWatch}
           >
             {togglingWatch
               ? <Loader2 className="w-4 h-4 animate-spin" />
@@ -225,6 +259,19 @@ export const TournamentDetailPage: React.FC = () => {
             {watching ? 'Na sua agenda' : 'Acompanhar'}
           </button>
         </div>
+
+        {/* Ver lista de inscritos — mesma posição do mobile */}
+        <button
+          onClick={handleToggleRegistrants}
+          disabled={registrantsLoading}
+          className="w-full btn-secondary flex items-center justify-center gap-2"
+        >
+          {registrantsLoading
+            ? <Loader2 className="w-4 h-4 animate-spin" />
+            : <Users className="w-4 h-4" />}
+          {registrantsOpen ? 'Ocultar lista de inscritos' : 'Ver lista de inscritos'}
+        </button>
+
         <button
           onClick={handleShare}
           className="w-full btn-ghost flex items-center justify-center gap-2 text-sm border border-border-subtle rounded-xl py-2"
@@ -233,17 +280,78 @@ export const TournamentDetailPage: React.FC = () => {
         </button>
 
         {regulation && (
-          <a
-            href={regulation.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-accent-blue hover:underline inline-flex items-center gap-1"
-          >
+          <a href={regulation.url} target="_blank" rel="noopener noreferrer"
+            className="text-xs text-accent-blue hover:underline inline-flex items-center gap-1">
             <FileText className="w-3 h-3" /> Regulamento oficial
           </a>
         )}
       </div>
 
+      {/* ── Lista de inscritos (expandida) ── */}
+      {registrantsOpen && (
+        <div className="space-y-3">
+          {/* Staleness warning */}
+          {isStale(syncedAt) && (
+            <div className="flex items-center gap-2 bg-status-closing/10 border border-status-closing/30 rounded-xl px-3 py-2 text-xs text-status-closing">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <span className="flex-1">Dados com mais de {STALE_HOURS}h. Atualize para ver a lista mais recente.</span>
+              <button onClick={handleRefreshRegistrants} className="shrink-0">
+                <RefreshCw className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
+          {/* Sync info bar */}
+          {(syncedAt || sourceLabel) && !registrantsLoading && (
+            <div className="flex items-center gap-1.5 text-[11px] text-text-muted px-1">
+              <RefreshCw className="w-3 h-3 shrink-0" />
+              {sourceLabel && <span>Fonte: {sourceLabel}</span>}
+              {sourceLabel && syncedAt && <span>·</span>}
+              {syncedAt && <span>Atualizado em {fmtDateTime(syncedAt)}</span>}
+            </div>
+          )}
+
+          {registrantsLoading && (
+            <div className="card py-10 flex justify-center">
+              <Loader2 className="w-6 h-6 text-accent-neon animate-spin" />
+            </div>
+          )}
+
+          {!registrantsLoading && registrants && registrants.categories.length === 0 && (
+            <div className="card text-center py-8 space-y-1">
+              <Users className="w-8 h-8 text-text-muted mx-auto" />
+              <p className="text-sm font-medium text-text-secondary">Lista ainda não publicada</p>
+              <p className="text-xs text-text-muted">
+                A federação ainda não divulgou as inscrições deste torneio.
+                Tente novamente mais tarde ou consulte o site oficial.
+              </p>
+            </div>
+          )}
+
+          {!registrantsLoading && registrants && registrants.categories.length > 0 && (
+            <>
+              {registrants.categories.map((cat) => (
+                <RegistrantsCategoryCard
+                  key={cat.category_text}
+                  cat={cat}
+                  expanded={expandedCats.has(cat.category_text)}
+                  onToggle={() => toggleCat(cat.category_text)}
+                />
+              ))}
+
+              {/* Note about ranking replacement */}
+              <div className="card flex items-start gap-3 bg-accent-blue/5 border border-accent-blue/20">
+                <Info className="w-4 h-4 text-accent-blue shrink-0 mt-0.5" />
+                <p className="text-[11px] text-text-muted leading-relaxed">
+                  O status "Confirmado na chave" indica que o atleta está confirmado conforme os dados publicados pela federação. Em torneios com critério de ranking, um atleta pago pode ser substituído se um atleta com ranking superior se inscrever após o preenchimento das vagas.
+                </p>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── Categorias ── */}
       <div className="card">
         <h2 className="font-semibold mb-3 flex items-center gap-2">
           Categorias
@@ -276,30 +384,16 @@ export const TournamentDetailPage: React.FC = () => {
         {elig && elig.total_count > 0 && (
           <div className="space-y-3">
             {compatCats.length > 0 && (
-              <CategoryGroup
-                title="Compatíveis com você"
-                color="text-accent-neon"
-                icon={<CheckCircle2 className="w-4 h-4" />}
-                items={compatCats}
-              />
+              <CategoryGroup title="Compatíveis com você" color="text-accent-neon"
+                icon={<CheckCircle2 className="w-4 h-4" />} items={compatCats} />
             )}
             {unknownCats.length > 0 && (
-              <CategoryGroup
-                title="Indeterminadas"
-                color="text-text-secondary"
-                icon={<HelpCircle className="w-4 h-4" />}
-                items={unknownCats}
-                subdued
-              />
+              <CategoryGroup title="Indeterminadas" color="text-text-secondary"
+                icon={<HelpCircle className="w-4 h-4" />} items={unknownCats} subdued />
             )}
             {incompatCats.length > 0 && (
-              <CategoryGroup
-                title="Outras categorias"
-                color="text-text-muted"
-                icon={<XCircle className="w-4 h-4" />}
-                items={incompatCats}
-                subdued
-              />
+              <CategoryGroup title="Outras categorias" color="text-text-muted"
+                icon={<XCircle className="w-4 h-4" />} items={incompatCats} subdued />
             )}
           </div>
         )}
@@ -311,49 +405,7 @@ export const TournamentDetailPage: React.FC = () => {
         )}
       </div>
 
-      {/* ── Inscritos ── */}
-      <div className="card">
-        <button
-          className="w-full flex items-center justify-between"
-          onClick={handleLoadRegistrants}
-        >
-          <h2 className="font-semibold flex items-center gap-2">
-            <Users className="w-4 h-4 text-accent-blue" />
-            Inscritos
-          </h2>
-          {registrantsLoading
-            ? <Loader2 className="w-4 h-4 animate-spin text-text-muted" />
-            : registrantsOpen
-              ? <ChevronUp className="w-4 h-4 text-text-muted" />
-              : <ChevronDown className="w-4 h-4 text-text-muted" />}
-        </button>
-
-        {registrantsOpen && (
-          <div className="mt-3">
-            {registrantsLoading && (
-              <div className="py-8 flex justify-center">
-                <Loader2 className="w-6 h-6 text-accent-neon animate-spin" />
-              </div>
-            )}
-            {!registrantsLoading && registrants && registrants.categories.length === 0 && (
-              <p className="text-sm text-text-muted text-center py-6">
-                Nenhum inscrito publicado pela fonte até o momento.
-              </p>
-            )}
-            {!registrantsLoading && registrants && registrants.categories.length > 0 && (
-              <div className="space-y-5">
-                {registrants.categories.map((cat) => (
-                  <RegistrantsCategory key={cat.category_text} cat={cat} />
-                ))}
-                <p className="text-[10px] text-text-muted text-center pt-1">
-                  Dados sincronizados de fontes oficiais — podem não refletir a lista definitiva.
-                </p>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
+      {/* ── Origem dos dados ── */}
       <div className="card">
         <h2 className="font-semibold mb-2 flex items-center gap-2">
           <FileText className="w-4 h-4" /> Origem dos dados
@@ -367,12 +419,8 @@ export const TournamentDetailPage: React.FC = () => {
             <div className="flex justify-between items-center">
               <dt>Link oficial</dt>
               <dd>
-                <a
-                  href={ed.official_source_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-accent-blue hover:underline truncate max-w-[180px] inline-block"
-                >
+                <a href={ed.official_source_url} target="_blank" rel="noopener noreferrer"
+                  className="text-accent-blue hover:underline truncate max-w-[180px] inline-block">
                   {new URL(ed.official_source_url).hostname}
                 </a>
               </dd>
@@ -384,13 +432,11 @@ export const TournamentDetailPage: React.FC = () => {
           </div>
           <div className="flex justify-between">
             <dt>Confiança dos dados</dt>
-            <dd
-              className={`font-medium ${
-                ed.data_confidence === 'high' ? 'text-accent-neon'
-                : ed.data_confidence === 'low' ? 'text-status-canceled'
-                : 'text-status-closing'
-              }`}
-            >
+            <dd className={`font-medium ${
+              ed.data_confidence === 'high' ? 'text-accent-neon'
+              : ed.data_confidence === 'low' ? 'text-status-canceled'
+              : 'text-status-closing'
+            }`}>
               {ed.data_confidence === 'high' ? 'Alta'
                 : ed.data_confidence === 'low' ? 'Baixa' : 'Média'}
             </dd>
@@ -398,6 +444,7 @@ export const TournamentDetailPage: React.FC = () => {
         </dl>
       </div>
 
+      {/* ── Histórico de alterações ── */}
       {ed.change_events && ed.change_events.length > 0 && (
         <div className="card">
           <h2 className="font-semibold mb-3 flex items-center gap-2">
@@ -422,12 +469,157 @@ export const TournamentDetailPage: React.FC = () => {
   );
 };
 
-const Stat: React.FC<{
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  accent?: boolean;
-}> = ({ icon, label, value, accent = false }) => (
+// ── Registrants: category card ────────────────────────────────────────────────
+
+function RegistrantsCategoryCard({
+  cat, expanded, onToggle,
+}: {
+  cat: RegistrantCategory;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const { summary } = cat;
+  const totalSlots = summary.total_slots ?? cat.max_participants;
+  const drawFull = totalSlots != null && summary.filled_slots >= totalSlots;
+  const isCosatSource = cat.entries[0]?.source === 'cosat';
+
+  const pills = isCosatSource
+    ? [{ label: `${summary.total} inscrito${summary.total !== 1 ? 's' : ''}`, cls: 'text-text-muted border-text-muted/30 bg-text-muted/10' },
+       { label: 'Pagamento não informado pela fonte', cls: 'text-text-muted border-text-muted/20 bg-transparent italic' }]
+    : [
+        { label: `${summary.total} inscrito${summary.total !== 1 ? 's' : ''}`,            cls: 'text-text-muted border-text-muted/30 bg-text-muted/10' },
+        { label: `${summary.in_draw} na chave`,                                            cls: 'text-accent-neon border-accent-neon/30 bg-accent-neon/10' },
+        { label: `${summary.paid} pago${summary.paid !== 1 ? 's' : ''}`,                  cls: 'text-accent-blue border-accent-blue/30 bg-accent-blue/10' },
+        { label: `${summary.pending} pendente${summary.pending !== 1 ? 's' : ''}`,         cls: 'text-status-closing border-status-closing/30 bg-status-closing/10' },
+      ];
+
+  return (
+    <div className="card p-0 overflow-hidden">
+      {/* Header */}
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center justify-between p-4 text-left"
+      >
+        <div>
+          <p className="font-semibold text-sm">{cat.category_text}</p>
+          {totalSlots != null && (
+            <p className="text-xs text-text-muted mt-0.5">
+              Vagas: {summary.filled_slots}/{totalSlots}
+              {drawFull
+                ? ' · Chave completa'
+                : ` · ${summary.remaining_slots ?? (totalSlots - summary.filled_slots)} restante${(summary.remaining_slots ?? 1) !== 1 ? 's' : ''}`}
+            </p>
+          )}
+        </div>
+        {expanded
+          ? <ChevronUp className="w-4 h-4 text-text-muted shrink-0" />
+          : <ChevronDown className="w-4 h-4 text-text-muted shrink-0" />}
+      </button>
+
+      {/* Summary pills */}
+      <div className="flex flex-wrap gap-1.5 px-4 pb-3">
+        {pills.map((p) => (
+          <span key={p.label} className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${p.cls}`}>
+            {p.label}
+          </span>
+        ))}
+      </div>
+
+      {/* Entry list */}
+      {expanded && (
+        <div className="border-t border-border-subtle">
+          {cat.entries.map((entry) => (
+            <EntryRow key={entry.id} entry={entry} maxP={totalSlots} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Registrants: entry row ────────────────────────────────────────────────────
+
+function EntryRow({ entry, maxP }: { entry: FederationEntryItem; maxP: number | null }) {
+  const sc = STATUS_CONFIG[entry.status] ?? {
+    icon: <HelpCircle className="w-3.5 h-3.5" />,
+    color: 'text-text-muted',
+    label: entry.status_label || 'Desconhecido',
+  };
+  const payColor = PAYMENT_COLOR[entry.payment_status] ?? 'text-text-muted';
+  const confCfg = CONFIDENCE_CONFIG[entry.confidence] ?? CONFIDENCE_CONFIG.medium;
+  const isRemoved = entry.status === 'removed';
+  const showPayment = entry.source !== 'cosat' && entry.status !== 'registered';
+
+  return (
+    <div className={`flex items-start gap-3 px-4 py-3 border-b border-border-subtle last:border-0 ${isRemoved ? 'opacity-60' : ''}`}>
+      {/* Slot # */}
+      <div className="w-8 text-right shrink-0 pt-0.5">
+        <span className={`text-sm font-bold ${isRemoved ? sc.color : entry.in_draw ? 'text-accent-neon' : 'text-text-muted'}`}>
+          {entry.slot_position != null ? `#${entry.slot_position}` : '—'}
+        </span>
+      </div>
+
+      {/* Player info */}
+      <div className="flex-1 min-w-0">
+        <p className={`text-sm font-semibold ${isRemoved ? 'line-through' : ''}`}>
+          {entry.player_name}
+          {entry.player_country_code && entry.player_country_code !== 'BRA' && (
+            <span className="ml-1 text-[10px] text-text-muted font-normal">({entry.player_country_code})</span>
+          )}
+        </p>
+        {entry.player_country_name && entry.player_country_code !== 'BRA' && (
+          <p className="text-[11px] text-text-muted">{entry.player_country_name}</p>
+        )}
+        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+          {entry.ranking_position != null && (
+            <span className="text-[11px] text-text-muted">Ranking {entry.ranking_position}</span>
+          )}
+          {entry.notes && (
+            <span className="text-[11px] text-text-muted">· {entry.notes}</span>
+          )}
+        </div>
+        {isRemoved && (
+          <p className="text-[11px] mt-1 leading-4" style={{ color: 'var(--color-status-canceled)' }}>
+            {entry.replacement_reason || 'Removido por critério de ranking da federação'}
+          </p>
+        )}
+        {entry.source_url && (
+          <a
+            href={entry.source_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 mt-1 text-[10px] text-accent-blue hover:underline"
+          >
+            <ExternalLink className="w-2.5 h-2.5" /> Ver na fonte oficial
+          </a>
+        )}
+      </div>
+
+      {/* Status + payment + confidence */}
+      <div className="flex flex-col items-end gap-1 shrink-0">
+        <div className={`flex items-center gap-1 ${sc.color}`}>
+          {sc.icon}
+          <span className="text-[10px] font-semibold">{sc.label}</span>
+        </div>
+        {showPayment && (
+          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-current/10 ${payColor}`}>
+            {entry.payment_status_label}
+          </span>
+        )}
+        <div className={`flex items-center gap-0.5 ${confCfg.color}`}>
+          {confCfg.icon}
+          <span className="text-[9px]">{confCfg.label}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Sub-components ────────────────────────────────────────────────────────────
+
+const Stat: React.FC<{ icon: React.ReactNode; label: string; value: string; accent?: boolean }> = (
+  { icon, label, value, accent = false }
+) => (
   <div>
     <div className="text-[10px] text-text-muted uppercase tracking-wider flex items-center gap-1">
       {icon} {label}
@@ -436,94 +628,6 @@ const Stat: React.FC<{
       {value}
     </div>
   </div>
-);
-
-const STATUS_CHIP: Record<string, { label: string; cls: string }> = {
-  confirmed:       { label: 'Confirmado',   cls: 'bg-accent-neon/15 text-accent-neon' },
-  in_draw:         { label: 'No draw',      cls: 'bg-accent-blue/15 text-accent-blue' },
-  registered:      { label: 'Inscrito',     cls: 'bg-accent-blue/15 text-accent-blue' },
-  waiting_list:    { label: 'Lista espera', cls: 'bg-amber-400/15 text-amber-400' },
-  pending_payment: { label: 'Ag. pagamento',cls: 'bg-orange-400/15 text-orange-400' },
-  removed:         { label: 'Removido',     cls: 'bg-status-canceled/20 text-status-canceled' },
-};
-
-const PAYMENT_CHIP: Record<string, string> = {
-  paid:    'text-accent-neon',
-  waived:  'text-accent-neon',
-  pending: 'text-amber-400',
-  unknown: 'text-text-muted',
-};
-
-const RegistrantsCategory: React.FC<{ cat: RegistrantCategory }> = ({ cat }) => {
-  const s = cat.summary;
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="text-sm font-semibold text-text-primary">{cat.category_text}</h3>
-        {cat.max_participants && (
-          <span className="text-[10px] text-text-muted">
-            {s.filled_slots}/{cat.max_participants} vagas
-          </span>
-        )}
-      </div>
-
-      <div className="flex gap-3 mb-3 flex-wrap">
-        <StatChip icon={<Users className="w-3 h-3" />} label={`${s.total} total`} />
-        {s.in_draw > 0 && (
-          <StatChip icon={<Trophy className="w-3 h-3 text-accent-neon" />} label={`${s.in_draw} no draw`} cls="text-accent-neon" />
-        )}
-        {s.waiting_list > 0 && (
-          <StatChip icon={<Clock3 className="w-3 h-3 text-amber-400" />} label={`${s.waiting_list} espera`} cls="text-amber-400" />
-        )}
-        {s.removed > 0 && (
-          <StatChip label={`${s.removed} removido${s.removed > 1 ? 's' : ''}`} cls="text-status-canceled" />
-        )}
-      </div>
-
-      <div className="space-y-1">
-        {cat.entries.map((entry) => {
-          const chip = STATUS_CHIP[entry.status] ?? { label: entry.status_label, cls: 'bg-bg-elevated text-text-muted' };
-          const payColor = PAYMENT_CHIP[entry.payment_status] ?? 'text-text-muted';
-          return (
-            <div
-              key={entry.id}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${
-                entry.removed_or_replaced ? 'opacity-40 line-through' : 'bg-bg-elevated'
-              }`}
-            >
-              <span className="text-[11px] text-text-muted w-5 text-right shrink-0">
-                {entry.slot_position ?? '—'}
-              </span>
-              <span className="flex-1 min-w-0 truncate font-medium">
-                {entry.player_name}
-                {entry.player_country_code && entry.player_country_code !== 'BRA' && (
-                  <span className="ml-1 text-[10px] text-text-muted">({entry.player_country_code})</span>
-                )}
-              </span>
-              {entry.ranking_position && (
-                <span className="text-[10px] text-text-muted shrink-0">#{entry.ranking_position}</span>
-              )}
-              <span className={`text-[10px] font-semibold shrink-0 ${payColor}`}>
-                {entry.payment_status === 'paid'
-                  ? '✓ Pago' : entry.payment_status === 'pending' ? 'Ag. pag.' : ''}
-              </span>
-              <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold shrink-0 ${chip.cls}`}>
-                {chip.label}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-};
-
-const StatChip: React.FC<{ icon?: React.ReactNode; label: string; cls?: string }> = ({
-  icon, label, cls = 'text-text-muted',
-}) => (
-  <span className={`flex items-center gap-1 text-[11px] ${cls}`}>
-    {icon}{label}
-  </span>
 );
 
 const CategoryGroup: React.FC<{
@@ -555,15 +659,11 @@ const CategoryGroup: React.FC<{
               </div>
             )}
             {c.result.ranking_check && c.result.ranking_check !== 'not_applicable' && (
-              <div
-                className={`text-[10px] mt-0.5 ${
-                  c.result.ranking_check === 'within_cutoff'
-                    ? 'text-accent-neon'
-                    : c.result.ranking_check === 'beyond_cutoff'
-                    ? 'text-amber-400'
-                    : 'text-text-muted italic'
-                }`}
-              >
+              <div className={`text-[10px] mt-0.5 ${
+                c.result.ranking_check === 'within_cutoff' ? 'text-accent-neon'
+                : c.result.ranking_check === 'beyond_cutoff' ? 'text-amber-400'
+                : 'text-text-muted italic'
+              }`}>
                 {c.result.ranking_check === 'within_cutoff' && '✓ Ranking dentro do corte estimado.'}
                 {c.result.ranking_check === 'beyond_cutoff' && '⚠ Ranking acima do corte estimado — vaga incerta. Confirme na fonte oficial.'}
                 {c.result.ranking_check === 'unknown' && (c.result.ranking_note || 'Corte de ranking não estimado.')}
@@ -578,3 +678,4 @@ const CategoryGroup: React.FC<{
     </div>
   </div>
 );
+

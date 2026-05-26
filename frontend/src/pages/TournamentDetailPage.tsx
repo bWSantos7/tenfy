@@ -152,8 +152,17 @@ export const TournamentDetailPage: React.FC = () => {
     });
   }
 
-  function handleRegister() {
+  async function handleRegister() {
     if (!ed) return;
+    // Add to agenda automatically if not already watching
+    if (!watching) {
+      try {
+        const r = await toggleWatchlist(ed.id, profile?.id);
+        setWatching(r.watching);
+        setWatchingItemId(r.item?.id ?? null);
+        if (r.watching) toast.success('Torneio adicionado à sua agenda!');
+      } catch { /* ignore watchlist error — still open external link */ }
+    }
     const regLink = ed.links?.find((l) => l.link_type === 'registration');
     const url = regLink?.url || ed.official_source_url;
     if (url) {

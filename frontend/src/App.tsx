@@ -21,6 +21,7 @@ const CoachPage           = React.lazy(() => import('./pages/CoachPage').then(m 
 const SubscriptionPage    = React.lazy(() => import('./pages/SubscriptionPage').then(m => ({ default: m.SubscriptionPage })));
 const PrivacyPolicyPage   = React.lazy(() => import('./pages/PrivacyPolicyPage').then(m => ({ default: m.PrivacyPolicyPage })));
 const InscricoesPage      = React.lazy(() => import('./pages/InscricoesPage').then(m => ({ default: m.InscricoesPage })));
+const TournamentComparePage = React.lazy(() => import('./pages/TournamentComparePage').then(m => ({ default: m.TournamentComparePage })));
 
 const PageLoader: React.FC = () => (
   <div className="min-h-screen bg-bg-base flex items-center justify-center">
@@ -81,6 +82,7 @@ const App: React.FC = () => {
           <Route path="inicio" element={<HomePage />} />
           <Route path="torneios" element={<TournamentsPage />} />
           <Route path="torneios/:id" element={<TournamentDetailPage />} />
+          <Route path="comparar" element={<TournamentComparePage />} />
           <Route path="watchlist" element={<WatchlistPage />} />
           <Route path="resultados" element={<ResultsPage />} />
           <Route path="alertas" element={<AlertsPage />} />

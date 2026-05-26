@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Search, Filter, Loader2, X, MapPin, List, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Search, Filter, Loader2, X, MapPin, List, Calendar, ChevronLeft, ChevronRight, GitCompareArrows, CheckSquare, Square } from 'lucide-react';
 import { TournamentEditionList } from '../types';
 import {
   listEditions,
@@ -97,9 +98,32 @@ function saveFilters(state: PersistedFilters) {
 
 export const TournamentsPage: React.FC = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const saved = useRef<PersistedFilters | null>(loadSavedFilters());
 
   const [viewMode, setViewMode] = useState<ViewMode>('list');
+
+  // Compare mode
+  const [compareMode, setCompareMode] = useState(false);
+  const [selectedCompare, setSelectedCompare] = useState<Set<number>>(new Set());
+
+  function toggleCompareMode() {
+    setCompareMode((v) => !v);
+    setSelectedCompare(new Set());
+  }
+
+  function toggleCompareSelect(id: number) {
+    setSelectedCompare((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) { next.delete(id); } else if (next.size < 4) { next.add(id); }
+      return next;
+    });
+  }
+
+  function handleCompare() {
+    if (selectedCompare.size < 2) return;
+    navigate(`/comparar?ids=${Array.from(selectedCompare).join(',')}`);
+  }
 
   // List state
   const [items, setItems] = useState<TournamentEditionList[]>([]);
@@ -239,21 +263,36 @@ export const TournamentsPage: React.FC = () => {
           <h1 className="text-2xl font-bold">Torneios</h1>
           <p className="text-sm text-text-muted">Agregados de CBT, FPT e federações parceiras</p>
         </div>
-        <div className="flex items-center gap-1 bg-bg-card border border-border-subtle rounded-xl p-1">
-          <button
-            onClick={() => switchMode('list')}
-            title="Lista"
-            className={`p-2 rounded-lg transition-colors ${viewMode === 'list' ? 'bg-accent-neon text-bg-base' : 'text-text-muted hover:text-text-primary'}`}
-          >
-            <List className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => switchMode('calendar')}
-            title="Calendário"
-            className={`p-2 rounded-lg transition-colors ${viewMode === 'calendar' ? 'bg-accent-neon text-bg-base' : 'text-text-muted hover:text-text-primary'}`}
-          >
-            <Calendar className="w-4 h-4" />
-          </button>
+        <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 bg-bg-card border border-border-subtle rounded-xl p-1">
+            <button
+              onClick={() => switchMode('list')}
+              title="Lista"
+              className={`p-2 rounded-lg transition-colors ${viewMode === 'list' ? 'bg-accent-neon text-bg-base' : 'text-text-muted hover:text-text-primary'}`}
+            >
+              <List className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => switchMode('calendar')}
+              title="Calendário"
+              className={`p-2 rounded-lg transition-colors ${viewMode === 'calendar' ? 'bg-accent-neon text-bg-base' : 'text-text-muted hover:text-text-primary'}`}
+            >
+              <Calendar className="w-4 h-4" />
+            </button>
+          </div>
+          {viewMode === 'list' && (
+            <button
+              onClick={toggleCompareMode}
+              title={compareMode ? 'Sair do modo comparação' : 'Comparar torneios'}
+              className={`p-2 rounded-xl border transition-colors ${
+                compareMode
+                  ? 'bg-accent-neon text-bg-base border-accent-neon'
+                  : 'bg-bg-card border-border-subtle text-text-muted hover:text-text-primary'
+              }`}
+            >
+              <GitCompareArrows className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -431,6 +470,12 @@ export const TournamentsPage: React.FC = () => {
             </div>
           ) : (
             <div className="space-y-3">
+              {compareMode && (
+                <div className="flex items-center gap-2 px-1 py-1.5 text-xs text-text-muted">
+                  <GitCompareArrows className="w-3.5 h-3.5 text-accent-neon" />
+                  Selecione 2 a 4 torneios para comparar · {selectedCompare.size} selecionado{selectedCompare.size !== 1 ? 's' : ''}
+                </div>
+              )}
               {items.map((ed, i) => {
                 const dynStatus = ed.dynamic_status ?? ed.status ?? 'unknown';
                 const group = getStatusGroup(dynStatus);
@@ -438,6 +483,7 @@ export const TournamentsPage: React.FC = () => {
                   ? getStatusGroup(items[i - 1].dynamic_status ?? items[i - 1].status ?? 'unknown')
                   : null;
                 const showHeader = !filters.status && group !== prevGroup;
+                const isSelected = selectedCompare.has(ed.id);
                 return (
                   <React.Fragment key={ed.id}>
                     {showHeader && (
@@ -445,7 +491,27 @@ export const TournamentsPage: React.FC = () => {
                         {GROUP_LABELS[group] ?? group}
                       </div>
                     )}
-                    <TournamentCard edition={ed} />
+                    {compareMode ? (
+                      <div
+                        className={`relative rounded-xl cursor-pointer transition-all ${
+                          isSelected
+                            ? 'ring-2 ring-accent-neon ring-offset-1 ring-offset-bg-base'
+                            : selectedCompare.size >= 4 && !isSelected
+                              ? 'opacity-50 cursor-not-allowed'
+                              : ''
+                        }`}
+                        onClick={() => toggleCompareSelect(ed.id)}
+                      >
+                        <div className="absolute top-2 right-2 z-10">
+                          {isSelected
+                            ? <CheckSquare className="w-5 h-5 text-accent-neon drop-shadow" />
+                            : <Square className="w-5 h-5 text-text-muted/60" />}
+                        </div>
+                        <TournamentCard edition={ed} />
+                      </div>
+                    ) : (
+                      <TournamentCard edition={ed} />
+                    )}
                   </React.Fragment>
                 );
               })}
@@ -572,6 +638,20 @@ export const TournamentsPage: React.FC = () => {
               )}
             </>
           )}
+        </div>
+      )}
+
+      {/* ─── FLOATING COMPARE BAR ──────────────────────────────────────────── */}
+      {compareMode && selectedCompare.size >= 2 && (
+        <div className="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 bg-bg-card border border-accent-neon/40 shadow-xl rounded-2xl px-5 py-3">
+          <GitCompareArrows className="w-4 h-4 text-accent-neon" />
+          <span className="text-sm font-semibold text-accent-neon">{selectedCompare.size} selecionados</span>
+          <button onClick={handleCompare} className="btn-primary !py-2 !px-4 text-sm">
+            Comparar
+          </button>
+          <button onClick={toggleCompareMode} className="btn-ghost !p-1.5">
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
     </div>

@@ -5,12 +5,13 @@ import {
   Loader2, Trash2, Mail, Edit2, CheckCircle2, Camera, AlertTriangle,
   Sun, Moon, CreditCard, Ticket, Users, ShieldCheck, Bell, LogOut,
   MapPin, Trophy, Calendar, User, ChevronRight, Shield, Download, Plus, Eye, EyeOff, Star,
+  KeyRound, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { ParentChild, PlayerProfile } from '../types';
-import { listProfiles, setPrimary, deleteProfile, updateProfile, requestDataExport, listChildren, removeChild, createChildWithProfile } from '../services/data';
+import { listProfiles, setPrimary, deleteProfile, updateProfile, requestDataExport, listChildren, removeChild, createChildWithProfile, listChildProfiles, createChildProfile, sendChildPasswordReset } from '../services/data';
 import { deleteAccount, uploadAvatar, linkExistingChild } from '../services/auth';
 import { extractApiError, mediaUrl } from '../services/api';
 import { LEVEL_LABELS, GENDER_LABELS, TENNIS_CLASS_LABELS, ROLE_LABELS } from '../utils/format';
@@ -372,24 +373,11 @@ export const ProfilePage: React.FC = () => {
           ) : (
             <div className="space-y-3">
               {children.map((c) => (
-                <div key={c.id} className="card flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-9 h-9 rounded-full bg-accent-neon/15 flex items-center justify-center shrink-0">
-                      <User className="w-4 h-4 text-accent-neon" />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="font-semibold text-sm truncate">{c.child_detail.full_name || '—'}</div>
-                      <div className="text-xs text-text-muted truncate">{c.child_detail.email}</div>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setConfirmRemoveChild(c.id)}
-                    className="shrink-0 p-1.5 rounded-lg bg-bg-elevated hover:bg-red-500/15 text-text-muted hover:text-red-400 transition-colors"
-                    title="Remover dependente"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
+                <DependentCard
+                  key={c.id}
+                  link={c}
+                  onRemove={() => setConfirmRemoveChild(c.id)}
+                />
               ))}
             </div>
           )}
@@ -515,6 +503,12 @@ const ProfileCard: React.FC<{
           <Trophy className="w-3.5 h-3.5 text-text-muted shrink-0" />
           <span>{levelLabel}{classLabel ? ` • ${classLabel}` : ''}</span>
         </div>
+        {p.preferred_modality && (
+          <div className="flex items-center gap-2 text-xs text-text-secondary">
+            <Trophy className="w-3.5 h-3.5 text-text-muted shrink-0 invisible" />
+            <span>Modalidade: {MODALITY_OPTIONS.find(o => o.value === p.preferred_modality)?.label || p.preferred_modality}</span>
+          </div>
+        )}
       </div>
 
       {!readOnly && (
@@ -931,6 +925,272 @@ const AddChildForm: React.FC<{
           Adicionar dependente
         </button>
         <button className="btn-secondary w-full" onClick={onCancel}>Cancelar</button>
+      </div>
+    </div>
+  );
+};
+
+// ─── DependentCard — dependent with inline sports profiles ────────────────────
+
+const DependentCard: React.FC<{
+  link: ParentChild;
+  onRemove: () => void;
+}> = ({ link, onRemove }) => {
+  const [profiles, setProfiles] = useState<PlayerProfile[]>([]);
+  const [loadingProfiles, setLoadingProfiles] = useState(true);
+  const [editingProfile, setEditingProfile] = useState<PlayerProfile | null>(null);
+  const [showProfiles, setShowProfiles] = useState(false);
+  const [addingProfile, setAddingProfile] = useState(false);
+  const [sendingReset, setSendingReset] = useState(false);
+
+  async function loadProfiles() {
+    setLoadingProfiles(true);
+    try {
+      const data = await listChildProfiles(link.child);
+      setProfiles(data);
+      if (data.length > 0) setShowProfiles(true);
+    } catch { /* ignore */ }
+    finally { setLoadingProfiles(false); }
+  }
+
+  useEffect(() => { loadProfiles(); }, [link.child]);
+
+  async function handleSendReset() {
+    setSendingReset(true);
+    try {
+      await sendChildPasswordReset(link.id);
+      toast.success('E-mail de redefinição de senha enviado.');
+    } catch (err) { toast.error(extractApiError(err)); }
+    finally { setSendingReset(false); }
+  }
+
+  return (
+    <div className="card space-y-3">
+      {/* Header row */}
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-full bg-accent-neon/15 flex items-center justify-center shrink-0">
+          <User className="w-5 h-5 text-accent-neon" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="font-semibold text-sm truncate">{link.child_detail.full_name || '—'}</div>
+          <div className="text-xs text-text-muted truncate">{link.child_detail.email}</div>
+        </div>
+        <button
+          onClick={onRemove}
+          className="shrink-0 p-1.5 rounded-lg bg-bg-elevated hover:bg-red-500/15 text-text-muted hover:text-red-400 transition-colors"
+          title="Remover dependente"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Profiles section */}
+      <div>
+        <button
+          className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text-primary transition-colors w-full"
+          onClick={() => setShowProfiles((v) => !v)}
+        >
+          <Trophy className="w-3.5 h-3.5" />
+          <span className="font-semibold">
+            Perfil esportivo ({loadingProfiles ? '…' : profiles.length})
+          </span>
+          {showProfiles ? <ChevronUp className="w-3.5 h-3.5 ml-auto" /> : <ChevronDown className="w-3.5 h-3.5 ml-auto" />}
+        </button>
+
+        {showProfiles && (
+          <div className="mt-2 space-y-2">
+            {loadingProfiles ? (
+              <div className="py-3 flex justify-center"><Loader2 className="w-4 h-4 animate-spin text-accent-neon" /></div>
+            ) : profiles.length === 0 ? (
+              <p className="text-xs text-text-muted py-2">Nenhum perfil esportivo criado.</p>
+            ) : (
+              profiles.map((p) =>
+                editingProfile?.id === p.id ? (
+                  <ChildProfileEditor
+                    key={p.id}
+                    profile={p}
+                    onSaved={() => { setEditingProfile(null); loadProfiles(); }}
+                    onCancel={() => setEditingProfile(null)}
+                  />
+                ) : (
+                  <div key={p.id} className="bg-bg-elevated rounded-xl px-3 py-2.5 border border-border-subtle space-y-1">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sm font-semibold">{p.display_name}</span>
+                        {p.is_primary && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-accent-neon/15 text-accent-neon border border-accent-neon/30">
+                            Principal
+                          </span>
+                        )}
+                      </div>
+                      <button className="btn-ghost !p-1" onClick={() => setEditingProfile(p)} title="Editar">
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-text-secondary">
+                      {p.sporting_age && <span>{p.sporting_age} anos</span>}
+                      {p.gender && <span>{p.gender === 'M' ? 'Masculino' : 'Feminino'}</span>}
+                      {p.home_state && <span>{[p.home_city, p.home_state].filter(Boolean).join('/')}</span>}
+                      {p.tennis_class && <span>Classe {p.tennis_class}</span>}
+                      {p.preferred_modality && (
+                        <span>{MODALITY_OPTIONS.find(o => o.value === p.preferred_modality)?.label || p.preferred_modality}</span>
+                      )}
+                    </div>
+                  </div>
+                )
+              )
+            )}
+
+            {addingProfile && (
+              <ChildProfileEditor
+                profile={null}
+                linkId={link.id}
+                onSaved={() => { setAddingProfile(false); loadProfiles(); }}
+                onCancel={() => setAddingProfile(false)}
+              />
+            )}
+
+            {!addingProfile && (
+              <button
+                className="flex items-center gap-1.5 text-xs text-accent-neon hover:underline mt-1"
+                onClick={() => setAddingProfile(true)}
+              >
+                <Plus className="w-3.5 h-3.5" /> Adicionar perfil esportivo
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Actions */}
+      <div className="flex gap-2 pt-1 border-t border-border-subtle">
+        <button
+          className="flex-1 btn-secondary !text-xs !py-1.5 flex items-center justify-center gap-1.5"
+          onClick={handleSendReset}
+          disabled={sendingReset}
+          title="Enviar e-mail de redefinição de senha para o dependente"
+        >
+          {sendingReset ? <Loader2 className="w-3 h-3 animate-spin" /> : <KeyRound className="w-3 h-3" />}
+          Redefinir senha
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ─── ChildProfileEditor — create/edit a dependent's sports profile ─────────────
+
+const ChildProfileEditor: React.FC<{
+  profile: PlayerProfile | null;
+  linkId?: number;
+  onSaved: () => void;
+  onCancel: () => void;
+}> = ({ profile, linkId, onSaved, onCancel }) => {
+  const [form, setForm] = useState({
+    display_name:      profile?.display_name ?? '',
+    birth_year:        profile?.birth_year ? String(profile.birth_year) : '',
+    gender:            (profile?.gender ?? '') as '' | 'M' | 'F',
+    home_state:        profile?.home_state ?? 'SP',
+    home_city:         profile?.home_city ?? '',
+    travel_states:     profile?.travel_states ?? [] as string[],
+    tennis_class:      profile?.tennis_class ?? '',
+    competitive_level: profile?.competitive_level ?? 'amateur',
+    preferred_modality: profile?.preferred_modality ?? 'tennis',
+  });
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    setSaving(true);
+    try {
+      const payload = {
+        ...form,
+        birth_year: form.birth_year ? Number(form.birth_year) : null,
+      } as any;
+      if (profile) {
+        await updateProfile(profile.id, payload);
+      } else if (linkId != null) {
+        await createChildProfile(linkId, { ...payload, is_primary: true });
+      }
+      toast.success(profile ? 'Perfil atualizado' : 'Perfil criado');
+      onSaved();
+    } catch (err) { toast.error(extractApiError(err)); }
+    finally { setSaving(false); }
+  }
+
+  return (
+    <div className="bg-bg-elevated rounded-xl border border-border-subtle p-3 space-y-2">
+      <h4 className="text-xs font-bold text-text-muted">{profile ? `Editando: ${profile.display_name}` : 'Novo perfil esportivo'}</h4>
+
+      <div>
+        <label className="text-xs text-text-secondary mb-0.5 block">Nome de exibição</label>
+        <input className="input-base !py-1.5 text-sm" value={form.display_name}
+          onChange={(e) => setForm({ ...form, display_name: e.target.value })} />
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="text-xs text-text-secondary mb-0.5 block">Ano nasc.</label>
+          <input className="input-base !py-1.5 text-sm" type="number" placeholder="2010" value={form.birth_year}
+            onChange={(e) => setForm({ ...form, birth_year: e.target.value })} />
+        </div>
+        <div>
+          <label className="text-xs text-text-secondary mb-0.5 block">Gênero</label>
+          <select className="input-base !py-1.5 text-sm" value={form.gender}
+            onChange={(e) => setForm({ ...form, gender: e.target.value as '' | 'M' | 'F' })}>
+            <option value="">—</option>
+            <option value="M">Masculino</option>
+            <option value="F">Feminino</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-2">
+        <div>
+          <label className="text-xs text-text-secondary mb-0.5 block">UF</label>
+          <select className="input-base !py-1.5 text-sm" value={form.home_state}
+            onChange={(e) => setForm({ ...form, home_state: e.target.value, home_city: '' })}>
+            {['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']
+              .map((uf) => <option key={uf} value={uf}>{uf}</option>)}
+          </select>
+        </div>
+        <div className="col-span-2">
+          <label className="text-xs text-text-secondary mb-0.5 block">Cidade</label>
+          <input className="input-base !py-1.5 text-sm" placeholder="Cidade" value={form.home_city}
+            onChange={(e) => setForm({ ...form, home_city: e.target.value })} />
+        </div>
+      </div>
+
+      <div>
+        <label className="text-xs text-text-secondary mb-0.5 block">Modalidade</label>
+        <select className="input-base !py-1.5 text-sm" value={form.preferred_modality}
+          onChange={(e) => setForm({ ...form, preferred_modality: e.target.value })}>
+          {MODALITY_OPTIONS.filter((o) => o.value).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="text-xs text-text-secondary mb-0.5 block">Nível</label>
+          <select className="input-base !py-1.5 text-sm" value={form.competitive_level}
+            onChange={(e) => setForm({ ...form, competitive_level: e.target.value as any })}>
+            {Object.entries(LEVEL_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs text-text-secondary mb-0.5 block">Classe</label>
+          <select className="input-base !py-1.5 text-sm" value={form.tennis_class}
+            onChange={(e) => setForm({ ...form, tennis_class: e.target.value })}>
+            <option value="">Sem classe</option>
+            {Object.entries(TENNIS_CLASS_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+        </div>
+      </div>
+
+      <div className="flex gap-2 pt-1">
+        <button className="btn-secondary flex-1 !text-xs !py-1.5" onClick={onCancel}>Cancelar</button>
+        <button className="btn-primary flex-1 !text-xs !py-1.5" onClick={save} disabled={saving}>
+          {saving ? <Loader2 className="w-3 h-3 animate-spin mx-auto" /> : 'Salvar'}
+        </button>
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Home, Calendar, Star, User, LogOut, ShieldCheck, Sun, Moon, Award, CreditCard, Users, Bell, Ticket } from 'lucide-react';
+import { Home, Calendar, Star, User, LogOut, ShieldCheck, Sun, Moon, Award, CreditCard, Users, Bell } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { BetaModal } from './BetaModal';
@@ -8,12 +8,11 @@ import { unreadAlerts } from '../services/data';
 
 // Nav principal — aparece no bottom bar (mobile) e no header (desktop)
 const navItems = [
-  { to: '/inicio',    label: 'Início',      icon: Home,     end: true  },
-  { to: '/torneios',  label: 'Torneios',    icon: Calendar, end: false },
-  { to: '/watchlist', label: 'Agenda',      icon: Star,     end: false },
-  { to: '/inscricoes',label: 'Inscrições',  icon: Ticket,   end: false },
-  { to: '/resultados',label: 'Resultados',  icon: Award,    end: false },
-  { to: '/perfil',    label: 'Perfil',      icon: User,     end: false },
+  { to: '/inicio',    label: 'Início',    icon: Home,     end: true  },
+  { to: '/torneios',  label: 'Torneios',  icon: Calendar, end: false },
+  { to: '/watchlist', label: 'Agenda',    icon: Star,     end: false },
+  { to: '/resultados',label: 'Resultados',icon: Award,    end: false },
+  { to: '/perfil',    label: 'Perfil',    icon: User,     end: false },
 ];
 
 export const AppLayout: React.FC = () => {
@@ -120,7 +119,7 @@ export const AppLayout: React.FC = () => {
 
       {/* ─── Bottom nav — apenas mobile (< md) ───────────────────────────────── */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-bg-card/95 backdrop-blur-lg border-t border-border-subtle">
-        <div className="mx-auto max-w-6xl px-1 h-16 grid grid-cols-6">
+        <div className="mx-auto max-w-6xl px-1 h-16 grid grid-cols-5">
           {navItems.map(({ to, label, icon: Icon, end }) => (
             <NavLink
               key={to}

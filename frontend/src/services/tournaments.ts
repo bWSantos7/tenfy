@@ -105,3 +105,16 @@ export async function evaluateEdition(editionId: number, profileId?: number) {
   const res = await api.get<EditionEligibility>(url);
   return res.data;
 }
+
+export interface ConflictPair {
+  edition_a: { id: number; title: string; start_date: string; end_date: string };
+  edition_b: { id: number; title: string; start_date: string; end_date: string };
+}
+
+export async function checkConflicts(ids: number[]): Promise<{ conflicts: ConflictPair[]; has_conflicts: boolean }> {
+  const res = await api.post<{ conflicts: ConflictPair[]; has_conflicts: boolean }>(
+    '/api/tournaments/editions/check_conflicts/',
+    { ids },
+  );
+  return res.data;
+}

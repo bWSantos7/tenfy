@@ -61,7 +61,9 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
             When(entry_close_at__lte=soon,   then=Value(0)),   # closing in ≤3 days
             When(entry_close_at__isnull=False, then=Value(0)), # open with known deadline
             When(entry_open_at__lte=now,     then=Value(0)),   # registration period opened
-            default=Value(1),                                   # announced (no dates)
+            # status='open' but no entry dates → treat as announced (ingestor over-published)
+            When(status='open', entry_close_at__isnull=True, entry_open_at__isnull=True, then=Value(1)),
+            default=Value(1),                                   # announced / unknown
             output_field=IntegerField(),
         )
 

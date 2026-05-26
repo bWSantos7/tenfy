@@ -19,6 +19,7 @@ class TournamentEditionFilter(filters.FilterSet):
     from_date = filters.DateFilter(field_name='start_date', lookup_expr='gte')
     to_date = filters.DateFilter(field_name='start_date', lookup_expr='lte')
     state = filters.CharFilter(field_name='venue__state', lookup_expr='iexact')
+    venue_state = filters.CharFilter(field_name='venue__state', lookup_expr='iexact')
     city = filters.CharFilter(field_name='venue__city', lookup_expr='icontains')
     organization = filters.NumberFilter(field_name='tournament__organization_id')
     organization_slug = filters.CharFilter(method='filter_org_slug')
@@ -40,7 +41,7 @@ class TournamentEditionFilter(filters.FilterSet):
     class Meta:
         model = TournamentEdition
         fields = [
-            'from_date', 'to_date', 'state', 'city', 'organization',
+            'from_date', 'to_date', 'state', 'venue_state', 'city', 'organization',
             'organization_slug', 'modality', 'circuit', 'surface',
             'status', 'q', 'near_profile',
             'category', 'category_id', 'category_code',

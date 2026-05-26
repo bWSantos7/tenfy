@@ -305,6 +305,55 @@ export interface CoachAthlete {
   created_at: string;
 }
 
+export interface FederationEntryItem {
+  id: number;
+  category_text: string;
+  player_name: string;
+  player_external_id: string;
+  ranking_position: number | null;
+  payment_status: 'paid' | 'pending' | 'unknown';
+  payment_status_label: string;
+  source: string;
+  source_label: string;
+  source_url: string | null;
+  confidence: 'high' | 'med' | 'low';
+  removed_or_replaced: boolean;
+  replacement_reason: string;
+  player_country_name: string;
+  player_country_code: string;
+  notes: string;
+  synced_at: string | null;
+  slot_position: number | null;
+  in_draw: boolean | null;
+  status: 'confirmed' | 'waiting_list' | 'pending_payment' | 'removed' | 'registered' | string;
+  status_label: string;
+}
+
+export interface RegistrantCategorySummary {
+  total: number;
+  paid: number;
+  pending: number;
+  in_draw: number;
+  waiting_list: number;
+  removed: number;
+  total_slots: number | null;
+  filled_slots: number;
+  remaining_slots: number | null;
+}
+
+export interface RegistrantCategory {
+  category_text: string;
+  max_participants: number | null;
+  summary: RegistrantCategorySummary;
+  entries: FederationEntryItem[];
+}
+
+export interface EditionRegistrants {
+  edition_id: number;
+  edition_title: string;
+  categories: RegistrantCategory[];
+}
+
 export interface Paginated<T> {
   count: number;
   total_pages: number;

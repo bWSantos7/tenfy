@@ -3,11 +3,13 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   ArrowLeft, Calendar, MapPin, Clock, ExternalLink, Star, CheckCircle2,
   XCircle, HelpCircle, Loader2, AlertTriangle, FileText, History, Share2,
+  Users, ChevronDown, ChevronUp, Trophy, Clock3,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { TournamentEditionDetail, EditionEligibility, PlayerProfile } from '../types';
+import { TournamentEditionDetail, EditionEligibility, PlayerProfile, EditionRegistrants, RegistrantCategory } from '../types';
 import { getEdition, evaluateEdition } from '../services/tournaments';
 import { listProfiles, toggleWatchlist, listWatchlist } from '../services/data';
+import { getEditionRegistrants } from '../services/registrations';
 import {
   STATUS_LABELS, fmtDateRange, fmtDateTime, fmtBRL, fmtRelative,
   statusBgClass, translateReason, formatChangeEventTitle, formatChangeEventDetails,
@@ -25,6 +27,9 @@ export const TournamentDetailPage: React.FC = () => {
   const [watchingItemId, setWatchingItemId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [togglingWatch, setTogglingWatch] = useState(false);
+  const [registrants, setRegistrants] = useState<EditionRegistrants | null>(null);
+  const [registrantsLoading, setRegistrantsLoading] = useState(false);
+  const [registrantsOpen, setRegistrantsOpen] = useState(false);
 
   async function handleShare() {
     const url = window.location.href;
@@ -74,6 +79,26 @@ export const TournamentDetailPage: React.FC = () => {
       }
     })();
   }, [id, nav]);
+
+  async function handleLoadRegistrants() {
+    if (!ed) return;
+    if (registrantsOpen && registrants) {
+      setRegistrantsOpen(false);
+      return;
+    }
+    setRegistrantsOpen(true);
+    if (registrants) return;
+    setRegistrantsLoading(true);
+    try {
+      const data = await getEditionRegistrants(ed.id);
+      setRegistrants(data);
+    } catch {
+      toast.error('Não foi possível carregar os inscritos.');
+      setRegistrantsOpen(false);
+    } finally {
+      setRegistrantsLoading(false);
+    }
+  }
 
   async function handleWatch() {
     if (!ed) return;
@@ -286,6 +311,49 @@ export const TournamentDetailPage: React.FC = () => {
         )}
       </div>
 
+      {/* ── Inscritos ── */}
+      <div className="card">
+        <button
+          className="w-full flex items-center justify-between"
+          onClick={handleLoadRegistrants}
+        >
+          <h2 className="font-semibold flex items-center gap-2">
+            <Users className="w-4 h-4 text-accent-blue" />
+            Inscritos
+          </h2>
+          {registrantsLoading
+            ? <Loader2 className="w-4 h-4 animate-spin text-text-muted" />
+            : registrantsOpen
+              ? <ChevronUp className="w-4 h-4 text-text-muted" />
+              : <ChevronDown className="w-4 h-4 text-text-muted" />}
+        </button>
+
+        {registrantsOpen && (
+          <div className="mt-3">
+            {registrantsLoading && (
+              <div className="py-8 flex justify-center">
+                <Loader2 className="w-6 h-6 text-accent-neon animate-spin" />
+              </div>
+            )}
+            {!registrantsLoading && registrants && registrants.categories.length === 0 && (
+              <p className="text-sm text-text-muted text-center py-6">
+                Nenhum inscrito publicado pela fonte até o momento.
+              </p>
+            )}
+            {!registrantsLoading && registrants && registrants.categories.length > 0 && (
+              <div className="space-y-5">
+                {registrants.categories.map((cat) => (
+                  <RegistrantsCategory key={cat.category_text} cat={cat} />
+                ))}
+                <p className="text-[10px] text-text-muted text-center pt-1">
+                  Dados sincronizados de fontes oficiais — podem não refletir a lista definitiva.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       <div className="card">
         <h2 className="font-semibold mb-2 flex items-center gap-2">
           <FileText className="w-4 h-4" /> Origem dos dados
@@ -368,6 +436,94 @@ const Stat: React.FC<{
       {value}
     </div>
   </div>
+);
+
+const STATUS_CHIP: Record<string, { label: string; cls: string }> = {
+  confirmed:       { label: 'Confirmado',   cls: 'bg-accent-neon/15 text-accent-neon' },
+  in_draw:         { label: 'No draw',      cls: 'bg-accent-blue/15 text-accent-blue' },
+  registered:      { label: 'Inscrito',     cls: 'bg-accent-blue/15 text-accent-blue' },
+  waiting_list:    { label: 'Lista espera', cls: 'bg-amber-400/15 text-amber-400' },
+  pending_payment: { label: 'Ag. pagamento',cls: 'bg-orange-400/15 text-orange-400' },
+  removed:         { label: 'Removido',     cls: 'bg-status-canceled/20 text-status-canceled' },
+};
+
+const PAYMENT_CHIP: Record<string, string> = {
+  paid:    'text-accent-neon',
+  waived:  'text-accent-neon',
+  pending: 'text-amber-400',
+  unknown: 'text-text-muted',
+};
+
+const RegistrantsCategory: React.FC<{ cat: RegistrantCategory }> = ({ cat }) => {
+  const s = cat.summary;
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-sm font-semibold text-text-primary">{cat.category_text}</h3>
+        {cat.max_participants && (
+          <span className="text-[10px] text-text-muted">
+            {s.filled_slots}/{cat.max_participants} vagas
+          </span>
+        )}
+      </div>
+
+      <div className="flex gap-3 mb-3 flex-wrap">
+        <StatChip icon={<Users className="w-3 h-3" />} label={`${s.total} total`} />
+        {s.in_draw > 0 && (
+          <StatChip icon={<Trophy className="w-3 h-3 text-accent-neon" />} label={`${s.in_draw} no draw`} cls="text-accent-neon" />
+        )}
+        {s.waiting_list > 0 && (
+          <StatChip icon={<Clock3 className="w-3 h-3 text-amber-400" />} label={`${s.waiting_list} espera`} cls="text-amber-400" />
+        )}
+        {s.removed > 0 && (
+          <StatChip label={`${s.removed} removido${s.removed > 1 ? 's' : ''}`} cls="text-status-canceled" />
+        )}
+      </div>
+
+      <div className="space-y-1">
+        {cat.entries.map((entry) => {
+          const chip = STATUS_CHIP[entry.status] ?? { label: entry.status_label, cls: 'bg-bg-elevated text-text-muted' };
+          const payColor = PAYMENT_CHIP[entry.payment_status] ?? 'text-text-muted';
+          return (
+            <div
+              key={entry.id}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${
+                entry.removed_or_replaced ? 'opacity-40 line-through' : 'bg-bg-elevated'
+              }`}
+            >
+              <span className="text-[11px] text-text-muted w-5 text-right shrink-0">
+                {entry.slot_position ?? '—'}
+              </span>
+              <span className="flex-1 min-w-0 truncate font-medium">
+                {entry.player_name}
+                {entry.player_country_code && entry.player_country_code !== 'BRA' && (
+                  <span className="ml-1 text-[10px] text-text-muted">({entry.player_country_code})</span>
+                )}
+              </span>
+              {entry.ranking_position && (
+                <span className="text-[10px] text-text-muted shrink-0">#{entry.ranking_position}</span>
+              )}
+              <span className={`text-[10px] font-semibold shrink-0 ${payColor}`}>
+                {entry.payment_status === 'paid'
+                  ? '✓ Pago' : entry.payment_status === 'pending' ? 'Ag. pag.' : ''}
+              </span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold shrink-0 ${chip.cls}`}>
+                {chip.label}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+const StatChip: React.FC<{ icon?: React.ReactNode; label: string; cls?: string }> = ({
+  icon, label, cls = 'text-text-muted',
+}) => (
+  <span className={`flex items-center gap-1 text-[11px] ${cls}`}>
+    {icon}{label}
+  </span>
 );
 
 const CategoryGroup: React.FC<{

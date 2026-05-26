@@ -4,16 +4,17 @@ import {
   ArrowLeft, Calendar, MapPin, Clock, ExternalLink, Star, CheckCircle2,
   XCircle, HelpCircle, Loader2, AlertTriangle, FileText, History, Share2,
   Users, ChevronDown, ChevronUp, RefreshCw, ShieldCheck, Info, AlertCircle,
-  CheckCircle, CreditCard, UserX, UserCheck, UserPlus,
+  CheckCircle, CreditCard, UserX, UserPlus, Trophy, LogIn, Lock, DoorOpen,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   TournamentEditionDetail, EditionEligibility, PlayerProfile,
-  EditionRegistrants, RegistrantCategory, FederationEntryItem,
+  EditionRegistrants, RegistrantCategory, FederationEntryItem, TournamentRegistration,
 } from '../types';
 import { getEdition, evaluateEdition } from '../services/tournaments';
 import { listProfiles, toggleWatchlist, listWatchlist } from '../services/data';
-import { getEditionRegistrants } from '../services/registrations';
+import { getEditionRegistrants, myRegistrations, withdrawRegistration } from '../services/registrations';
+import { fmtDate } from '../utils/format';
 import {
   STATUS_LABELS, fmtDateRange, fmtDateTime, fmtBRL, fmtRelative,
   statusBgClass, translateReason, formatChangeEventTitle, formatChangeEventDetails,
@@ -62,6 +63,8 @@ export const TournamentDetailPage: React.FC = () => {
   const [registrantsLoading, setRegistrantsLoading] = useState(false);
   const [registrantsOpen, setRegistrantsOpen] = useState(false);
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
+  const [myReg, setMyReg] = useState<TournamentRegistration | null>(null);
+  const [withdrawing, setWithdrawing] = useState(false);
 
   async function handleShare() {
     const url = window.location.href;
@@ -80,10 +83,11 @@ export const TournamentDetailPage: React.FC = () => {
     (async () => {
       setLoading(true);
       try {
-        const [edition, profiles, watchlist] = await Promise.all([
+        const [edition, profiles, watchlist, regs] = await Promise.all([
           getEdition(edId),
           listProfiles().catch(() => []),
           listWatchlist().catch(() => []),
+          myRegistrations().catch(() => [] as TournamentRegistration[]),
         ]);
         setEd(edition);
         const primary = pickBestProfile(profiles);
@@ -91,6 +95,8 @@ export const TournamentDetailPage: React.FC = () => {
         const watchItem = watchlist.find((w) => w.edition === edId);
         setWatching(!!watchItem);
         setWatchingItemId(watchItem?.id ?? null);
+        const existing = regs.find((r) => r.edition_id === edId && !r.is_withdrawn);
+        setMyReg(existing ?? null);
         if (primary) {
           try {
             const e = await evaluateEdition(edId, primary.id);
@@ -144,6 +150,33 @@ export const TournamentDetailPage: React.FC = () => {
       if (next.has(text)) next.delete(text); else next.add(text);
       return next;
     });
+  }
+
+  function handleRegister() {
+    if (!ed) return;
+    const regLink = ed.links?.find((l) => l.link_type === 'registration');
+    const url = regLink?.url || ed.official_source_url;
+    if (url) {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } else {
+      toast('Link não disponível. Acesse o site da entidade organizadora.', { icon: 'ℹ️' });
+    }
+  }
+
+  async function handleWithdraw() {
+    if (!myReg) return;
+    const ok = window.confirm('Tem certeza que deseja cancelar sua inscrição neste torneio?');
+    if (!ok) return;
+    setWithdrawing(true);
+    try {
+      await withdrawRegistration(myReg.id);
+      setMyReg(null);
+      toast.success('Inscrição cancelada.');
+    } catch (err) {
+      toast.error(extractApiError(err));
+    } finally {
+      setWithdrawing(false);
+    }
   }
 
   async function handleWatch() {
@@ -351,6 +384,113 @@ export const TournamentDetailPage: React.FC = () => {
         </div>
       )}
 
+      {/* ── Linha do Tempo ── */}
+      {(ed.entry_open_at || ed.entry_close_at || ed.withdrawal_deadline_at || ed.start_date) && (
+        <div className="card space-y-0">
+          <h2 className="font-semibold mb-4">Linha do Tempo</h2>
+          <TimelineItem
+            icon={<LogIn className="w-3.5 h-3.5" />}
+            label="Início das inscrições"
+            value={ed.entry_open_at}
+            color="text-accent-blue"
+            dotColor="border-accent-blue bg-accent-blue/15"
+          />
+          <TimelineItem
+            icon={<Lock className="w-3.5 h-3.5" />}
+            label="Encerramento das inscrições"
+            value={ed.entry_close_at}
+            color="text-status-closing"
+            dotColor="border-status-closing bg-status-closing/15"
+          />
+          {ed.withdrawal_deadline_at && (
+            <TimelineItem
+              icon={<DoorOpen className="w-3.5 h-3.5" />}
+              label="Limite para desistência"
+              value={ed.withdrawal_deadline_at}
+              color="text-status-canceled"
+              dotColor="border-status-canceled bg-status-canceled/15"
+            />
+          )}
+          <TimelineItem
+            icon={<Trophy className="w-3.5 h-3.5" />}
+            label="Início do torneio"
+            value={ed.start_date}
+            color="text-accent-neon"
+            dotColor="border-accent-neon bg-accent-neon/15"
+            isLast
+          />
+        </div>
+      )}
+
+      {/* ── Inscrever-se / Minha inscrição ── */}
+      {myReg ? (
+        <div className="card space-y-3">
+          <div className="flex items-center gap-2">
+            {myReg.registration_status === 'confirmed'
+              ? <CheckCircle className="w-5 h-5 text-accent-neon" />
+              : myReg.registration_status === 'waiting_list'
+              ? <Clock className="w-5 h-5 text-status-closing" />
+              : myReg.registration_status === 'pending_payment'
+              ? <CreditCard className="w-5 h-5 text-accent-blue" />
+              : <XCircle className="w-5 h-5 text-text-muted" />}
+            <span className={`font-bold text-sm ${
+              myReg.registration_status === 'confirmed' ? 'text-accent-neon'
+              : myReg.registration_status === 'waiting_list' ? 'text-status-closing'
+              : myReg.registration_status === 'pending_payment' ? 'text-accent-blue'
+              : 'text-text-muted'
+            }`}>
+              {myReg.registration_status_label}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {myReg.slot_position != null && (
+              <div className="bg-bg-base rounded-xl p-3 text-center border border-border-subtle">
+                <p className="text-[10px] text-text-muted">Posição</p>
+                <p className={`text-2xl font-bold mt-1 ${myReg.in_draw ? 'text-accent-neon' : 'text-text-primary'}`}>
+                  #{myReg.slot_position}
+                </p>
+                {myReg.max_participants && (
+                  <p className={`text-[10px] mt-0.5 font-semibold ${myReg.in_draw ? 'text-accent-neon' : 'text-status-canceled'}`}>
+                    {myReg.in_draw ? 'Na chave' : `Fora (limite ${myReg.max_participants})`}
+                  </p>
+                )}
+              </div>
+            )}
+            <div className="bg-bg-base rounded-xl p-3 text-center border border-border-subtle">
+              <p className="text-[10px] text-text-muted">Pagamento</p>
+              {myReg.payment_status === 'paid' || myReg.payment_status === 'waived'
+                ? <CheckCircle className="w-6 h-6 text-accent-neon mx-auto my-1" />
+                : <Clock className="w-6 h-6 text-status-closing mx-auto my-1" />}
+              <p className={`text-[10px] font-semibold ${myReg.payment_status === 'paid' || myReg.payment_status === 'waived' ? 'text-accent-neon' : 'text-status-closing'}`}>
+                {myReg.payment_status_label}
+              </p>
+            </div>
+            {myReg.category_text && (
+              <div className="bg-bg-base rounded-xl p-3 text-center border border-border-subtle">
+                <p className="text-[10px] text-text-muted">Categoria</p>
+                <p className="text-xs font-semibold mt-1">{myReg.category_text}</p>
+              </div>
+            )}
+          </div>
+          <button
+            onClick={handleWithdraw}
+            disabled={withdrawing}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-status-canceled/50 text-status-canceled text-sm font-semibold hover:bg-status-canceled/10 transition-colors disabled:opacity-50"
+          >
+            {withdrawing ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserX className="w-4 h-4" />}
+            Cancelar minha inscrição
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={handleRegister}
+          className="w-full btn-primary flex items-center justify-center gap-2 py-3 text-base font-semibold"
+        >
+          <UserPlus className="w-5 h-5" />
+          Inscrever-se neste torneio
+        </button>
+      )}
+
       {/* ── Categorias ── */}
       <div className="card">
         <h2 className="font-semibold mb-3 flex items-center gap-2">
@@ -468,6 +608,46 @@ export const TournamentDetailPage: React.FC = () => {
     </div>
   );
 };
+
+// ── Timeline item ─────────────────────────────────────────────────────────────
+
+function fmtDateMaybeTime(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  return iso.includes('T') ? fmtDateTime(iso) : fmtDate(iso);
+}
+
+function TimelineItem({
+  icon, label, value, color, dotColor, isLast = false,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string | null | undefined;
+  color: string;
+  dotColor: string;
+  isLast?: boolean;
+}) {
+  const hasValue = !!value;
+  return (
+    <div className="flex gap-3" style={{ marginBottom: isLast ? 0 : 20 }}>
+      {/* Dot + line */}
+      <div className="flex flex-col items-center w-8 shrink-0">
+        <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center ${hasValue ? dotColor : 'border-text-muted/30 bg-text-muted/10'} ${hasValue ? color : 'text-text-muted'}`}>
+          {icon}
+        </div>
+        {!isLast && (
+          <div className="w-0.5 flex-1 bg-border-subtle mt-1" />
+        )}
+      </div>
+      {/* Content */}
+      <div className="pt-1 pb-1">
+        <p className="text-[11px] text-text-muted">{label}</p>
+        <p className={`text-sm font-semibold mt-0.5 ${hasValue ? 'text-text-primary' : 'text-text-muted'}`}>
+          {fmtDateMaybeTime(value)}
+        </p>
+      </div>
+    </div>
+  );
+}
 
 // ── Registrants: category card ────────────────────────────────────────────────
 

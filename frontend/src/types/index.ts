@@ -192,6 +192,7 @@ export interface TournamentChangeEvent {
 export interface TournamentEditionDetail extends TournamentEditionList {
   external_id: string;
   price_notes: string;
+  withdrawal_deadline_at: string | null;
   reviewed_at: string | null;
   reviewed_by_email: string | null;
   is_manual_override: boolean;

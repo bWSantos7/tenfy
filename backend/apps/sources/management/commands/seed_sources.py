@@ -146,8 +146,8 @@ class Command(BaseCommand):
         org_by_short = {}
         for entry in ORGANIZATIONS:
             obj, _ = Organization.objects.update_or_create(
-                short_name=entry['short_name'],
-                defaults={k: v for k, v in entry.items() if k != 'short_name'},
+                name=entry['name'],
+                defaults={k: v for k, v in entry.items() if k != 'name'},
             )
             org_by_short[entry['short_name']] = obj
 

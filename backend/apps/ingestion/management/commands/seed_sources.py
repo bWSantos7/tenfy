@@ -133,9 +133,9 @@ class Command(BaseCommand):
         org_map = {}
         for org_data in ORGS:
             org, created = Organization.objects.update_or_create(
-                short_name=org_data['short_name'],
+                name=org_data['name'],
                 defaults={
-                    'name': org_data['name'],
+                    'short_name': org_data['short_name'],
                     'type': org_data['type'],
                 },
             )

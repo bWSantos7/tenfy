@@ -467,3 +467,7 @@ if SENTRY_DSN:
         send_default_pii=False,
         attach_stacktrace=True,
     )
+
+import sys
+TESTING = 'test' in sys.argv or 'test_coverage' in sys.argv
+

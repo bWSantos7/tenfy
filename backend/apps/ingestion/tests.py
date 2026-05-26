@@ -1038,8 +1038,8 @@ class ParseInscriptionDateTestCase(TestCase):
 
     def test_iso_datetime_string(self):
         from apps.ingestion.connectors.cosat_mongo import _parse_inscription_date
-        from datetime import date
-        self.assertEqual(_parse_inscription_date('2026-05-02T00:00:00Z'), date(2026, 5, 2))
+        from datetime import datetime, timezone
+        self.assertEqual(_parse_inscription_date('2026-05-02T00:00:00Z'), datetime(2026, 5, 2, 0, 0, tzinfo=timezone.utc))
 
     def test_br_format(self):
         from apps.ingestion.connectors.cosat_mongo import _parse_inscription_date

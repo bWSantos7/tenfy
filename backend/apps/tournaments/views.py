@@ -97,12 +97,6 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
         # The eligibility engine evaluates them via raw text extraction.
         category_filter |= Q(categories__normalized_category__isnull=True)
 
-        # Modality filter: if profile has preferred_modality set, only show tournaments
-        # of that modality. This prevents beach_tennis appearing for tennis players, etc.
-        preferred_modality = (profile.preferred_modality or '').strip()
-        if preferred_modality:
-            category_filter = Q(tournament__modality__iexact=preferred_modality) & category_filter
-
         sporting_age = profile.sporting_age
         if sporting_age is not None:
             # A player may enter any age category whose max_age >= their age.
@@ -144,6 +138,12 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
                 categories__normalized_category__gender_scope__in=[profile.gender, '*', 'X']
             ) | Q(categories__normalized_category__isnull=True)
             category_filter &= gender_q
+
+        # Modality filter: if profile has preferred_modality set, only show tournaments
+        # of that modality. This prevents beach_tennis appearing for tennis players, etc.
+        preferred_modality = (profile.preferred_modality or '').strip()
+        if preferred_modality:
+            category_filter = Q(tournament__modality__iexact=preferred_modality) & category_filter
 
         return category_filter
 

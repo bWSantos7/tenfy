@@ -89,18 +89,23 @@ export const WatchlistPage: React.FC = () => {
     setLoading(true);
     try {
       if (isParent) {
-        const [children, sm] = await Promise.all([
+        const [ownItems, children, sm] = await Promise.all([
+          listWatchlist().catch(() => [] as WatchlistItem[]),
           listChildren().catch(() => [] as ParentChild[]),
           watchlistSummary().catch(() => null),
         ]);
         const childWatchlists = await Promise.all(
           children.map((link) => listChildWatchlist(link.child).catch(() => [] as WatchlistItem[])),
         );
-        const groups: ChildGroup[] = children.map((link, i) => ({
+        const childrenGroups: ChildGroup[] = children.map((link, i) => ({
           childName: link.child_detail.full_name || link.child_detail.email,
           childId: link.child,
           items: childWatchlists[i],
         }));
+        const groups: ChildGroup[] = [
+          ...(ownItems.length > 0 ? [{ childName: 'Meu perfil', childId: -1, items: ownItems }] : []),
+          ...childrenGroups,
+        ];
         const allItems = groups.flatMap((g) => g.items);
         setChildGroups(groups);
         setItems(allItems);
@@ -284,7 +289,7 @@ export const WatchlistPage: React.FC = () => {
           <Star className="w-10 h-10 text-text-muted mx-auto" />
           <p className="font-semibold">Nenhum torneio na agenda</p>
           <p className="text-sm text-text-secondary">
-            {isParent ? 'Nenhum dependente tem torneios na agenda ainda.' : 'Você ainda não está acompanhando nenhum torneio.'}
+            {isParent ? 'Você e seus dependentes ainda não têm torneios na agenda.' : 'Você ainda não está acompanhando nenhum torneio.'}
           </p>
           {!isParent && (
             <Link to="/torneios" className="btn-primary inline-flex items-center gap-2 !text-sm">

@@ -50,7 +50,8 @@ export const ResultsPage: React.FC = () => {
     setLoading(true);
     try {
       if (user?.role === 'parent') {
-        const [children, ownProfs] = await Promise.all([
+        const [ownData, children, ownProfs] = await Promise.all([
+          listWatchlist().catch(() => [] as WatchlistItem[]),
           listChildren().catch(() => [] as ParentChild[]),
           listProfiles().catch(() => [] as PlayerProfile[]),
         ]);
@@ -60,7 +61,8 @@ export const ResultsPage: React.FC = () => {
         const childProfileArrays = await Promise.all(
           children.map((c) => listChildProfiles(c.child).catch(() => [] as PlayerProfile[])),
         );
-        const allItems = children.flatMap((_, i) =>
+        const ownItems = ownData.filter((it) => it.user_status === 'registered_declared' || !!it.result);
+        const childItems = children.flatMap((_, i) =>
           childWatchlists[i].filter((it) => it.user_status === 'registered_declared' || !!it.result),
         );
         const nameMap: Record<number, string> = {};
@@ -70,7 +72,7 @@ export const ResultsPage: React.FC = () => {
             nameMap[p.id] = `${link.child_detail.full_name || link.child_detail.email} — ${p.display_name}`;
           });
         });
-        setItems(allItems);
+        setItems([...ownItems, ...childItems]);
         setProfileNames(nameMap);
       } else {
         const [data, profs] = await Promise.all([
@@ -123,6 +125,8 @@ export const ResultsPage: React.FC = () => {
   const totalWins    = items.reduce((s, i) => s + (i.result?.wins   ?? 0), 0);
   const totalLosses  = items.reduce((s, i) => s + (i.result?.losses ?? 0), 0);
   const totalMatches = totalWins + totalLosses;
+  const positions    = items.map((i) => i.result?.position).filter((p): p is number => p != null);
+  const bestPosition = positions.length > 0 ? Math.min(...positions) : null;
 
   // Group by profile for parent users
   function renderGrouped() {
@@ -291,19 +295,28 @@ export const ResultsPage: React.FC = () => {
         </p>
       </div>
 
-      {items.length > 0 && (
-        <div className="grid grid-cols-4 gap-2">
-          {[
-            { label: 'Inscritos', value: items.length,   color: 'text-accent-neon'      },
-            { label: 'Vitórias',  value: totalWins,      color: 'text-status-open'      },
-            { label: 'Derrotas',  value: totalLosses,    color: 'text-status-canceled'  },
-            { label: 'Partidas',  value: totalMatches,   color: 'text-accent-blue'      },
-          ].map((s) => (
-            <div key={s.label} className="card text-center !py-3">
-              <div className={`text-xl font-bold ${s.color}`}>{s.value}</div>
-              <div className="text-[10px] text-text-muted mt-0.5">{s.label}</div>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {[
+          { label: 'Inscrições',  value: String(items.length),                                                            color: 'text-accent-neon'     },
+          { label: 'Vitórias',    value: String(totalWins),                                                               color: 'text-status-open'     },
+          { label: 'Derrotas',    value: String(totalLosses),                                                             color: 'text-status-canceled' },
+          { label: 'Partidas',    value: String(totalMatches),                                                            color: 'text-accent-blue'     },
+        ].map((s) => (
+          <div key={s.label} className="card text-center !py-3">
+            <div className={`text-xl font-bold ${s.color}`}>{s.value}</div>
+            <div className="text-[10px] text-text-muted mt-0.5">{s.label}</div>
+          </div>
+        ))}
+      </div>
+      {bestPosition != null && (
+        <div className="card flex items-center gap-3 !py-3">
+          <Trophy className="w-6 h-6 text-status-closing shrink-0" />
+          <div>
+            <div className="text-[10px] text-text-muted">Melhor posição registrada</div>
+            <div className="text-xl font-bold text-status-closing">
+              {bestPosition === 1 ? '1º lugar' : bestPosition === 2 ? '2º lugar' : bestPosition === 3 ? '3º lugar' : `${bestPosition}º lugar`}
             </div>
-          ))}
+          </div>
         </div>
       )}
 

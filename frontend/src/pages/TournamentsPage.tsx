@@ -34,7 +34,6 @@ const MONTHS_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho'
 const WEEKDAYS_PT = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
 const TODAY = new Date().toISOString().slice(0, 10);
 
-// Priority: open/closing_soon first, then upcoming, then past/canceled
 const STATUS_SORT_PRIORITY: Record<string, number> = {
   open: 0,
   closing_soon: 0,
@@ -47,10 +46,27 @@ const STATUS_SORT_PRIORITY: Record<string, number> = {
   unknown: 5,
 };
 
+// Groups for section headers — uses dynamic_status when available
+function getStatusGroup(status: string): string {
+  if (status === 'open' || status === 'closing_soon') return 'open';
+  if (status === 'announced') return 'announced';
+  if (status === 'in_progress' || status === 'draws_published') return 'in_progress';
+  if (status === 'closed') return 'closed';
+  return 'other';
+}
+
+const GROUP_LABELS: Record<string, string> = {
+  open: 'Inscrições Abertas',
+  announced: 'Anunciados',
+  in_progress: 'Em Andamento',
+  closed: 'Encerradas',
+  other: 'Outros',
+};
+
 function sortTournaments(list: TournamentEditionList[]): TournamentEditionList[] {
   return [...list].sort((a, b) => {
-    const pa = STATUS_SORT_PRIORITY[a.status ?? 'unknown'] ?? 5;
-    const pb = STATUS_SORT_PRIORITY[b.status ?? 'unknown'] ?? 5;
+    const pa = STATUS_SORT_PRIORITY[(a.dynamic_status ?? a.status) ?? 'unknown'] ?? 5;
+    const pb = STATUS_SORT_PRIORITY[(b.dynamic_status ?? b.status) ?? 'unknown'] ?? 5;
     if (pa !== pb) return pa - pb;
     return (a.start_date || '').localeCompare(b.start_date || '');
   });
@@ -415,9 +431,24 @@ export const TournamentsPage: React.FC = () => {
             </div>
           ) : (
             <div className="space-y-3">
-              {items.map((ed) => (
-                <TournamentCard key={ed.id} edition={ed} />
-              ))}
+              {items.map((ed, i) => {
+                const dynStatus = ed.dynamic_status ?? ed.status ?? 'unknown';
+                const group = getStatusGroup(dynStatus);
+                const prevGroup = i > 0
+                  ? getStatusGroup(items[i - 1].dynamic_status ?? items[i - 1].status ?? 'unknown')
+                  : null;
+                const showHeader = !filters.status && group !== prevGroup;
+                return (
+                  <React.Fragment key={ed.id}>
+                    {showHeader && (
+                      <div className={`text-[11px] font-bold text-text-muted uppercase tracking-wider px-1 ${i > 0 ? 'pt-3 pb-0.5' : 'pb-0.5'}`}>
+                        {GROUP_LABELS[group] ?? group}
+                      </div>
+                    )}
+                    <TournamentCard edition={ed} />
+                  </React.Fragment>
+                );
+              })}
               {totalPages > 1 && (
                 <div className="flex items-center justify-center gap-2 pt-4">
                   <button

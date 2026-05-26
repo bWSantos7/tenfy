@@ -3,7 +3,7 @@ from datetime import timedelta
 import hashlib
 
 from django.core.cache import cache
-from django.db.models import Case, Count, IntegerField, Q, When
+from django.db.models import Case, Count, IntegerField, Q, Value, When
 from django.utils import timezone
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
@@ -42,21 +42,28 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
     ordering_fields = ('start_date', 'entry_close_at', 'created_at', 'status_priority')
     ordering = ('status_priority', 'start_date')
 
-    # Status priority for ordering: open/closing_soon first, then announced/in_progress,
-    # then closed, then finished/canceled last.
-    _STATUS_PRIORITY = Case(
-        When(status='open',          then=0),
-        When(status='closing_soon',  then=0),
-        When(status='announced',     then=1),
-        When(status='in_progress',   then=1),
-        When(status='draws_published', then=1),
-        When(status='closed',        then=2),
-        When(status='unknown',       then=3),
-        When(status='finished',      then=4),
-        When(status='canceled',      then=5),
-        default=3,
-        output_field=IntegerField(),
-    )
+    @staticmethod
+    def _build_dynamic_priority():
+        """
+        Replicates compute_dynamic_status() logic as a SQL annotation so ordering
+        uses the live calculated status instead of the stored status field.
+        Fixes cases where status='open' but dynamic_status='announced' or 'finished'.
+        """
+        now = timezone.now()
+        today = now.date()
+        soon = now + timedelta(days=3)
+        return Case(
+            When(status='canceled',          then=Value(5)),
+            When(status='finished',          then=Value(4)),
+            When(end_date__lt=today,         then=Value(4)),   # past end_date → finished
+            When(start_date__lte=today,      then=Value(1)),   # started → in_progress
+            When(entry_close_at__lt=now,     then=Value(2)),   # registrations closed
+            When(entry_close_at__lte=soon,   then=Value(0)),   # closing in ≤3 days
+            When(entry_close_at__isnull=False, then=Value(0)), # open with known deadline
+            When(entry_open_at__lte=now,     then=Value(0)),   # registration period opened
+            default=Value(1),                                   # announced (no dates)
+            output_field=IntegerField(),
+        )
 
     def get_queryset(self):
         qs = (
@@ -65,7 +72,7 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
             .prefetch_related('categories__normalized_category', 'links')
             .annotate(
                 categories_count=Count('categories'),
-                status_priority=self._STATUS_PRIORITY,
+                status_priority=self._build_dynamic_priority(),
             )
         )
         # Default: only show youth/junior tournaments.

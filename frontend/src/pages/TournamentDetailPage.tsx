@@ -12,7 +12,7 @@ import {
   EditionRegistrants, RegistrantCategory, FederationEntryItem, TournamentRegistration,
 } from '../types';
 import { getEdition, evaluateEdition } from '../services/tournaments';
-import { listProfiles, toggleWatchlist, listWatchlist } from '../services/data';
+import { listProfiles, toggleWatchlist, listWatchlist, updateWatch } from '../services/data';
 import { getEditionRegistrants, myRegistrations, withdrawRegistration } from '../services/registrations';
 import { fmtDate } from '../utils/format';
 import {
@@ -57,6 +57,7 @@ export const TournamentDetailPage: React.FC = () => {
   const [profile, setProfile] = useState<PlayerProfile | null>(null);
   const [watching, setWatching] = useState(false);
   const [watchingItemId, setWatchingItemId] = useState<number | null>(null);
+  const [watchUserStatus, setWatchUserStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [togglingWatch, setTogglingWatch] = useState(false);
   const [registrants, setRegistrants] = useState<EditionRegistrants | null>(null);
@@ -95,6 +96,7 @@ export const TournamentDetailPage: React.FC = () => {
         const watchItem = watchlist.find((w) => w.edition === edId);
         setWatching(!!watchItem);
         setWatchingItemId(watchItem?.id ?? null);
+        setWatchUserStatus(watchItem?.user_status ?? null);
         const existing = regs.find((r) => r.edition_id === edId && !r.is_withdrawn);
         setMyReg(existing ?? null);
         if (primary) {
@@ -152,23 +154,39 @@ export const TournamentDetailPage: React.FC = () => {
     });
   }
 
+  const [registering, setRegistering] = useState(false);
+
   async function handleRegister() {
     if (!ed) return;
-    // Add to agenda automatically if not already watching
-    if (!watching) {
-      try {
+    setRegistering(true);
+    try {
+      let itemId = watchingItemId;
+      if (!watching) {
         const r = await toggleWatchlist(ed.id, profile?.id);
         setWatching(r.watching);
-        setWatchingItemId(r.item?.id ?? null);
-        if (r.watching) toast.success('Torneio adicionado à sua agenda!');
-      } catch { /* ignore watchlist error — still open external link */ }
+        itemId = r.item?.id ?? null;
+        setWatchingItemId(itemId);
+      }
+      if (itemId) {
+        const updated = await updateWatch(itemId, { user_status: 'registered_declared' });
+        setWatchUserStatus(updated.user_status ?? 'registered_declared');
+      }
+      toast.success('Inscrição registrada na sua agenda!');
+    } catch {
+      toast.error('Não foi possível registrar a inscrição. Tente novamente.');
+    } finally {
+      setRegistering(false);
     }
-    const regLink = ed.links?.find((l) => l.link_type === 'registration');
-    const url = regLink?.url || ed.official_source_url;
-    if (url) {
-      window.open(url, '_blank', 'noopener,noreferrer');
-    } else {
-      toast('Link não disponível. Acesse o site da entidade organizadora.', { icon: 'ℹ️' });
+  }
+
+  async function handleCancelDeclaredReg() {
+    if (!watchingItemId) return;
+    try {
+      await updateWatch(watchingItemId, { user_status: 'intended' });
+      setWatchUserStatus('intended');
+      toast.success('Inscrição desmarcada.');
+    } catch {
+      toast.error('Não foi possível atualizar o status.');
     }
   }
 
@@ -195,6 +213,7 @@ export const TournamentDetailPage: React.FC = () => {
       const r = await toggleWatchlist(ed.id, profile?.id);
       setWatching(r.watching);
       setWatchingItemId(r.item?.id ?? null);
+      if (!r.watching) setWatchUserStatus(null);
       toast.success(r.watching ? 'Adicionado à sua agenda' : 'Removido da agenda');
     } catch (err) {
       toast.error(extractApiError(err));
@@ -490,12 +509,43 @@ export const TournamentDetailPage: React.FC = () => {
             Cancelar minha inscrição
           </button>
         </div>
+      ) : watchUserStatus === 'registered_declared' ? (
+        <div className="card space-y-3">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-5 h-5 text-accent-neon" />
+            <div>
+              <p className="font-bold text-sm text-accent-neon">Inscrito (declarado)</p>
+              <p className="text-xs text-text-muted">Torneio salvo na sua agenda</p>
+            </div>
+          </div>
+          <p className="text-xs text-text-secondary leading-relaxed">
+            Sua inscrição foi registrada na agenda. Após o torneio, acesse a aba{' '}
+            <strong>Resultados</strong> para lançar seu desempenho.
+          </p>
+          {regURL && (
+            <a
+              href={regURL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full btn-secondary flex items-center justify-center gap-2 text-sm"
+            >
+              <ExternalLink className="w-4 h-4" /> Acessar site oficial de inscrição
+            </a>
+          )}
+          <button
+            onClick={handleCancelDeclaredReg}
+            className="w-full flex items-center justify-center gap-2 py-2 rounded-xl border border-border-subtle text-text-muted text-xs font-medium hover:bg-bg-subtle transition-colors"
+          >
+            <XCircle className="w-3.5 h-3.5" /> Desmarcar inscrição
+          </button>
+        </div>
       ) : (
         <button
           onClick={handleRegister}
+          disabled={registering}
           className="w-full btn-primary flex items-center justify-center gap-2 py-3 text-base font-semibold"
         >
-          <UserPlus className="w-5 h-5" />
+          {registering ? <Loader2 className="w-5 h-5 animate-spin" /> : <UserPlus className="w-5 h-5" />}
           Inscrever-se neste torneio
         </button>
       )}

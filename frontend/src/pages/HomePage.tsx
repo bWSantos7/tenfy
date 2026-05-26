@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronRight, Clock, Sparkles, Bell, Loader2, CalendarDays, User } from 'lucide-react';
+import { ChevronRight, Clock, Sparkles, Bell, Loader2, CalendarDays, User, AlertTriangle } from 'lucide-react';
 import { TournamentEditionList, PlayerProfile } from '../types';
 import { closingSoon, compatibleForProfile, listEditions } from '../services/tournaments';
 import { listChildren, listProfiles, unreadAlerts } from '../services/data';
@@ -23,6 +23,7 @@ export const HomePage: React.FC = () => {
   const [closing, setClosing] = useState<TournamentEditionList[]>([]);
   const [recent, setRecent] = useState<TournamentEditionList[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [modalityMissing, setModalityMissing] = useState(false);
   const hasLoadedRef = useRef(false);
 
   const loadData = useCallback(async () => {
@@ -67,6 +68,7 @@ export const HomePage: React.FC = () => {
       setProfile(primary);
       setActiveChildName(childName);
 
+      setModalityMissing(false);
       if (primary) {
         syncModalityFromProfile(primary);
         // Prefer preferred_modality from the API response; fall back to localStorage cache.
@@ -76,7 +78,12 @@ export const HomePage: React.FC = () => {
         const compatData = await compatibleForProfile(primary.id, {
           page_size: 20,
           ...(modality ? { modality } : {}),
-        }).catch(() => ({ results: [] as TournamentEditionList[] }));
+        }).catch((err: any) => {
+          if (err?.response?.data?.code === 'modality_required') {
+            setModalityMissing(true);
+          }
+          return { results: [] as TournamentEditionList[] };
+        });
         const filtered = (compatData.results || [])
           .filter((t) => ACTIVE_STATUSES.has(t.status ?? ''))
           .slice(0, 8);
@@ -166,7 +173,21 @@ export const HomePage: React.FC = () => {
       )}
 
       {/* ── Compatible tournaments (only when profile exists) ── */}
-      {profile && (
+      {profile && modalityMissing && (
+        <div className="card flex items-start gap-3 border border-amber-500/30 bg-amber-500/5">
+          <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-amber-400">Modalidade não configurada</p>
+            <p className="text-xs text-text-secondary mt-0.5">
+              Configure a modalidade esportiva no perfil para ver torneios compatíveis (Tênis, Beach Tennis, etc.).
+            </p>
+          </div>
+          <Link to="/perfil" className="btn-secondary !py-1.5 !px-3 text-xs shrink-0">
+            Perfil
+          </Link>
+        </div>
+      )}
+      {profile && !modalityMissing && (
         <Section
           title={activeChildName ? `Compatíveis — ${activeChildName}` : 'Compatíveis com você'}
           subtitle="Baseado no perfil ativo: categoria, modalidade e localização"

@@ -184,3 +184,113 @@ class TournamentFilterCosatTestCase(TestCase):
         self.assertEqual(res.status_code, 200)
         ids = [e['id'] for e in _response_items(res)]
         self.assertNotIn(self.edition.id, ids)
+
+
+class CompatibleEndpointModalityTestCase(TestCase):
+    """
+    GET /api/tournaments/editions/compatible/?profile_id=X enforces modality isolation.
+
+    Covers four scenarios:
+    1. Empty preferred_modality   → 400 with code='modality_required'
+    2. Whitespace preferred_modality → same 400
+    3. preferred_modality='tennis'       → no beach_tennis in results
+    4. preferred_modality='beach_tennis' → no tennis in results
+    """
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            email='compat_mod@test.com', password='pass', full_name='Compat Tester'
+        )
+        self.client.force_authenticate(user=self.user)
+
+        org, _ = Organization.objects.get_or_create(
+            name='COMPAT_MOD_ORG',
+            defaults={'short_name': 'CMO', 'type': Organization.TYPE_FEDERATION},
+        )
+        ds, _ = DataSource.objects.get_or_create(
+            connector_key='compat_mod_test',
+            defaults={
+                'organization': org,
+                'source_name': 'Compat Modality Test',
+                'slug': 'compat-mod-test',
+                'source_type': DataSource.SOURCE_TYPE_JSON,
+                'base_url': 'https://example.com',
+            },
+        )
+        t_tennis, _ = Tournament.objects.get_or_create(
+            canonical_slug='compat-tennis-mod-test',
+            defaults={
+                'canonical_name': 'Compat Tennis Mod', 'circuit': 'FPT',
+                'organization': org, 'modality': 'tennis',
+            },
+        )
+        t_beach, _ = Tournament.objects.get_or_create(
+            canonical_slug='compat-beach-mod-test',
+            defaults={
+                'canonical_name': 'Compat Beach Mod', 'circuit': 'CBT',
+                'organization': org, 'modality': 'beach_tennis',
+            },
+        )
+        self.tennis_ed = TournamentEdition.objects.create(
+            tournament=t_tennis, external_id='cmod:tennis-ed',
+            data_source=ds, title='Compat Tennis Edition', season_year=2026,
+            status='open', is_youth=True, is_published=True,
+        )
+        self.beach_ed = TournamentEdition.objects.create(
+            tournament=t_beach, external_id='cmod:beach-ed',
+            data_source=ds, title='Compat Beach Edition', season_year=2026,
+            status='open', is_youth=True, is_published=True,
+        )
+
+    def _make_profile(self, modality, suffix=''):
+        return PlayerProfile.objects.create(
+            user=self.user,
+            display_name=f'CMod-{modality or "empty"}{suffix}',
+            preferred_modality=modality,
+        )
+
+    def _compatible_ids_and_modalities(self, profile_id):
+        res = self.client.get(
+            '/api/tournaments/editions/compatible/', {'profile_id': profile_id}
+        )
+        return res, [e.get('modality') for e in (res.data.get('results') or [])]
+
+    def test_empty_modality_returns_400_not_mixed_results(self):
+        """Profile with empty preferred_modality must return 400, never mixed results."""
+        profile = self._make_profile('')
+        res = self.client.get(
+            '/api/tournaments/editions/compatible/', {'profile_id': profile.id}
+        )
+        self.assertEqual(res.status_code, 400)
+        self.assertEqual(res.data.get('code'), 'modality_required')
+
+    def test_whitespace_modality_returns_400(self):
+        """Profile with whitespace-only preferred_modality returns 400."""
+        profile = self._make_profile('')
+        PlayerProfile.objects.filter(pk=profile.pk).update(preferred_modality='   ')
+        res = self.client.get(
+            '/api/tournaments/editions/compatible/', {'profile_id': profile.id}
+        )
+        self.assertEqual(res.status_code, 400)
+        self.assertEqual(res.data.get('code'), 'modality_required')
+
+    def test_tennis_profile_contains_no_beach_tennis(self):
+        """Tennis profile results must never include beach_tennis editions."""
+        profile = self._make_profile('tennis', '-t')
+        res, modalities = self._compatible_ids_and_modalities(profile.id)
+        self.assertEqual(res.status_code, 200)
+        self.assertNotIn(
+            'beach_tennis', modalities,
+            f'Tennis profile must not see beach_tennis editions. Got modalities: {modalities}',
+        )
+
+    def test_beach_tennis_profile_contains_no_tennis(self):
+        """Beach_tennis profile results must never include tennis editions."""
+        profile = self._make_profile('beach_tennis', '-b')
+        res, modalities = self._compatible_ids_and_modalities(profile.id)
+        self.assertEqual(res.status_code, 200)
+        self.assertNotIn(
+            'tennis', modalities,
+            f'Beach tennis profile must not see tennis editions. Got modalities: {modalities}',
+        )

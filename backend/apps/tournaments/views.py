@@ -226,6 +226,22 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
             else:
                 return Response({'error': 'Perfil não encontrado'}, status=404)
 
+        # Guard: profile without modality cannot produce safe results.
+        # Without preferred_modality the category filter has no modality constraint,
+        # which would mix tennis and beach_tennis editions in the same response.
+        if not (profile.preferred_modality or '').strip():
+            return Response(
+                {
+                    'error': 'Perfil sem modalidade definida.',
+                    'detail': (
+                        'Acesse o perfil esportivo e selecione a modalidade '
+                        '(Tênis, Beach Tennis, etc.) para visualizar torneios compatíveis.'
+                    ),
+                    'code': 'modality_required',
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         cache_key = 'compatible:{}:{}:{}'.format(
             request.user.id,
             profile.id,

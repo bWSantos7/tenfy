@@ -67,3 +67,13 @@ class PlayerProfileSerializer(serializers.ModelSerializer):
         if value and len(value) != 2:
             raise serializers.ValidationError('UF deve ter 2 caracteres.')
         return value.upper() if value else value
+
+    _VALID_MODALITIES = frozenset({'tennis', 'beach_tennis', 'padel', 'wheelchair'})
+
+    def validate_preferred_modality(self, value):
+        if value and value not in self._VALID_MODALITIES:
+            raise serializers.ValidationError(
+                f'Modalidade inválida: "{value}". '
+                f'Valores aceitos: {", ".join(sorted(self._VALID_MODALITIES))}.'
+            )
+        return value

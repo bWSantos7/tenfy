@@ -7,6 +7,7 @@ import { extractApiError } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { LEVEL_LABELS, TENNIS_CLASS_LABELS } from '../utils/format';
 import { StateMultiSelect, loadCitiesForState } from '../components/StateMultiSelect';
+import { MODALITY_OPTIONS } from '../utils/profileModality';
 
 const UF_OPTIONS = [
   'AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB',
@@ -29,6 +30,7 @@ export const OnboardingPage: React.FC = () => {
     travel_states: [] as string[],
     competitive_level: 'amateur',
     tennis_class: '',
+    preferred_modality: '' as string,
   });
 
   // IBGE cities
@@ -77,6 +79,10 @@ export const OnboardingPage: React.FC = () => {
   async function finish() {
     setSubmitting(true);
     try {
+      if (!form.preferred_modality) {
+        toast.error('Selecione a modalidade esportiva antes de continuar.');
+        return;
+      }
       await createProfile({
         display_name: form.display_name || 'Jogador',
         birth_year: form.birth_year ? Number(form.birth_year) : null,
@@ -86,6 +92,7 @@ export const OnboardingPage: React.FC = () => {
         travel_states: form.travel_states,
         competitive_level: form.competitive_level as any,
         tennis_class: form.tennis_class,
+        preferred_modality: form.preferred_modality,
         is_primary: true,
       } as any);
       toast.success('Perfil criado!');
@@ -202,12 +209,26 @@ export const OnboardingPage: React.FC = () => {
           </div>
         )}
 
-        {/* ─── Step 3: Nível ────────────────────────────────────────────── */}
+        {/* ─── Step 3: Modalidade e nível ──────────────────────────────── */}
         {step === 3 && (
           <div className="card space-y-4">
             <div>
-              <h2 className="text-xl font-bold mb-1">Seu nível</h2>
-              <p className="text-sm text-text-secondary">Determina os torneios compatíveis com você.</p>
+              <h2 className="text-xl font-bold mb-1">Modalidade e nível</h2>
+              <p className="text-sm text-text-secondary">Usados para encontrar torneios compatíveis com você.</p>
+            </div>
+
+            <div>
+              <label className="text-xs text-text-secondary mb-1 block">Modalidade principal *</label>
+              <select className="input-base" value={form.preferred_modality}
+                onChange={(e) => update('preferred_modality', e.target.value)}>
+                <option value="">Selecione a modalidade...</option>
+                {MODALITY_OPTIONS.filter((o) => o.value).map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+              {!form.preferred_modality && (
+                <p className="text-[10px] text-amber-400 mt-0.5">Obrigatório para ver torneios compatíveis.</p>
+              )}
             </div>
 
             <div>
@@ -230,7 +251,7 @@ export const OnboardingPage: React.FC = () => {
             <div className="flex gap-2">
               <button className="btn-secondary flex-1" onClick={() => setStep(2)}>Voltar</button>
               <button className="btn-primary flex-1 flex items-center justify-center gap-2"
-                onClick={finish} disabled={submitting}>
+                onClick={finish} disabled={submitting || !form.preferred_modality}>
                 {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCheck className="w-4 h-4" />}
                 Concluir
               </button>

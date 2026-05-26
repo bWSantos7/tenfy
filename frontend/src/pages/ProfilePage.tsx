@@ -554,7 +554,8 @@ const ProfileEditor: React.FC<{
     tennis_class:      profile.tennis_class ?? '',
     competitive_level: profile.competitive_level ?? 'amateur',
   });
-  const [modality, setModality] = useState(() => getProfileModality(profile.id));
+  // Read modality from the API response first; localStorage is only a cross-device fallback.
+  const [modality, setModality] = useState(() => profile.preferred_modality || getProfileModality(profile.id));
   const [saving, setSaving] = useState(false);
   const [cities, setCities] = useState<{ value: string; label: string }[]>([]);
   const [loadingCities, setLoadingCities] = useState(false);
@@ -637,11 +638,13 @@ const ProfileEditor: React.FC<{
       />
 
       <div>
-        <label className="text-xs text-text-secondary mb-1 block">Modalidade principal</label>
+        <label className="text-xs text-text-secondary mb-1 block">Modalidade principal *</label>
         <select className="input-base" value={modality} onChange={(e) => setModality(e.target.value)}>
           {MODALITY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
-        <p className="text-[10px] text-text-muted mt-0.5">Usado para filtrar torneios compatíveis</p>
+        {!modality
+          ? <p className="text-[10px] text-amber-400 mt-0.5">Selecione a modalidade para ver torneios compatíveis.</p>
+          : <p className="text-[10px] text-text-muted mt-0.5">Usado para filtrar torneios compatíveis.</p>}
       </div>
 
       <div className="grid grid-cols-2 gap-2">

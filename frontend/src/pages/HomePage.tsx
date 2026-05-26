@@ -90,11 +90,7 @@ export const HomePage: React.FC = () => {
         setHasProfile(profiles.length > 0);
 
         const activeId = getActiveProfileId(user.id);
-        let activeOption = activeId ? options.find((o) => o.profile.id === activeId) : null;
-        if (!activeOption && options.length > 0) {
-          const best = pickBestProfile(profiles);
-          activeOption = options.find((o) => o.profile.id === best?.id) ?? options[0];
-        }
+        const activeOption = activeId ? options.find((o) => o.profile.id === activeId) : null;
         primary = activeOption?.profile ?? null;
         childName = activeOption?.childName ?? null;
       } else {
@@ -245,6 +241,19 @@ export const HomePage: React.FC = () => {
           <Link to="/perfil" className="btn-secondary !py-1.5 !px-3 text-xs shrink-0">
             Perfil
           </Link>
+        </div>
+      )}
+
+      {/* ── No profile selected (parent with multiple profiles, no explicit selection yet) ── */}
+      {!profile && user?.role === 'parent' && profileOptions.length > 1 && (
+        <div className="card flex items-start gap-3 border border-accent-neon/30 bg-accent-neon/5">
+          <User className="w-5 h-5 text-accent-neon shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium">Selecione um dependente</p>
+            <p className="text-xs text-text-muted mt-0.5">
+              Escolha o perfil acima para ver os torneios compatíveis com esse atleta.
+            </p>
+          </div>
         </div>
       )}
 

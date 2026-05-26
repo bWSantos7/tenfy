@@ -161,19 +161,40 @@ export const TournamentDetailPage: React.FC = () => {
     setRegistering(true);
     try {
       let itemId = watchingItemId;
+
       if (!watching) {
         const r = await toggleWatchlist(ed.id, profile?.id);
         setWatching(r.watching);
         itemId = r.item?.id ?? null;
-        setWatchingItemId(itemId);
+        if (itemId) setWatchingItemId(itemId);
       }
+
+      // Fallback: toggle may not return item — fetch watchlist to get the ID
+      if (!itemId) {
+        const wl = await listWatchlist();
+        const found = wl.find((w) => w.edition === ed.id);
+        if (found) {
+          itemId = found.id;
+          setWatchingItemId(found.id);
+          setWatching(true);
+          if (found.user_status === 'registered_declared') {
+            setWatchUserStatus('registered_declared');
+            toast.success('Já registrado como inscrito na sua agenda!');
+            return;
+          }
+        }
+      }
+
       if (itemId) {
         const updated = await updateWatch(itemId, { user_status: 'registered_declared' });
         setWatchUserStatus(updated.user_status ?? 'registered_declared');
+        setWatching(true);
       }
+
       toast.success('Inscrição registrada na sua agenda!');
-    } catch {
-      toast.error('Não foi possível registrar a inscrição. Tente novamente.');
+    } catch (err) {
+      console.error('handleRegister error:', err);
+      toast.error(extractApiError(err));
     } finally {
       setRegistering(false);
     }

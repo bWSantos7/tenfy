@@ -3,7 +3,7 @@ from datetime import timedelta
 import hashlib
 
 from django.core.cache import cache
-from django.db.models import Case, Count, IntegerField, Q, Value, When
+from django.db.models import Case, Count, ExpressionWrapper, IntegerField, Q, Value, When
 from django.utils import timezone
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
@@ -52,6 +52,8 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
         now = timezone.now()
         today = now.date()
         soon = now + timedelta(days=3)
+        # Q-based condition: status=open but no entry dates → announced priority
+        open_no_dates = Q(status='open') & Q(entry_close_at__isnull=True) & Q(entry_open_at__isnull=True)
         return Case(
             When(status='canceled',          then=Value(5)),
             When(status='finished',          then=Value(4)),
@@ -61,8 +63,7 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
             When(entry_close_at__lte=soon,   then=Value(0)),   # closing in ≤3 days
             When(entry_close_at__isnull=False, then=Value(0)), # open with known deadline
             When(entry_open_at__lte=now,     then=Value(0)),   # registration period opened
-            # status='open' but no entry dates → treat as announced (ingestor over-published)
-            When(status='open', entry_close_at__isnull=True, entry_open_at__isnull=True, then=Value(1)),
+            When(open_no_dates,              then=Value(1)),   # open status, no dates → announced
             default=Value(1),                                   # announced / unknown
             output_field=IntegerField(),
         )

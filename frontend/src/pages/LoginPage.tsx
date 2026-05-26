@@ -15,7 +15,10 @@ export const LoginPage: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
 
-  const from = (location.state as { from?: { pathname: string } } | null)?.from?.pathname ?? '/';
+  // Se o usuário chegou ao login diretamente (sem ser redirecionado de uma rota protegida),
+  // ou se veio da landing page ('/'), mandamos para /inicio após o login.
+  const rawFrom = (location.state as { from?: { pathname: string } } | null)?.from?.pathname;
+  const from = !rawFrom || rawFrom === '/' ? '/inicio' : rawFrom;
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();

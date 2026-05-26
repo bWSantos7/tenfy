@@ -2,21 +2,22 @@ import React, { useEffect, useState } from 'react';
 import { FlaskConical } from 'lucide-react';
 import { User } from '../types';
 
-const BETA_ACK_PREFIX = 'th_beta_ack';
+// Chave única por dispositivo/browser — persiste entre sessões e usuários
+const BETA_ACK_KEY = 'tenfy_beta_ack';
 
 export const BetaModal: React.FC<{ user: User | null }> = ({ user }) => {
   const [visible, setVisible] = useState(false);
-  const betaAckKey = user ? `${BETA_ACK_PREFIX}_${user.id}` : BETA_ACK_PREFIX;
 
   useEffect(() => {
+    // Só exibe quando o usuário estiver carregado e nunca tiver confirmado antes
     if (!user) return;
-    if (!localStorage.getItem(betaAckKey)) {
+    if (!localStorage.getItem(BETA_ACK_KEY)) {
       setVisible(true);
     }
-  }, [betaAckKey, user]);
+  }, [user]);
 
   const dismiss = () => {
-    localStorage.setItem(betaAckKey, '1');
+    localStorage.setItem(BETA_ACK_KEY, '1');
     setVisible(false);
   };
 

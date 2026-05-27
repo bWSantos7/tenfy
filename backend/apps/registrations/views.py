@@ -821,6 +821,11 @@ def _run_import(request):
     }
     if dry_run:
         result['previews'] = previews
+    else:
+        # Automatically trigger the auto-discovery matching process
+        from .tasks import match_federation_entries
+        match_federation_entries.delay(edition.id)
+
     return Response(result)
 
 

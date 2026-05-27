@@ -40,21 +40,27 @@ class WatchlistViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        user_ids = [user.id]
 
         if user.role == 'parent':
-            # Include the parent's own items AND all managed children's items.
-            # Previously only child IDs were used, which caused PATCH/DELETE on
-            # the parent's own watchlist items to return 404.
             child_ids = self._managed_child_ids()
-            user_ids = list({user.id, *child_ids})
+            # All IDs the parent is allowed to see: themselves + managed children
+            allowed_ids = [user.id, *child_ids]
+
             requested_user_id = self.request.query_params.get('user_id')
             if requested_user_id:
+                # ?user_id=X → return items for that specific user (if allowed)
                 try:
                     requested_user_id_int = int(requested_user_id)
                 except (TypeError, ValueError):
                     requested_user_id_int = None
-                user_ids = [requested_user_id_int] if requested_user_id_int in user_ids else []
+                user_ids = [requested_user_id_int] if requested_user_id_int in allowed_ids else []
+            else:
+                # No filter: return ONLY the parent's own items.
+                # Children's items are fetched via ?user_id=<child_id> individually.
+                # This prevents duplication in list views.
+                user_ids = [user.id]
+        else:
+            user_ids = [user.id]
 
         return (
             WatchlistItem.objects
@@ -62,6 +68,30 @@ class WatchlistViewSet(viewsets.ModelViewSet):
             .select_related('edition__tournament__organization', 'edition__venue', 'profile')
             .order_by('-created_at')
         )
+
+    def get_object(self):
+        """
+        Allow parent users to retrieve (and PATCH/DELETE) items belonging to
+        themselves OR any of their managed children, even though get_queryset
+        only returns the parent's own items by default.
+        """
+        user = self.request.user
+        if user.role == 'parent':
+            child_ids = self._managed_child_ids()
+            allowed_ids = [user.id, *child_ids]
+            try:
+                obj = (
+                    WatchlistItem.objects
+                    .select_related('edition__tournament__organization', 'edition__venue', 'profile')
+                    .filter(user_id__in=allowed_ids)
+                    .get(pk=self.kwargs['pk'])
+                )
+            except WatchlistItem.DoesNotExist:
+                from rest_framework.exceptions import NotFound
+                raise NotFound()
+            self.check_object_permissions(self.request, obj)
+            return obj
+        return super().get_object()
 
     @action(detail=False, methods=['get'])
     def summary(self, request):

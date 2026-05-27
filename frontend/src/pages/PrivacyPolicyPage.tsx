@@ -19,7 +19,7 @@ export const PrivacyPolicyPage: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-4 mb-8">
-          <img src={theme === 'dark' ? '/icons/logo_noturno.png' : '/icons/logo_diurna.png'} alt="Tenfy" className="w-12 h-12 object-contain" />
+          <img src={theme === 'dark' ? '/icons/logo_noturno.png?v=2' : '/icons/logo_diurna.png?v=2'} alt="Tenfy" className="w-12 h-12 object-contain" />
           <div>
             <h1 className="text-2xl font-bold">Política de Privacidade</h1>
             <p className="text-text-secondary text-sm mt-1">Última atualização: maio de 2026</p>

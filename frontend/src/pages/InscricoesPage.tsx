@@ -53,13 +53,15 @@ export const InscricoesPage: React.FC = () => {
           .map((link, i) => ({
             childName: link.child_detail.full_name || link.child_detail.email,
             childId: link.child,
-            items: childWatchlists[i].filter((it) => it.user_status === 'registered_declared'),
+            // Include 'completed' — backend sets this automatically when a result is saved
+            items: childWatchlists[i].filter((it) => it.user_status === 'registered_declared' || it.user_status === 'completed'),
           }))
           .filter((g) => g.items.length > 0);
         setChildGroups(groups);
       } else {
         const wl = await listWatchlist().catch(() => [] as WatchlistItem[]);
-        const inscribed = wl.filter((i) => i.user_status === 'registered_declared');
+        // Include 'completed' — backend sets this automatically when a result is saved
+        const inscribed = wl.filter((i) => i.user_status === 'registered_declared' || i.user_status === 'completed');
         setChildGroups(inscribed.length > 0 ? [{ childName: '', childId: 0, items: inscribed }] : []);
       }
     } catch (err) {

@@ -4,7 +4,7 @@ import { StateMultiSelect, loadCitiesForState, ALL_UFS } from '../components/Sta
 import {
   Loader2, Trash2, Mail, Edit2, CheckCircle2, Camera, AlertTriangle,
   Sun, Moon, CreditCard, Ticket, Users, ShieldCheck, Bell, LogOut,
-  MapPin, Trophy, Calendar, User, ChevronRight, Shield, Download, Plus, Eye, EyeOff, Star,
+  MapPin, Trophy, Calendar, User, ChevronRight, Shield, Download, Plus, Eye, EyeOff,
   KeyRound, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -253,12 +253,6 @@ export const ProfilePage: React.FC = () => {
           <ChevronRight className="w-4 h-4 text-text-muted" />
         </Link>
 
-        {/* Watchlist */}
-        <Link to="/watchlist" className="menu-row px-4 flex items-center gap-3">
-          <Star className="w-4 h-4 text-text-muted shrink-0" />
-          <span className="flex-1 text-sm">Minha agenda</span>
-          <ChevronRight className="w-4 h-4 text-text-muted" />
-        </Link>
 
         {/* Coach */}
         {user?.role === 'coach' && (

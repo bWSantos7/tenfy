@@ -6,14 +6,14 @@ from django.conf import settings
 from django.db.models import F, Window
 from django.db.models.functions import RowNumber
 from django.utils import timezone
-from rest_framework import status, viewsets
+from rest_framework import status, viewsets, generics, permissions
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
 
 from apps.players.models import PlayerProfile
 from apps.tournaments.models import TournamentEdition, TournamentCategory
-from .models import FederationEntry, TournamentRegistration
+from .models import FederationEntry, TournamentRegistration, MatchingLog
 from .serializers import (
     AdminRegistrationSerializer,
     BulkPaymentSerializer,
@@ -822,11 +822,31 @@ def _run_import(request):
     if dry_run:
         result['previews'] = previews
     else:
-        # Automatically trigger the auto-discovery matching process
+        # Automatically trigger the auto-discovery matching process synchronously
+        # to ensure it executes even if the Celery worker is lagging or misconfigured.
         from .tasks import match_federation_entries
-        match_federation_entries.delay(edition.id)
+        try:
+            match_res = match_federation_entries(edition.id)
+            result['match_results'] = match_res
+        except Exception as exc:
+            import logging
+            logging.getLogger('apps.registrations').error(f'Sync match failed: {exc}', exc_info=True)
+            result['match_error'] = str(exc)
 
     return Response(result)
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def debug_matching(request, edition_id):
+    from .models import MatchingLog
+    qs = MatchingLog.objects.all()
+    if edition_id > 0:
+        qs = qs.filter(entry__edition_id=edition_id)
+    logs = list(qs.order_by('-created_at')[:50].values(
+        'id', 'confidence', 'method', 'score', 'registration_created',
+        'entry__player_name', 'profile__display_name', 'created_at', 'entry__edition_id'
+    ))
+    return Response({'edition_id': edition_id, 'logs': logs})
 
 
 @api_view(['POST'])

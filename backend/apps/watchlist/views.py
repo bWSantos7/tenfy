@@ -43,7 +43,11 @@ class WatchlistViewSet(viewsets.ModelViewSet):
         user_ids = [user.id]
 
         if user.role == 'parent':
-            user_ids = self._managed_child_ids()
+            # Include the parent's own items AND all managed children's items.
+            # Previously only child IDs were used, which caused PATCH/DELETE on
+            # the parent's own watchlist items to return 404.
+            child_ids = self._managed_child_ids()
+            user_ids = list({user.id, *child_ids})
             requested_user_id = self.request.query_params.get('user_id')
             if requested_user_id:
                 try:

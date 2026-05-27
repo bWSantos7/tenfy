@@ -182,7 +182,9 @@ export const WatchlistPage: React.FC = () => {
 
   function renderItem(item: WatchlistItem) {
     const statusInfo = USER_STATUS_LABELS[item.user_status] ?? USER_STATUS_LABELS.none;
-    const isRegistered = item.user_status === 'registered_declared';
+    // 'completed' also counts as registered — backend sets this automatically when a result is saved
+    const isRegistered = item.user_status === 'registered_declared' || item.user_status === 'completed';
+    const isCompleted = item.user_status === 'completed';
     return (
       <div key={item.id} className="relative">
         {conflicts.has(item.id) && (
@@ -200,13 +202,14 @@ export const WatchlistPage: React.FC = () => {
           </span>
           <div className="flex items-center gap-1">
             <button
-              onClick={() => toggleRegistered(item)}
+              onClick={() => !isCompleted && toggleRegistered(item)}
+              disabled={isCompleted}
               className={`flex items-center gap-1 text-xs px-2 py-1 rounded-lg border transition-colors ${
                 isRegistered
                   ? 'bg-status-open/15 border-status-open/40 text-status-open'
                   : 'bg-bg-card border-border-subtle text-text-muted hover:text-accent-neon hover:border-accent-neon/40'
-              }`}
-              title={isRegistered ? 'Remover status de inscrito' : 'Marcar que você está inscrito neste torneio'}
+              } ${isCompleted ? 'opacity-70 cursor-default' : ''}`}
+              title={isCompleted ? 'Resultado registrado' : isRegistered ? 'Remover status de inscrito' : 'Marcar que você está inscrito neste torneio'}
             >
               <CheckCircle className="w-3.5 h-3.5" />
               {isRegistered ? 'Inscrito' : 'Marcar como inscrito'}

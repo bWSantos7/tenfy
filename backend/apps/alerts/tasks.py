@@ -10,6 +10,50 @@ from apps.tournaments.models import TournamentEdition, TournamentChangeEvent
 
 logger = logging.getLogger('apps.alerts')
 
+
+def _get_parents_of(user):
+    """Return dicts with parent and child info for active ParentChild links."""
+    from apps.accounts.models import ParentChild
+    return list(
+        ParentChild.objects
+        .filter(child=user, is_active=True)
+        .values('parent__id', 'parent__email',
+                'parent__full_name', 'child__full_name', 'child__email')
+    )
+
+
+def _notify_parents(item, kind, title, body, dedup_base, payload=None):
+    """
+    For each active parent of item.user, create an in-app and/or push alert
+    with the child's name prepended to the title.
+    """
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+    for row in _get_parents_of(item.user):
+        parent = User.objects.get(pk=row['parent__id'])
+        child_name = row['child__full_name'] or row['child__email']
+        parent_title = f'\U0001F9D2 {child_name} — {title}'
+        prefs = UserAlertPreference.get_or_create_defaults(parent)
+        if not prefs.in_app_enabled and not prefs.push_enabled:
+            continue
+        dedup_parent = f'{dedup_base}:parent:{parent.pk}'
+        if prefs.in_app_enabled:
+            _create_alert(
+                user=parent, edition=item.edition,
+                kind=kind, channel=Alert.CHANNEL_IN_APP,
+                title=parent_title, body=body,
+                payload=payload or {},
+                dedup_key=dedup_parent + ':app',
+            )
+        if prefs.push_enabled:
+            _create_alert(
+                user=parent, edition=item.edition,
+                kind=kind, channel=Alert.CHANNEL_PUSH,
+                title=parent_title, body=body,
+                payload=payload or {},
+                dedup_key=dedup_parent + ':push',
+            )
+
 # Human-readable labels for tournament field names shown in change alerts
 _FIELD_LABELS: dict[str, str] = {
     'entry_close_at':   'Prazo de inscrição',
@@ -250,6 +294,16 @@ def dispatch_deadline_alerts(self):
                 )
                 created += 1
 
+            # Notify parent(s) of this child watcher
+            _notify_parents(
+                item=item,
+                kind=Alert.KIND_DEADLINE,
+                title=title,
+                body=body,
+                dedup_base=dedup,
+                payload={'days_before': d},
+            )
+
     logger.info('Dispatched %d deadline alerts', created)
     return created
 
@@ -307,5 +361,15 @@ def dispatch_change_alert(self, edition_id: int, event_id: int):
                 payload={'event_id': event_id},
                 dedup_key=dedup + ':push',
             )
+
+        # Notify parent(s) of this child watcher
+        _notify_parents(
+            item=item,
+            kind=kind,
+            title=title,
+            body=body,
+            dedup_base=dedup,
+            payload={'event_id': event_id},
+        )
 
     return created

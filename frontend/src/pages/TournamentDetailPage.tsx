@@ -150,14 +150,6 @@ export const TournamentDetailPage: React.FC = () => {
     });
   }
 
-  function toggleCat(text: string) {
-    setExpandedCats((prev) => {
-      const next = new Set(prev);
-      if (next.has(text)) next.delete(text); else next.add(text);
-      return next;
-    });
-  }
-
   async function handleWithdraw() {
     if (!myReg) return;
     const ok = window.confirm('Tem certeza que deseja cancelar sua inscrição neste torneio?');
@@ -180,8 +172,6 @@ export const TournamentDetailPage: React.FC = () => {
     try {
       const r = await toggleWatchlist(ed.id, profile?.id);
       setWatching(r.watching);
-      setWatchingItemId(r.item?.id ?? null);
-      if (!r.watching) setWatchUserStatus(null);
       toast.success(r.watching ? 'Adicionado à sua agenda' : 'Removido da agenda');
     } catch (err) {
       toast.error(extractApiError(err));

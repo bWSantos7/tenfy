@@ -1,8 +1,10 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
+import { useTheme } from '../contexts/ThemeContext';
 
 export const PrivacyPolicyPage: React.FC = () => {
+  const { theme } = useTheme();
   return (
     <div className="min-h-screen bg-bg-base text-text-primary">
       <div className="max-w-3xl mx-auto px-4 py-10">
@@ -17,7 +19,7 @@ export const PrivacyPolicyPage: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-4 mb-8">
-          <img src="/icons/logo.png" alt="Tenfy" className="w-12 h-12 object-contain" />
+          <img src={theme === 'dark' ? '/icons/logo_noturno.png' : '/icons/logo_diurna.png'} alt="Tenfy" className="w-12 h-12 object-contain" />
           <div>
             <h1 className="text-2xl font-bold">Política de Privacidade</h1>
             <p className="text-text-secondary text-sm mt-1">Última atualização: maio de 2026</p>

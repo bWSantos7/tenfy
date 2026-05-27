@@ -43,8 +43,8 @@ export const LoginPage: React.FC = () => {
         {/* Logo largo — igual ao mobile */}
         <div className="flex justify-center mb-8">
           <img
-            src="/logo2.png"
-            alt="Tenfy"
+            src="/icons/logo_login.png"
+            alt="Tenfy Logo"
             className="h-12 object-contain"
             style={{ maxWidth: 200 }}
           />

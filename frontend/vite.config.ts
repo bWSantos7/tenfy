@@ -11,7 +11,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'icons/*.svg'],
+      includeAssets: ['icons/logo_aba.png', 'icons/*.svg'],
       manifest: {
         name: 'Tenfy',
         short_name: 'Tenfy',
@@ -22,7 +22,7 @@ export default defineConfig({
         orientation: 'portrait',
         start_url: '/',
         icons: [
-          { src: '/favicon.svg', sizes: 'any', type: 'image/svg+xml' },
+          { src: '/icons/logo_aba.png', sizes: 'any', type: 'image/png' },
           { src: '/icons/icon-192.svg', sizes: '192x192', type: 'image/svg+xml' },
         ],
       },

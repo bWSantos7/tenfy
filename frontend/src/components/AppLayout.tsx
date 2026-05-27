@@ -40,7 +40,7 @@ export const AppLayout: React.FC = () => {
 
           {/* Logo */}
           <NavLink to="/inicio" className="flex items-center gap-2 shrink-0 mr-2">
-            <img src="/logo2.png" alt="Tenfy" className="h-7 object-contain" style={{ maxWidth: 110 }} />
+            <img src={theme === 'dark' ? '/icons/logo_noturno.png' : '/icons/logo_diurna.png'} alt="Tenfy" className="h-7 object-contain" style={{ maxWidth: 110 }} />
           </NavLink>
 
           {/* ── Nav items — só visível em desktop (md+) ── */}

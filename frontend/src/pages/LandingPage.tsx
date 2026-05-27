@@ -125,7 +125,7 @@ export const LandingPage: React.FC = () => {
           {/* Logo */}
           <Link to={isAuthenticated ? '/inicio' : '/'} className="flex items-center gap-2 group">
             <img 
-              src={theme === 'dark' ? '/icons/logo_noturno.png?v=3' : '/icons/logo_diurna.png?v=3'} 
+              src={theme === 'dark' ? '/icons/logo_noturno_tr.png' : '/icons/logo_diurna_tr.png'} 
               alt="Tenfy Logo" 
               className="h-8 object-contain transition-transform duration-300 group-hover:scale-105" 
             />
@@ -329,7 +329,7 @@ export const LandingPage: React.FC = () => {
                     <span className="w-2.5 h-2.5 rounded-full bg-accent-neon animate-ping" />
                   </div>
                   <img 
-                    src={theme === 'dark' ? '/icons/logo_noturno.png?v=3' : '/icons/logo_diurna.png?v=3'} 
+                    src={theme === 'dark' ? '/icons/logo_noturno_tr.png' : '/icons/logo_diurna_tr.png'} 
                     alt="Tenfy Branding" 
                     className="w-full object-contain" 
                   />
@@ -998,7 +998,7 @@ export const LandingPage: React.FC = () => {
           {/* Column 1: Brand details */}
           <div className="space-y-4 col-span-1 md:col-span-2">
             <Link to="/" className="inline-block">
-              <img src={theme === 'dark' ? '/icons/logo_noturno.png?v=3' : '/icons/logo_diurna.png?v=3'} alt="Tenfy Logo" className="h-8 object-contain" />
+              <img src={theme === 'dark' ? '/icons/logo_noturno_tr.png' : '/icons/logo_diurna_tr.png'} alt="Tenfy Logo" className="h-8 object-contain" />
             </Link>
             <p className="text-xs text-text-secondary max-w-sm leading-relaxed">
               O Tenfy é o agregador inteligente de torneios oficiais de tênis no Brasil. Criamos tecnologia para conectar atletas, pais e organizadores no ecossistema esportivo.

@@ -85,7 +85,7 @@ export async function listChildren(): Promise<ParentChild[]> {
 }
 
 export async function removeChild(linkId: number): Promise<void> {
-  await api.delete(`/api/auth/children/${linkId}/`);
+  await api.delete(`/api/auth/children/${linkId}/remove/`);
 }
 
 export async function listChildProfiles(childUserId: number): Promise<PlayerProfile[]> {

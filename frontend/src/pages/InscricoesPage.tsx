@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Loader2, CheckCircle, ChevronRight, Ticket, User, Calendar, Trophy, CreditCard, XCircle, Clock, AlertCircle, ShieldCheck } from 'lucide-react';
+import { Loader2, CheckCircle, ChevronRight, Ticket, User, Calendar, Trophy, XCircle, AlertCircle, ShieldCheck } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { TournamentRegistration, WatchlistItem, ParentChild } from '../types';
 import { myRegistrations, withdrawRegistration } from '../services/registrations';
@@ -148,10 +148,11 @@ export const InscricoesPage: React.FC = () => {
                   )}
                   {group.items.map((item) => {
                     const ed = item.edition_detail;
+                    const officiallyConfirmed = item.is_registered;
                     return (
                       <Link key={`wl-${item.id}`} to={`/torneios/${ed.id}`} className="card flex items-center gap-3 hover:border-accent-neon/30 transition-colors no-underline">
-                        <div className="w-9 h-9 rounded-full bg-accent-neon/15 flex items-center justify-center shrink-0">
-                          <CheckCircle className="w-5 h-5 text-accent-neon" />
+                        <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${officiallyConfirmed ? 'bg-status-open/15' : 'bg-accent-neon/15'}`}>
+                          <CheckCircle className={`w-5 h-5 ${officiallyConfirmed ? 'text-status-open' : 'text-accent-neon'}`} />
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="font-bold text-sm line-clamp-1">{ed.title}</div>
@@ -160,7 +161,14 @@ export const InscricoesPage: React.FC = () => {
                               {fmtDateRange(ed.start_date, ed.end_date)}
                             </div>
                           )}
-                          <span className="inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-text-muted/15 text-text-muted">Declarado por você</span>
+                          {officiallyConfirmed ? (
+                            <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-status-open/15 text-status-open">
+                              <ShieldCheck className="w-3 h-3" />
+                              Inscrição Confirmada
+                            </span>
+                          ) : (
+                            <span className="inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-text-muted/15 text-text-muted">Declarado Manualmente</span>
+                          )}
                         </div>
                         <ChevronRight className="w-4 h-4 text-text-muted shrink-0" />
                       </Link>

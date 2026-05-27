@@ -182,9 +182,12 @@ export const WatchlistPage: React.FC = () => {
 
   function renderItem(item: WatchlistItem) {
     const statusInfo = USER_STATUS_LABELS[item.user_status] ?? USER_STATUS_LABELS.none;
+    const isOfficiallyRegistered = item.is_registered || item.result !== null;
     // 'completed' also counts as registered — backend sets this automatically when a result is saved
-    const isRegistered = item.user_status === 'registered_declared' || item.user_status === 'completed';
-    const isCompleted = item.user_status === 'completed';
+    const isDeclaredManually =
+      !isOfficiallyRegistered &&
+      (item.user_status === 'registered_declared' || item.user_status === 'completed');
+
     return (
       <div key={item.id} className="relative">
         {conflicts.has(item.id) && (
@@ -201,19 +204,34 @@ export const WatchlistPage: React.FC = () => {
             {statusInfo.label}
           </span>
           <div className="flex items-center gap-1">
-            <button
-              onClick={() => !isCompleted && toggleRegistered(item)}
-              disabled={isCompleted}
-              className={`flex items-center gap-1 text-xs px-2 py-1 rounded-lg border transition-colors ${
-                isRegistered
-                  ? 'bg-status-open/15 border-status-open/40 text-status-open'
-                  : 'bg-bg-card border-border-subtle text-text-muted hover:text-accent-neon hover:border-accent-neon/40'
-              } ${isCompleted ? 'opacity-70 cursor-default' : ''}`}
-              title={isCompleted ? 'Resultado registrado' : isRegistered ? 'Remover status de inscrito' : 'Marcar que você está inscrito neste torneio'}
-            >
-              <CheckCircle className="w-3.5 h-3.5" />
-              {isRegistered ? 'Inscrito' : 'Marcar como inscrito'}
-            </button>
+
+            {/* ── Oficialmente inscrito pelo motor de matching ─────────────── */}
+            {isOfficiallyRegistered ? (
+              <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg border bg-status-open/15 border-status-open/40 text-status-open">
+                <CheckCircle className="w-3.5 h-3.5" />
+                Inscrição Confirmada
+              </span>
+            ) : isDeclaredManually ? (
+              /* ── Declarado manualmente pelo usuário ───────────────────── */
+              <button
+                onClick={() => toggleRegistered(item)}
+                className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg border bg-bg-elevated border-border-subtle text-text-muted hover:text-red-400 hover:border-red-400/40 transition-colors"
+                title="Remover status declarado"
+              >
+                <CheckCircle className="w-3.5 h-3.5" />
+                Declarado Manualmente
+              </button>
+            ) : (
+              /* ── Sem inscrição: botão para declarar ───────────────────── */
+              <button
+                onClick={() => toggleRegistered(item)}
+                className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg border bg-bg-card border-border-subtle text-text-muted hover:text-accent-neon hover:border-accent-neon/40 transition-colors"
+                title="Marcar que você está inscrito neste torneio"
+              >
+                <CheckCircle className="w-3.5 h-3.5" />
+                Marcar como inscrito
+              </button>
+            )}
 
             {confirmRemove === item.id ? (
               <div className="flex items-center gap-1">

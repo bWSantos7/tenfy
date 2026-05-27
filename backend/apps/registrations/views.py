@@ -842,3 +842,30 @@ def federation_import(request):
             status=status.HTTP_403_FORBIDDEN,
         )
     return _run_import(request)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def trigger_matching(request, edition_id):
+    """
+    POST /api/registrations/match/<edition_id>/
+
+    Dispara a task Celery de auto-discovery zero-click para uma edição.
+    Aceita staff JWT ou X-Import-Token (mesmo esquema do endpoint de importação).
+
+    Chamado pelo n8n como último nó após o bulk-import de inscritos.
+    Retorna 200 imediatamente — a task roda em background.
+    """
+    if not _check_import_auth(request):
+        return Response(
+            {'detail': 'Autenticação necessária. Use JWT de staff ou X-Import-Token.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    try:
+        TournamentEdition.objects.get(pk=edition_id)
+    except TournamentEdition.DoesNotExist:
+        return Response({'detail': 'Edição não encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+
+    from .tasks import match_federation_entries
+    match_federation_entries.delay(int(edition_id))
+    return Response({'status': 'matching_started', 'edition_id': edition_id})

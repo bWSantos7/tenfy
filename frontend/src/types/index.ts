@@ -270,6 +270,8 @@ export interface WatchlistItem {
   alert_on_changes: boolean;
   alert_on_draws: boolean;
   result: TournamentResult | null;
+  /** True when the backend auto-matched this user to a FederationEntry and created a TournamentRegistration. */
+  is_registered: boolean;
   created_at: string;
   updated_at: string;
 }

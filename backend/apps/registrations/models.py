@@ -239,3 +239,65 @@ class FederationEntry(TimestampedModel):
 
     def __str__(self):
         return f'{self.player_name} — {self.category_text} ({self.edition.title})'
+
+
+class MatchingLog(TimestampedModel):
+    """
+    Audit trail for the zero-click auto-discovery engine.
+    One row per (FederationEntry, matching attempt).
+    """
+
+    METHOD_EXTERNAL_ID = 'external_id'
+    METHOD_NAME_FUZZY = 'name_fuzzy'
+    METHOD_NONE = 'none'
+    METHOD_CHOICES = [
+        (METHOD_EXTERNAL_ID, 'ID externo (match exato)'),
+        (METHOD_NAME_FUZZY, 'Nome fuzzy (SequenceMatcher)'),
+        (METHOD_NONE, 'Sem correspondência'),
+    ]
+
+    CONFIDENCE_HIGH = 'high'
+    CONFIDENCE_MEDIUM = 'medium'
+    CONFIDENCE_LOW = 'low'
+    CONFIDENCE_NONE = 'none'
+    CONFIDENCE_CHOICES = [
+        (CONFIDENCE_HIGH, 'Alta'),
+        (CONFIDENCE_MEDIUM, 'Média'),
+        (CONFIDENCE_LOW, 'Baixa'),
+        (CONFIDENCE_NONE, 'Sem match'),
+    ]
+
+    entry = models.ForeignKey(
+        'FederationEntry',
+        on_delete=models.CASCADE,
+        related_name='matching_logs',
+    )
+    profile = models.ForeignKey(
+        'players.PlayerProfile',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='matching_logs',
+    )
+    confidence = models.CharField(
+        max_length=10,
+        choices=CONFIDENCE_CHOICES,
+        default=CONFIDENCE_NONE,
+    )
+    method = models.CharField(
+        max_length=20,
+        choices=METHOD_CHOICES,
+        default=METHOD_NONE,
+    )
+    score = models.FloatField(null=True, blank=True)
+    registration_created = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['entry']),
+            models.Index(fields=['profile']),
+        ]
+
+    def __str__(self):
+        return f'MatchingLog: {self.entry_id} → profile={self.profile_id} ({self.confidence})'

@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import FederationEntryViewSet, RegistrationViewSet, federation_import
+from .views import FederationEntryViewSet, RegistrationViewSet, federation_import, trigger_matching
 
 reg = RegistrationViewSet.as_view
 fed = FederationEntryViewSet.as_view
@@ -28,4 +28,7 @@ urlpatterns = [
 
     # ── External import — n8n / pipelines (AllowAny + token check inside) ────
     path('import/', federation_import, name='federation-import'),
+
+    # ── Zero-click matching trigger (called by n8n after bulk-import) ─────────
+    path('match/<int:edition_id>/', trigger_matching, name='federation-trigger-matching'),
 ]

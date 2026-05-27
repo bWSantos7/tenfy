@@ -49,7 +49,7 @@ def match_federation_entries(self, edition_id: int) -> dict:
         logger.info('match_federation_entries: no entries for edition %s', edition_id)
         return {'edition_id': edition_id, 'entries_processed': 0, 'registrations_created': 0}
 
-    # Only consider profiles of users who expressed intent via watchlist
+    # Only consider profiles of users who expressed intent via watchlist, plus their dependents
     watcher_user_ids = list(
         WatchlistItem.objects
         .filter(edition=edition)
@@ -65,7 +65,15 @@ def match_federation_entries(self, edition_id: int) -> dict:
             'note': 'No watchers',
         }
 
-    profiles = list(PlayerProfile.objects.filter(user_id__in=watcher_user_ids))
+    from apps.accounts.models import ParentChild
+    children_user_ids = list(
+        ParentChild.objects
+        .filter(parent_id__in=watcher_user_ids)
+        .values_list('child_id', flat=True)
+    )
+    all_target_user_ids = set(watcher_user_ids + children_user_ids)
+
+    profiles = list(PlayerProfile.objects.filter(user_id__in=all_target_user_ids))
     if not profiles:
         return {
             'edition_id': edition_id,

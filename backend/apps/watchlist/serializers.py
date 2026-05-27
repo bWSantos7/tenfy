@@ -25,12 +25,18 @@ class WatchlistItemSerializer(serializers.ModelSerializer):
         read_only_fields = ('created_at', 'updated_at')
 
     def get_is_registered(self, obj) -> bool:
-        """True when a non-withdrawn TournamentRegistration exists for this user+edition."""
+        """True when a non-withdrawn TournamentRegistration exists for this user+edition or their dependents."""
         from apps.registrations.models import TournamentRegistration
         from apps.players.models import PlayerProfile
+        from apps.accounts.models import ParentChild
+        
+        target_user_ids = [obj.user_id]
+        children_ids = list(ParentChild.objects.filter(parent_id=obj.user_id).values_list('child_id', flat=True))
+        target_user_ids.extend(children_ids)
+
         profile_ids = list(
             PlayerProfile.objects
-            .filter(user_id=obj.user_id)
+            .filter(user_id__in=target_user_ids)
             .values_list('id', flat=True)
         )
         if not profile_ids:

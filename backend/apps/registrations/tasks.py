@@ -4,6 +4,7 @@ from difflib import SequenceMatcher
 
 from celery import shared_task
 from django.db import transaction
+from django.utils import timezone
 
 from .models import FederationEntry, MatchingLog, TournamentRegistration
 
@@ -16,74 +17,24 @@ def _normalize(text: str) -> str:
     return normalized.encode('ascii', 'ignore').decode('ascii').lower().strip()
 
 
-@shared_task(bind=True, max_retries=2, default_retry_delay=60)
-def match_federation_entries(self, edition_id: int) -> dict:
-    """
-    Zero-click auto-discovery: match FederationEntries against PlayerProfiles
-    of users who added the tournament to their watchlist.
-
-    Match strategy (in order):
-      1. Exact match via profile.external_ids[source] == entry.player_external_id
-      2. Fuzzy name match using SequenceMatcher; threshold > 0.95
-
-    On a confirmed match:
-      - Creates a TournamentRegistration (skips if one already exists).
-      - Persists player_external_id into profile.external_ids so future
-        matches use the faster exact-ID path.
-
-    Called by n8n immediately after bulk-import completes via
-    POST /api/registrations/match/<edition_id>/
-    """
-    from apps.players.models import PlayerProfile
-    from apps.tournaments.models import TournamentEdition
+def _ensure_watchlist(user_id: int, edition) -> None:
+    """Create a WatchlistItem(registered_declared) for user+edition if one does not exist."""
     from apps.watchlist.models import WatchlistItem
-
-    try:
-        edition = TournamentEdition.objects.get(pk=edition_id)
-    except TournamentEdition.DoesNotExist:
-        logger.error('match_federation_entries: edition %s not found', edition_id)
-        return {'error': f'Edition {edition_id} not found'}
-
-    entries = list(FederationEntry.objects.filter(edition=edition))
-    if not entries:
-        logger.info('match_federation_entries: no entries for edition %s', edition_id)
-        return {'edition_id': edition_id, 'entries_processed': 0, 'registrations_created': 0}
-
-    # Only consider profiles of users who expressed intent via watchlist, plus their dependents
-    watcher_user_ids = list(
-        WatchlistItem.objects
-        .filter(edition=edition)
-        .values_list('user_id', flat=True)
-        .distinct()
+    WatchlistItem.objects.get_or_create(
+        user_id=user_id,
+        edition=edition,
+        defaults={'user_status': 'registered_declared'},
     )
-    if not watcher_user_ids:
-        logger.info('match_federation_entries: no watchers for edition %s', edition_id)
-        return {
-            'edition_id': edition_id,
-            'entries_processed': len(entries),
-            'registrations_created': 0,
-            'note': 'No watchers',
-        }
 
-    from apps.accounts.models import ParentChild
-    children_user_ids = list(
-        ParentChild.objects
-        .filter(parent_id__in=watcher_user_ids)
-        .values_list('child_id', flat=True)
-    )
-    all_target_user_ids = set(watcher_user_ids + children_user_ids)
 
-    profiles = list(PlayerProfile.objects.filter(user_id__in=all_target_user_ids))
-    if not profiles:
-        return {
-            'edition_id': edition_id,
-            'entries_processed': len(entries),
-            'registrations_created': 0,
-            'note': 'No profiles found for watchers',
-        }
+def _do_match(entries, profiles, edition, registrations_created_ref: list) -> list:
+    """
+    Core matching loop shared by both tasks.
 
+    Returns list of MatchingLog instances (not yet saved).
+    registrations_created_ref is a 1-element list used as a mutable counter.
+    """
     logs_to_create = []
-    registrations_created = 0
 
     for entry in entries:
         matched_profile = None
@@ -149,19 +100,21 @@ def match_federation_entries(self, edition_id: int) -> dict:
                             ),
                         )
                         reg_created = True
-                        registrations_created += 1
+                        registrations_created_ref[0] += 1
 
-                        # "The secret sauce": persist external_id for fast future matching
+                        # Persist external_id for fast future exact matching
                         if method == MatchingLog.METHOD_NAME_FUZZY and entry.player_external_id:
                             ext_ids = dict(matched_profile.external_ids or {})
                             ext_ids[entry.source] = entry.player_external_id
                             matched_profile.external_ids = ext_ids
                             matched_profile.save(update_fields=['external_ids'])
 
+                        # Guarantee the tournament appears in the user's agenda
+                        _ensure_watchlist(matched_profile.user_id, edition)
+
                 except Exception as exc:
                     logger.warning(
-                        'match_federation_entries: failed to create registration '
-                        'for profile=%s entry=%s: %s',
+                        '_do_match: failed to create registration for profile=%s entry=%s: %s',
                         matched_profile.pk, entry.pk, exc,
                     )
 
@@ -174,15 +127,138 @@ def match_federation_entries(self, edition_id: int) -> dict:
             registration_created=reg_created,
         ))
 
-    MatchingLog.objects.bulk_create(logs_to_create)
+    return logs_to_create
+
+
+@shared_task(bind=True, max_retries=2, default_retry_delay=60)
+def match_federation_entries(self, edition_id: int) -> dict:
+    """
+    Eixo 1 — Torneio → Usuários.
+
+    Triggered by n8n after bulk-import via POST /api/registrations/match/<edition_id>/.
+    Matches ALL FederationEntries for an edition against ALL PlayerProfiles in the DB.
+
+    On a confirmed match:
+      - Creates TournamentRegistration (skips if already exists).
+      - Creates WatchlistItem(registered_declared) so the tournament pops up on
+        the user's agenda automatically.
+      - Persists player_external_id into profile.external_ids for future fast matching.
+    """
+    from apps.players.models import PlayerProfile
+    from apps.tournaments.models import TournamentEdition
+
+    try:
+        edition = TournamentEdition.objects.get(pk=edition_id)
+    except TournamentEdition.DoesNotExist:
+        logger.error('match_federation_entries: edition %s not found', edition_id)
+        return {'error': f'Edition {edition_id} not found'}
+
+    entries = list(FederationEntry.objects.filter(edition=edition))
+    if not entries:
+        logger.info('match_federation_entries: no entries for edition %s', edition_id)
+        return {'edition_id': edition_id, 'entries_processed': 0, 'registrations_created': 0}
+
+    # Match against ALL profiles in the platform (universal discovery)
+    profiles = list(PlayerProfile.objects.all().only('id', 'user_id', 'display_name', 'external_ids'))
+    if not profiles:
+        return {
+            'edition_id': edition_id,
+            'entries_processed': len(entries),
+            'registrations_created': 0,
+            'note': 'No profiles in database',
+        }
+
+    counter = [0]
+    logs = _do_match(entries, profiles, edition, counter)
+    MatchingLog.objects.bulk_create(logs)
 
     logger.info(
         'match_federation_entries edition=%s: %d entries, %d registrations created',
-        edition_id, len(entries), registrations_created,
+        edition_id, len(entries), counter[0],
     )
     return {
         'edition_id': edition_id,
         'entries_processed': len(entries),
-        'registrations_created': registrations_created,
-        'logs_created': len(logs_to_create),
+        'registrations_created': counter[0],
+        'logs_created': len(logs),
     }
+
+
+@shared_task(bind=True, max_retries=2, default_retry_delay=30)
+def match_new_profile_to_entries(self, profile_id: int) -> dict:
+    """
+    Eixo 2 — Novo Perfil → Torneios Existentes (viagem no tempo).
+
+    Triggered immediately after a new PlayerProfile is created (player onboarding
+    or parent creating a dependent profile).
+
+    Searches ALL FederationEntries from editions that have not yet finished
+    (end_date >= today or end_date is null) for matches with the new profile.
+
+    On a confirmed match:
+      - Creates TournamentRegistration.
+      - Creates WatchlistItem so the tournament appears on the agenda instantly.
+    """
+    from apps.players.models import PlayerProfile
+    from apps.tournaments.models import TournamentEdition
+
+    try:
+        profile = PlayerProfile.objects.get(pk=profile_id)
+    except PlayerProfile.DoesNotExist:
+        logger.error('match_new_profile_to_entries: profile %s not found', profile_id)
+        return {'error': f'Profile {profile_id} not found'}
+
+    today = timezone.now().date()
+    # Editions still active or with unknown end date
+    active_edition_ids = list(
+        TournamentEdition.objects
+        .filter(
+            models_end_date_filter(today)
+        )
+        .values_list('id', flat=True)
+    )
+
+    entries = list(
+        FederationEntry.objects
+        .filter(edition_id__in=active_edition_ids)
+        .select_related('edition')
+    )
+
+    if not entries:
+        return {
+            'profile_id': profile_id,
+            'entries_scanned': 0,
+            'registrations_created': 0,
+        }
+
+    # Group entries by edition to reuse _do_match per edition
+    from itertools import groupby
+    entries_sorted = sorted(entries, key=lambda e: e.edition_id)
+    counter = [0]
+    all_logs = []
+
+    for edition_id, edition_entries in groupby(entries_sorted, key=lambda e: e.edition_id):
+        edition_entries_list = list(edition_entries)
+        edition = edition_entries_list[0].edition
+        logs = _do_match(edition_entries_list, [profile], edition, counter)
+        all_logs.extend(logs)
+
+    if all_logs:
+        MatchingLog.objects.bulk_create(all_logs)
+
+    logger.info(
+        'match_new_profile_to_entries profile=%s: %d entries scanned, %d registrations created',
+        profile_id, len(entries), counter[0],
+    )
+    return {
+        'profile_id': profile_id,
+        'entries_scanned': len(entries),
+        'registrations_created': counter[0],
+        'logs_created': len(all_logs),
+    }
+
+
+def models_end_date_filter(today):
+    """Return a Q filter for editions that are still active or have no end date."""
+    from django.db.models import Q
+    return Q(end_date__gte=today) | Q(end_date__isnull=True)

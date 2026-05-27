@@ -78,6 +78,11 @@ class PlayerProfileViewSet(viewsets.ModelViewSet):
                 )
         return super().create(request, *args, **kwargs)
 
+    def perform_create(self, serializer):
+        profile = serializer.save()
+        from apps.registrations.tasks import match_new_profile_to_entries
+        match_new_profile_to_entries.delay(profile.pk)
+
     def destroy(self, request, *args, **kwargs):
         # Managed children cannot delete profiles
         if self._is_managed_child():

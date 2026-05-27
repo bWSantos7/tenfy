@@ -521,7 +521,7 @@ class ParentChildViewSet(viewsets.ModelViewSet):
             link = account_serializer.save()
             child = link.child
             display_name = (profile_data.get('display_name') or '').strip() or child.full_name or 'Jogador'
-            PlayerProfile.objects.create(
+            new_profile = PlayerProfile.objects.create(
                 user=child,
                 display_name=display_name,
                 birth_year=profile_data.get('birth_year'),
@@ -534,6 +534,9 @@ class ParentChildViewSet(viewsets.ModelViewSet):
                 preferred_modality=profile_data.get('preferred_modality', ''),
                 is_primary=True,
             )
+
+        from apps.registrations.tasks import match_new_profile_to_entries
+        match_new_profile_to_entries.delay(new_profile.pk)
 
         return Response(
             ParentChildSerializer(link, context={'request': request}).data,
@@ -656,6 +659,8 @@ class ParentChildViewSet(viewsets.ModelViewSet):
             preferred_modality=vd.get('preferred_modality', ''),
             is_primary=True,
         )
+        from apps.registrations.tasks import match_new_profile_to_entries
+        match_new_profile_to_entries.delay(profile.pk)
         return Response(PlayerProfileSerializer(profile).data, status=status.HTTP_201_CREATED)
 
     @viewset_action(detail=True, methods=['post'], url_path='reset-password')

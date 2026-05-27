@@ -11,7 +11,7 @@ import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { ParentChild, PlayerProfile } from '../types';
-import { listProfiles, setPrimary, deleteProfile, updateProfile, requestDataExport, listChildren, removeChild, createChildWithProfile, listChildProfiles, createChildProfile, sendChildPasswordReset } from '../services/data';
+import { listProfiles, setPrimary, deleteProfile, updateProfile, requestDataExport, listChildren, removeChild, createChildWithProfile, listChildProfiles, createChildProfile, sendChildPasswordReset, updateChildAccount } from '../services/data';
 import { deleteAccount, uploadAvatar, linkExistingChild } from '../services/auth';
 import { extractApiError, mediaUrl } from '../services/api';
 import { createChildAccount } from '../services/data';
@@ -374,6 +374,7 @@ export const ProfilePage: React.FC = () => {
                   key={c.id}
                   link={c}
                   onRemove={() => setConfirmRemoveChild(c.id)}
+                  onUpdated={(updated: ParentChild) => setChildren((prev: ParentChild[]) => prev.map((x: ParentChild) => x.id === updated.id ? updated : x))}
                 />
               ))}
             </div>
@@ -966,13 +967,17 @@ const AddChildForm: React.FC<{
 const DependentCard: React.FC<{
   link: ParentChild;
   onRemove: () => void;
-}> = ({ link, onRemove }) => {
+  onUpdated: (updated: ParentChild) => void;
+}> = ({ link, onRemove, onUpdated }) => {
   const [profiles, setProfiles] = useState<PlayerProfile[]>([]);
   const [loadingProfiles, setLoadingProfiles] = useState(true);
   const [editingProfile, setEditingProfile] = useState<PlayerProfile | null>(null);
   const [showProfiles, setShowProfiles] = useState(false);
   const [addingProfile, setAddingProfile] = useState(false);
   const [sendingReset, setSendingReset] = useState(false);
+  const [editingAccount, setEditingAccount] = useState(false);
+  const [accountForm, setAccountForm] = useState({ full_name: link.child_detail.full_name || '', email: link.child_detail.email || '' });
+  const [savingAccount, setSavingAccount] = useState(false);
 
   async function loadProfiles() {
     setLoadingProfiles(true);
@@ -995,6 +1000,20 @@ const DependentCard: React.FC<{
     finally { setSendingReset(false); }
   }
 
+  async function handleSaveAccount() {
+    setSavingAccount(true);
+    try {
+      const updated = await updateChildAccount(link.id, {
+        full_name: accountForm.full_name.trim() || undefined,
+        email: accountForm.email.trim() || undefined,
+      });
+      onUpdated(updated);
+      setEditingAccount(false);
+      toast.success('Dados atualizados.');
+    } catch (err) { toast.error(extractApiError(err)); }
+    finally { setSavingAccount(false); }
+  }
+
   return (
     <div className="card space-y-3">
       {/* Header row */}
@@ -1007,6 +1026,13 @@ const DependentCard: React.FC<{
           <div className="text-xs text-text-muted truncate">{link.child_detail.email}</div>
         </div>
         <button
+          onClick={() => { setEditingAccount((v) => !v); setAccountForm({ full_name: link.child_detail.full_name || '', email: link.child_detail.email || '' }); }}
+          className="shrink-0 p-1.5 rounded-lg bg-bg-elevated hover:bg-accent-neon/10 text-text-muted hover:text-accent-neon transition-colors"
+          title="Editar dados do dependente"
+        >
+          <Edit2 className="w-4 h-4" />
+        </button>
+        <button
           onClick={onRemove}
           className="shrink-0 p-1.5 rounded-lg bg-bg-elevated hover:bg-red-500/15 text-text-muted hover:text-red-400 transition-colors"
           title="Remover dependente"
@@ -1014,6 +1040,38 @@ const DependentCard: React.FC<{
           <Trash2 className="w-4 h-4" />
         </button>
       </div>
+
+      {/* Inline account edit form */}
+      {editingAccount && (
+        <div className="bg-bg-elevated rounded-xl border border-border-subtle p-3 space-y-2">
+          <p className="text-xs font-bold text-text-muted">Editar dados da conta</p>
+          <div>
+            <label className="text-xs text-text-secondary mb-0.5 block">Nome completo</label>
+            <input
+              className="input-base !py-1.5 text-sm"
+              value={accountForm.full_name}
+              onChange={(e) => setAccountForm((f) => ({ ...f, full_name: e.target.value }))}
+            />
+          </div>
+          <div>
+            <label className="text-xs text-text-secondary mb-0.5 block">E-mail</label>
+            <input
+              className="input-base !py-1.5 text-sm"
+              type="email"
+              value={accountForm.email}
+              onChange={(e) => setAccountForm((f) => ({ ...f, email: e.target.value }))}
+            />
+          </div>
+          <div className="flex gap-2 pt-1">
+            <button className="flex-1 btn-primary !text-xs !py-1.5" onClick={handleSaveAccount} disabled={savingAccount}>
+              {savingAccount ? <Loader2 className="w-3 h-3 animate-spin mx-auto" /> : 'Salvar'}
+            </button>
+            <button className="flex-1 btn-secondary !text-xs !py-1.5" onClick={() => setEditingAccount(false)}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Profiles section */}
       <div>
@@ -1081,7 +1139,7 @@ const DependentCard: React.FC<{
               />
             )}
 
-            {!addingProfile && (
+            {!addingProfile && !loadingProfiles && profiles.length === 0 && (
               <button
                 className="flex items-center gap-1.5 text-xs text-accent-neon hover:underline mt-1"
                 onClick={() => setAddingProfile(true)}

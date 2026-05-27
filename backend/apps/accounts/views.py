@@ -393,7 +393,7 @@ class IsParent(permissions.BasePermission):
 class ParentChildViewSet(viewsets.ModelViewSet):
     """Parents create and manage child player accounts."""
     permission_classes = [IsParent]
-    http_method_names = ['get', 'post', 'delete', 'head', 'options']
+    http_method_names = ['get', 'post', 'patch', 'delete', 'head', 'options']
 
     def get_queryset(self):
         return (
@@ -618,6 +618,32 @@ class ParentChildViewSet(viewsets.ModelViewSet):
             ParentChildSerializer(link, context={'request': request}).data,
             status=status.HTTP_201_CREATED,
         )
+
+    @viewset_action(detail=True, methods=['patch'], url_path='update-account')
+    def update_child_account(self, request, pk=None):
+        """Parent updates child account data (full_name and/or email)."""
+        link = self.get_object()
+        child = link.child
+
+        full_name = (request.data.get('full_name') or '').strip()
+        email = (request.data.get('email') or '').strip().lower()
+
+        if not full_name and not email:
+            return Response({'detail': 'Informe ao menos um campo para atualizar.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if email and User.objects.filter(email=email).exclude(pk=child.pk).exists():
+            return Response({'email': 'Este e-mail já está em uso.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        update_fields = []
+        if full_name:
+            child.full_name = full_name
+            update_fields.append('full_name')
+        if email:
+            child.email = email
+            update_fields.append('email')
+
+        child.save(update_fields=update_fields)
+        return Response(ParentChildSerializer(link, context={'request': request}).data)
 
     @viewset_action(detail=True, methods=['delete'], url_path='remove')
     def remove_child(self, request, pk=None):

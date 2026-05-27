@@ -32,7 +32,7 @@ def _notify_parents(item, kind, title, body, dedup_base, payload=None):
     for row in _get_parents_of(item.user):
         parent = User.objects.get(pk=row['parent__id'])
         child_name = row['child__full_name'] or row['child__email']
-        parent_title = f'\U0001F9D2 {child_name} — {title}'
+        parent_title = f'{child_name} — {title}'
         prefs = UserAlertPreference.get_or_create_defaults(parent)
         if not prefs.in_app_enabled and not prefs.push_enabled:
             continue

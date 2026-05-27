@@ -88,6 +88,11 @@ export async function removeChild(linkId: number): Promise<void> {
   await api.delete(`/api/auth/children/${linkId}/remove/`);
 }
 
+export async function updateChildAccount(linkId: number, data: { full_name?: string; email?: string }): Promise<import('../types').ParentChild> {
+  const res = await api.patch<import('../types').ParentChild>(`/api/auth/children/${linkId}/update-account/`, data);
+  return res.data;
+}
+
 export async function listChildProfiles(childUserId: number): Promise<PlayerProfile[]> {
   const res = await api.get<Paginated<PlayerProfile> | PlayerProfile[]>(`/api/players/profiles/?user_id=${childUserId}`);
   const d = res.data as Paginated<PlayerProfile>;
@@ -121,7 +126,7 @@ export async function createChildWithProfile(
 }
 
 export async function sendChildPasswordReset(linkId: number): Promise<void> {
-  await api.post(`/api/auth/children/${linkId}/password-reset/`);
+  await api.post(`/api/auth/children/${linkId}/reset-password/`);
 }
 
 // ----- Coach -----

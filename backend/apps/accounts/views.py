@@ -531,6 +531,7 @@ class ParentChildViewSet(viewsets.ModelViewSet):
                 travel_states=travel_states,
                 competitive_level=profile_data.get('competitive_level', 'amateur'),
                 tennis_class=profile_data.get('tennis_class', ''),
+                preferred_modality=profile_data.get('preferred_modality', ''),
                 is_primary=True,
             )
 
@@ -652,6 +653,7 @@ class ParentChildViewSet(viewsets.ModelViewSet):
             travel_states=vd.get('travel_states', []),
             competitive_level=vd.get('competitive_level', 'amateur'),
             tennis_class=vd.get('tennis_class', ''),
+            preferred_modality=vd.get('preferred_modality', ''),
             is_primary=True,
         )
         return Response(PlayerProfileSerializer(profile).data, status=status.HTTP_201_CREATED)

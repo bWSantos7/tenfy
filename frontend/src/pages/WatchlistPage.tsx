@@ -206,10 +206,10 @@ export const WatchlistPage: React.FC = () => {
                   ? 'bg-status-open/15 border-status-open/40 text-status-open'
                   : 'bg-bg-card border-border-subtle text-text-muted hover:text-accent-neon hover:border-accent-neon/40'
               }`}
-              title={isRegistered ? 'Remover declaração de inscrição' : 'Declarar que você está inscrito neste torneio (informativo, não validado pela fonte oficial)'}
+              title={isRegistered ? 'Remover status de inscrito' : 'Marcar que você está inscrito neste torneio'}
             >
               <CheckCircle className="w-3.5 h-3.5" />
-              {isRegistered ? 'Inscrito (declarado)' : 'Declarar inscrição'}
+              {isRegistered ? 'Inscrito' : 'Marcar como inscrito'}
             </button>
 
             {confirmRemove === item.id ? (

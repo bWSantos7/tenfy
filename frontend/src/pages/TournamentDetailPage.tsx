@@ -56,8 +56,6 @@ export const TournamentDetailPage: React.FC = () => {
   const [elig, setElig] = useState<EditionEligibility | null>(null);
   const [profile, setProfile] = useState<PlayerProfile | null>(null);
   const [watching, setWatching] = useState(false);
-  const [watchingItemId, setWatchingItemId] = useState<number | null>(null);
-  const [watchUserStatus, setWatchUserStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [togglingWatch, setTogglingWatch] = useState(false);
   const [registrants, setRegistrants] = useState<EditionRegistrants | null>(null);
@@ -95,8 +93,6 @@ export const TournamentDetailPage: React.FC = () => {
         setProfile(primary);
         const watchItem = watchlist.find((w) => w.edition === edId);
         setWatching(!!watchItem);
-        setWatchingItemId(watchItem?.id ?? null);
-        setWatchUserStatus(watchItem?.user_status ?? null);
         const existing = regs.find((r) => r.edition_id === edId && !r.is_withdrawn);
         setMyReg(existing ?? null);
         if (primary) {
@@ -154,61 +150,12 @@ export const TournamentDetailPage: React.FC = () => {
     });
   }
 
-  const [registering, setRegistering] = useState(false);
-
-  async function handleRegister() {
-    if (!ed) return;
-    setRegistering(true);
-    try {
-      let itemId = watchingItemId;
-
-      if (!watching) {
-        const r = await toggleWatchlist(ed.id, profile?.id);
-        setWatching(r.watching);
-        itemId = r.item?.id ?? null;
-        if (itemId) setWatchingItemId(itemId);
-      }
-
-      // Fallback: toggle may not return item — fetch watchlist to get the ID
-      if (!itemId) {
-        const wl = await listWatchlist();
-        const found = wl.find((w) => w.edition === ed.id);
-        if (found) {
-          itemId = found.id;
-          setWatchingItemId(found.id);
-          setWatching(true);
-          if (found.user_status === 'registered_declared') {
-            setWatchUserStatus('registered_declared');
-            toast.success('Já registrado como inscrito na sua agenda!');
-            return;
-          }
-        }
-      }
-
-      if (itemId) {
-        const updated = await updateWatch(itemId, { user_status: 'registered_declared' });
-        setWatchUserStatus(updated.user_status ?? 'registered_declared');
-        setWatching(true);
-      }
-
-      toast.success('Inscrição registrada na sua agenda!');
-    } catch (err) {
-      console.error('handleRegister error:', err);
-      toast.error(extractApiError(err));
-    } finally {
-      setRegistering(false);
-    }
-  }
-
-  async function handleCancelDeclaredReg() {
-    if (!watchingItemId) return;
-    try {
-      await updateWatch(watchingItemId, { user_status: 'intended' });
-      setWatchUserStatus('intended');
-      toast.success('Inscrição desmarcada.');
-    } catch {
-      toast.error('Não foi possível atualizar o status.');
-    }
+  function toggleCat(text: string) {
+    setExpandedCats((prev) => {
+      const next = new Set(prev);
+      if (next.has(text)) next.delete(text); else next.add(text);
+      return next;
+    });
   }
 
   async function handleWithdraw() {
@@ -325,14 +272,8 @@ export const TournamentDetailPage: React.FC = () => {
 
         {/* Action buttons */}
         <div className="grid grid-cols-2 gap-2 pt-1">
-          {regURL && (
-            <a href={regURL} target="_blank" rel="noopener noreferrer"
-              className="btn-primary flex items-center justify-center gap-2">
-              <ExternalLink className="w-4 h-4" /> Inscrição oficial
-            </a>
-          )}
           <button
-            className={`btn-secondary flex items-center justify-center gap-2 ${watching ? '!border-accent-neon !text-accent-neon' : ''}`}
+            className={`flex items-center justify-center gap-2 ${watching ? 'btn-secondary !border-accent-neon !text-accent-neon' : 'btn-primary'}`}
             onClick={handleWatch} disabled={togglingWatch}
           >
             {togglingWatch
@@ -340,6 +281,12 @@ export const TournamentDetailPage: React.FC = () => {
               : <Star className={`w-4 h-4 ${watching ? 'fill-accent-neon' : ''}`} />}
             {watching ? 'Na sua agenda' : 'Acompanhar'}
           </button>
+          {regURL && (
+            <a href={regURL} target="_blank" rel="noopener noreferrer"
+              className="btn-secondary flex items-center justify-center gap-2">
+              <ExternalLink className="w-4 h-4" /> Site oficial
+            </a>
+          )}
         </div>
 
         {/* Ver lista de inscritos — mesma posição do mobile */}
@@ -471,8 +418,8 @@ export const TournamentDetailPage: React.FC = () => {
         </div>
       )}
 
-      {/* ── Inscrever-se / Minha inscrição ── */}
-      {myReg ? (
+      {/* ── Minha inscrição ── */}
+      {myReg && (
         <div className="card space-y-3">
           <div className="flex items-center gap-2">
             {myReg.registration_status === 'confirmed'
@@ -530,45 +477,6 @@ export const TournamentDetailPage: React.FC = () => {
             Cancelar minha inscrição
           </button>
         </div>
-      ) : watchUserStatus === 'registered_declared' ? (
-        <div className="card space-y-3">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-5 h-5 text-accent-neon" />
-            <div>
-              <p className="font-bold text-sm text-accent-neon">Inscrito (declarado)</p>
-              <p className="text-xs text-text-muted">Torneio salvo na sua agenda</p>
-            </div>
-          </div>
-          <p className="text-xs text-text-secondary leading-relaxed">
-            Sua inscrição foi registrada na agenda. Após o torneio, acesse a aba{' '}
-            <strong>Resultados</strong> para lançar seu desempenho.
-          </p>
-          {regURL && (
-            <a
-              href={regURL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full btn-secondary flex items-center justify-center gap-2 text-sm"
-            >
-              <ExternalLink className="w-4 h-4" /> Acessar site oficial de inscrição
-            </a>
-          )}
-          <button
-            onClick={handleCancelDeclaredReg}
-            className="w-full flex items-center justify-center gap-2 py-2 rounded-xl border border-border-subtle text-text-muted text-xs font-medium hover:bg-bg-subtle transition-colors"
-          >
-            <XCircle className="w-3.5 h-3.5" /> Desmarcar inscrição
-          </button>
-        </div>
-      ) : (
-        <button
-          onClick={handleRegister}
-          disabled={registering}
-          className="w-full btn-primary flex items-center justify-center gap-2 py-3 text-base font-semibold"
-        >
-          {registering ? <Loader2 className="w-5 h-5 animate-spin" /> : <UserPlus className="w-5 h-5" />}
-          Inscrever-se neste torneio
-        </button>
       )}
 
       {/* ── Categorias ── */}

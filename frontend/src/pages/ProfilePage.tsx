@@ -14,6 +14,7 @@ import { ParentChild, PlayerProfile } from '../types';
 import { listProfiles, setPrimary, deleteProfile, updateProfile, requestDataExport, listChildren, removeChild, createChildWithProfile, listChildProfiles, createChildProfile, sendChildPasswordReset } from '../services/data';
 import { deleteAccount, uploadAvatar, linkExistingChild } from '../services/auth';
 import { extractApiError, mediaUrl } from '../services/api';
+import { createChildAccount } from '../services/data';
 import { LEVEL_LABELS, GENDER_LABELS, TENNIS_CLASS_LABELS, ROLE_LABELS } from '../utils/format';
 import { getProfileModality, setProfileModality, MODALITY_OPTIONS } from '../utils/profileModality';
 
@@ -288,6 +289,7 @@ export const ProfilePage: React.FC = () => {
       </div>
 
       {/* ─── Perfis esportivos ─────────────────────────────────────────────── */}
+      {user?.role !== 'parent' && (
       <div>
         <div className="flex items-center justify-between mb-3">
           <div>
@@ -296,7 +298,7 @@ export const ProfilePage: React.FC = () => {
               {user?.managed_by_parent ? 'Seu perfil de jogador (gerenciado pelo responsável)' : 'Gerencie seu perfil de jogador'}
             </p>
           </div>
-          {!user?.managed_by_parent && (
+          {(!user?.managed_by_parent || profiles.length === 0) && (
             <Link
               to="/onboarding"
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-accent-neon bg-accent-neon/10 border border-accent-neon/30 hover:bg-accent-neon/20 transition-colors"
@@ -338,6 +340,7 @@ export const ProfilePage: React.FC = () => {
           </div>
         )}
       </div>
+      )}
 
       {/* ─── Meus dependentes (só para role parent) ───────────────────────── */}
       {user?.role === 'parent' && (
@@ -699,6 +702,7 @@ const AddChildForm: React.FC<{
   const [saving, setSaving] = useState(false);
   const [cities, setCities] = useState<{ value: string; label: string }[]>([]);
   const [loadingCities, setLoadingCities] = useState(false);
+  const [createProfileNow, setCreateProfileNow] = useState(true);
   // TC-013/014: link existing account flow
   const [duplicateEmailDetected, setDuplicateEmailDetected] = useState(false);
 
@@ -719,25 +723,40 @@ const AddChildForm: React.FC<{
     if (!account.email.trim()) { toast.error('Informe o e-mail.'); return; }
     if (account.password.length < 8) { toast.error('Senha deve ter pelo menos 8 caracteres.'); return; }
     if (account.password !== account.confirm_password) { toast.error('As senhas não conferem.'); return; }
-    if (!profile.birth_year) { toast.error('Informe o ano de nascimento.'); return; }
+    
+    if (createProfileNow) {
+      if (!profile.birth_year) { toast.error('Informe o ano de nascimento.'); return; }
+      if (!profile.gender) { toast.error('Selecione o gênero.'); return; }
+      if (!profile.competitive_level) { toast.error('Selecione o nível competitivo.'); return; }
+    }
+
     setSaving(true);
     setDuplicateEmailDetected(false);
     try {
-      await createChildWithProfile(
-        { full_name: account.full_name, email: account.email, password: account.password, password_confirm: account.confirm_password },
-        {
-          display_name: profile.display_name || account.full_name,
-          birth_year: Number(profile.birth_year),
-          gender: profile.gender || undefined,
-          home_state: profile.home_state,
-          home_city: profile.home_city,
-          travel_states: profile.travel_states,
-          competitive_level: profile.competitive_level as any,
-          tennis_class: profile.tennis_class,
-          preferred_modality: profile.preferred_modality,
-          is_primary: true,
-        },
-      );
+      if (createProfileNow) {
+        await createChildWithProfile(
+          { full_name: account.full_name, email: account.email, password: account.password, password_confirm: account.confirm_password },
+          {
+            display_name: profile.display_name || account.full_name,
+            birth_year: Number(profile.birth_year),
+            gender: profile.gender || undefined,
+            home_state: profile.home_state,
+            home_city: profile.home_city,
+            travel_states: profile.travel_states,
+            competitive_level: profile.competitive_level as any,
+            tennis_class: profile.tennis_class,
+            preferred_modality: profile.preferred_modality,
+            is_primary: true,
+          },
+        );
+      } else {
+        await createChildAccount({
+          full_name: account.full_name,
+          email: account.email,
+          password: account.password,
+          password_confirm: account.confirm_password,
+        });
+      }
       toast.success('Dependente adicionado!');
       onAdded();
     } catch (err) {
@@ -842,9 +861,26 @@ const AddChildForm: React.FC<{
 
       <hr className="border-border-subtle" />
 
-      {/* Perfil esportivo */}
-      <div className="space-y-3">
-        <h4 className="text-xs font-bold text-text-muted uppercase tracking-wide">Perfil esportivo</h4>
+      {/* Opção de criar perfil esportivo */}
+      <div className="flex items-center gap-3 bg-bg-elevated p-3 rounded-xl border border-border-subtle">
+        <input 
+          type="checkbox" 
+          id="createProfileNow" 
+          className="w-4 h-4 text-accent-neon rounded border-border-subtle focus:ring-accent-neon" 
+          checked={createProfileNow}
+          onChange={(e) => setCreateProfileNow(e.target.checked)}
+        />
+        <label htmlFor="createProfileNow" className="text-sm font-semibold cursor-pointer select-none flex-1">
+          Criar perfil esportivo agora
+          <p className="text-xs text-text-muted font-normal mt-0.5">
+            Se desmarcado, o dependente poderá criar o perfil posteriormente ao fazer login.
+          </p>
+        </label>
+      </div>
+
+      {createProfileNow && (
+        <div className="space-y-3">
+          <h4 className="text-xs font-bold text-text-muted uppercase tracking-wide">Perfil esportivo</h4>
         <div>
           <label className="text-xs text-text-secondary mb-1 block">Nome do atleta</label>
           <input className="input-base" placeholder="Deixe em branco para usar o nome completo"
@@ -917,7 +953,8 @@ const AddChildForm: React.FC<{
             {Object.entries(TENNIS_CLASS_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
         </div>
-      </div>
+        </div>
+      )}
 
       <div className="flex flex-col gap-2 pt-1">
         <button className="btn-primary w-full flex items-center justify-center gap-2" onClick={handleSubmit} disabled={saving}>

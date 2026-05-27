@@ -105,6 +105,13 @@ export async function createChildProfile(linkId: number, data: Partial<PlayerPro
   return res.data;
 }
 
+export async function createChildAccount(
+  accountData: { full_name: string; email: string; password: string; password_confirm: string },
+): Promise<ParentChild> {
+  const res = await api.post<ParentChild>('/api/auth/children/', accountData);
+  return res.data;
+}
+
 export async function createChildWithProfile(
   accountData: { full_name: string; email: string; password: string; password_confirm: string },
   profileData: Partial<PlayerProfile>,

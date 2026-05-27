@@ -53,12 +53,15 @@ class PlayerProfileViewSet(viewsets.ModelViewSet):
         return ParentChild.objects.filter(child=self.request.user, is_active=True).exists()
 
     def create(self, request, *args, **kwargs):
-        # Managed children cannot create new profiles — only their parent can
+        # Managed children can only create their very first (primary) profile
+        # during onboarding. Additional profiles must be created by the parent.
         if self._is_managed_child():
-            return Response(
-                {'detail': 'Contas de filho não podem criar novos perfis esportivos.'},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+            already_has_profile = PlayerProfile.objects.filter(user=request.user).exists()
+            if already_has_profile:
+                return Response(
+                    {'detail': 'Contas de filho não podem criar perfis esportivos adicionais. Peça ao responsável para gerenciar seus perfis.'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
         # Enforce dependent profile limit for parent accounts
         if request.user.role == 'parent':
             from apps.billing.models import Subscription

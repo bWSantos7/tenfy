@@ -20,9 +20,17 @@ ORGANIZATIONS = [
         'name': 'Federação Paulista de Tênis',
         'short_name': 'FPT',
         'type': Organization.TYPE_FEDERATION,
-        'website_url': 'https://www.tenispaulista.com.br',
+        'website_url': 'https://fpt.tenisintegrado.com.br',
         'state': 'SP',
-        'description': 'Federação estadual de São Paulo, com maior densidade de torneios abertos no país.',
+        'description': 'Federação estadual de São Paulo (SP), com maior densidade de torneios abertos no país. Plataforma: fpt.tenisintegrado.com.br.',
+    },
+    {
+        'name': 'Federação Paranaense de Tênis',
+        'short_name': 'FPaT',
+        'type': Organization.TYPE_FEDERATION,
+        'website_url': 'https://fpt.com.br',
+        'state': 'PR',
+        'description': 'Federação estadual do Paraná (PR). Calendário em fpt.com.br.',
     },
     {
         'name': 'Confederação Sulamericana de Tênis',
@@ -69,25 +77,49 @@ ORGANIZATIONS = [
 DATA_SOURCES = [
     {
         'org_short': 'FPT',
-        'source_name': 'FPT – Área pública de torneios abertos',
-        'slug': 'fpt-public-tournaments',
-        'source_type': DataSource.SOURCE_TYPE_HTML,
-        'base_url': 'https://sisfpt.com.br/area-publica/torneios/abertos',
-        'connector_key': 'fpt_public',
+        'source_name': 'FPT (SP) – Tennis Tool API (todos os departamentos)',
+        'slug': 'fpt-sp-tennistool-all',
+        'source_type': DataSource.SOURCE_TYPE_JSON,
+        'base_url': 'https://api.tennistool.tenisintegrado.com/tournaments/tournament/getTournamentDepartmentList',
+        'connector_key': 'fpt_sp_public',
         'fetch_schedule_cron': '0 */4 * * *',
         'priority': 'P0',
-        'legal_notes': 'Área pública do sistema FPT. Dados acessíveis sem autenticação.',
+        'legal_notes': 'API pública Tennis Tool da FPT (SP). Mesma plataforma do CBT. Host: fpt.tenisintegrado.com.br. Dados públicos sem autenticação.',
     },
     {
         'org_short': 'FPT',
-        'source_name': 'FPT – Regulamento Torneios Abertos 2026 (PDF)',
+        'source_name': 'FPT (SP) – Tennis Kids (departamento 7)',
+        'slug': 'fpt-sp-tennistool-kids',
+        'source_type': DataSource.SOURCE_TYPE_JSON,
+        'base_url': 'https://fpt.tenisintegrado.com.br/kids/tournament',
+        'connector_key': 'fpt_sp_kids',
+        'fetch_schedule_cron': '0 */6 * * *',
+        'priority': 'P0',
+        'legal_notes': 'API pública Tennis Tool para o departamento Tennis Kids (tipo_depto=7) da FPT (SP). Dados públicos sem autenticação.',
+        'enabled': False,
+    },
+    {
+        'org_short': 'FPaT',
+        'source_name': 'FPaT (PR) – Área pública de torneios abertos',
+        'slug': 'fpat-public-tournaments',
+        'source_type': DataSource.SOURCE_TYPE_HTML,
+        'base_url': 'https://fpt.com.br/Torneio/Calendario',
+        'connector_key': 'fpt_public',
+        'fetch_schedule_cron': '0 */4 * * *',
+        'priority': 'P1',
+        'legal_notes': 'Calendário público FPaT (Federação Paranaense de Tênis). Dados acessíveis sem autenticação.',
+    },
+    {
+        'org_short': 'FPT',
+        'source_name': 'FPT (SP) – Regulamento Torneios Abertos 2026 (PDF)',
         'slug': 'fpt-regulamento-2026',
         'source_type': DataSource.SOURCE_TYPE_PDF,
         'base_url': 'https://www.tenispaulista.com.br/wp-content/uploads/2026/02/FPT_-_Regulamento-Torneios-Abertos-2026.pdf',
         'connector_key': 'fpt_regulation_pdf',
         'fetch_schedule_cron': '0 8 * * 1',
-        'priority': 'P0',
-        'legal_notes': 'Regulamento oficial público da FPT 2026. Define regras de categoria, classe, elegibilidade.',
+        'priority': 'P1',
+        'legal_notes': 'Regulamento oficial público da FPT (SP) 2026. Define regras de categoria, classe, elegibilidade.',
+        'enabled': False,
     },
     {
         'org_short': 'CBT',
@@ -152,7 +184,7 @@ DATA_SOURCES = [
 
 
 class Command(BaseCommand):
-    help = 'Seed core organizations (CBT, FPT, COSAT, ITF, UTR, FMT) and data source stubs'
+    help = 'Seed core organizations (CBT, FPT, FPaT, COSAT, ITF, UTR, FMT, FCT) and data source stubs'
 
     def handle(self, *args, **options):
         org_map: dict[str, Organization] = {}

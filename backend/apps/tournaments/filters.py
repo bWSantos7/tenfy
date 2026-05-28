@@ -66,15 +66,17 @@ class TournamentEditionFilter(filters.FilterSet):
     def filter_search(self, queryset, name, value):
         if not value:
             return queryset
+        # unaccent__icontains: accent-insensitive + case-insensitive search
+        # (requires the unaccent PostgreSQL extension, installed via migration 0009)
         return queryset.filter(
-            Q(title__icontains=value)
-            | Q(tournament__canonical_name__icontains=value)
-            | Q(tournament__circuit__icontains=value)
-            | Q(tournament__organization__name__icontains=value)
-            | Q(tournament__organization__short_name__icontains=value)
-            | Q(source_name__icontains=value)
-            | Q(venue__name__icontains=value)
-            | Q(venue__city__icontains=value)
+            Q(title__unaccent__icontains=value)
+            | Q(tournament__canonical_name__unaccent__icontains=value)
+            | Q(tournament__circuit__unaccent__icontains=value)
+            | Q(tournament__organization__name__unaccent__icontains=value)
+            | Q(tournament__organization__short_name__unaccent__icontains=value)
+            | Q(source_name__unaccent__icontains=value)
+            | Q(venue__name__unaccent__icontains=value)
+            | Q(venue__city__unaccent__icontains=value)
         )
 
     def filter_org_slug(self, queryset, name, value):

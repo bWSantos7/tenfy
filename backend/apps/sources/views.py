@@ -7,11 +7,23 @@ from apps.core.permissions import IsAdminOrReadOnly, IsAdmin
 
 
 class OrganizationViewSet(viewsets.ModelViewSet):
-    queryset = Organization.objects.all()
     serializer_class = OrganizationSerializer
     permission_classes = [IsAdminOrReadOnly]
     filterset_fields = ('type', 'state', 'is_active')
     search_fields = ('name', 'short_name')
+    # No pagination: this is a reference list consumed as a flat array by the
+    # frontend filter dropdowns. Global pagination would break listOrganizations().
+    pagination_class = None
+
+    def get_queryset(self):
+        qs = Organization.objects.filter(is_active=True).order_by('short_name', 'name')
+        # For the public list action, return only orgs that have at least one
+        # tournament so the filter dropdown doesn't show unused entries.
+        if self.action == 'list' and not (
+            self.request.user.is_staff or self.request.user.is_superuser
+        ):
+            qs = qs.filter(tournaments__isnull=False).distinct()
+        return qs
 
 
 class DataSourceViewSet(viewsets.ModelViewSet):

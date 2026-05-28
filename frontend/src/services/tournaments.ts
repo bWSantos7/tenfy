@@ -35,15 +35,16 @@ export interface OrganizationOption {
 }
 
 export async function listOrganizations(): Promise<OrganizationOption[]> {
-  // Tries the public sources endpoint first; falls back to deriving orgs
-  // from the editions queryset by reading short_name fields.
   try {
-    const res = await api.get<{ id: number; name: string; short_name: string }[]>(
-      '/api/sources/organizations/',
-    );
+    const res = await api.get<
+      OrganizationOption[] | { count: number; results: OrganizationOption[] }
+    >('/api/sources/organizations/');
     if (Array.isArray(res.data)) return res.data;
+    // Handle paginated response (legacy behaviour before pagination_class=None)
+    const paged = res.data as { results?: OrganizationOption[] };
+    if (Array.isArray(paged.results)) return paged.results;
   } catch {
-    // ignore — fallback below
+    // ignore
   }
   return [];
 }

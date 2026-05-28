@@ -92,7 +92,8 @@ class FCTPublicConnector(BaseConnector):
         city, state, start_date, end_date = self._parse_info(info_text, fallback_year)
         entry_close = self._parse_detail_deadline(detail.get('deadline'))
         circuit = self._infer_circuit(title)
-        modality = infer_modality(title, circuit)
+        venue_name = detail.get('venue_name') or ''
+        modality = infer_modality(title, circuit, venue_name)
         status = self._infer_status(detail.get('status_text') or status_text, start_date, end_date, entry_close)
 
         return {

@@ -156,10 +156,11 @@ export const TournamentsPage: React.FC = () => {
       if (!primary) primary = pickBestProfile(list);
       if (primary) {
         setPrimaryProfileId(primary.id);
-        // On the very first visit (no filters saved in sessionStorage), pre-apply
-        // the profile's modality so the user sees only their sport by default.
-        // They can manually clear the modality filter to browse all modalities.
-        if (primary.preferred_modality && saved.current === null) {
+        // Always apply the profile's modality as default when no modality has
+        // been explicitly saved — covers first visit, post-clear, and returning
+        // sessions that pre-date the modality filter. The user can still change
+        // the modality pill to browse other sports.
+        if (primary.preferred_modality && !saved.current?.filters?.modality) {
           setFilters((f) => ({ ...f, modality: primary.preferred_modality }));
         }
       }

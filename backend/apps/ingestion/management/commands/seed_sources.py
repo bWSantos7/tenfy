@@ -25,15 +25,27 @@ ORGS = [
 SOURCES = [
     {
         'org_short': 'FPT',
+        'source_name': 'FPT (SP) – Tennis Tool API',
+        'connector_key': 'fpt_sp_public',
+        'source_type': 'json',
+        'base_url': 'https://api.tennistool.tenisintegrado.com/tournaments/tournament/getTournamentDepartmentList',
+        'fetch_schedule_cron': '0 */4 * * *',  # every 4 hours
+        'priority': 'P0',
+        'enabled': True,
+        'config_json': {},
+        'legal_notes': 'API pública Tennis Tool — mesma plataforma do CBT. Host: fpt.tenisintegrado.com.br. Dados públicos.',
+    },
+    {
+        'org_short': 'FPT',
         'source_name': 'FPT Calendário Público',
         'connector_key': 'fpt_public',
         'source_type': 'html',
         'base_url': 'https://fpt.com.br/Torneio/Calendario/',
         'fetch_schedule_cron': '0 */2 * * *',  # every 2 hours
-        'priority': 'P0',
-        'enabled': True,
+        'priority': 'P1',
+        'enabled': False,
         'config_json': {'years': [CURRENT_YEAR]},
-        'legal_notes': 'Public calendar page. Scraping respects rate limits.',
+        'legal_notes': 'Public calendar page — fpt.com.br (Federação Paranaense). Scraping respects rate limits.',
     },
     {
         'org_short': 'CBT',

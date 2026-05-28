@@ -140,7 +140,6 @@ class WatchlistViewSet(viewsets.ModelViewSet):
         except TournamentEdition.DoesNotExist:
             return Response({'error': 'Edição não encontrada'}, status=404)
         owner = request.user
-        parent_also_watches = False  # flag: parent adding for a dependent
         if profile_id:
             from apps.players.models import PlayerProfile
             try:
@@ -154,9 +153,10 @@ class WatchlistViewSet(viewsets.ModelViewSet):
                         {'detail': 'Este perfil não pertence a um dependente gerenciado por você.'},
                         status=status.HTTP_403_FORBIDDEN,
                     )
+                # WatchlistItem is created ONLY for the dependent's user.
+                # The parent's agenda already shows all dependents' items via
+                # get_queryset(allowed_ids) — no duplication needed.
                 owner = profile.user
-                # Parent should mirror the action in their own agenda too
-                parent_also_watches = (owner.pk != request.user.pk)
             elif profile.user_id != request.user.id:
                 return Response(
                     {'detail': 'Este perfil não pertence ao usuário autenticado.'},
@@ -166,9 +166,6 @@ class WatchlistViewSet(viewsets.ModelViewSet):
         item = WatchlistItem.objects.filter(user=owner, edition=edition).first()
         if item:
             item.delete()
-            # Mirror removal: remove from parent's agenda too
-            if parent_also_watches:
-                WatchlistItem.objects.filter(user=request.user, edition=edition).delete()
             _audit(request.user, 'watchlist.remove', str(edition_id), f'Removed edition {edition_id} from watchlist')
             return Response({'watching': False, 'edition_id': edition_id})
 
@@ -177,13 +174,6 @@ class WatchlistViewSet(viewsets.ModelViewSet):
             edition=edition,
             profile_id=profile_id,
         )
-        # Mirror add: parent also gets the tournament in their own agenda
-        if parent_also_watches:
-            WatchlistItem.objects.get_or_create(
-                user=request.user,
-                edition=edition,
-                defaults={'profile_id': None},
-            )
         _audit(request.user, 'watchlist.add', str(edition_id), f'Added edition {edition_id} to watchlist')
         return Response({
             'watching': True,

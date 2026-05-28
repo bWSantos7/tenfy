@@ -57,17 +57,22 @@ export const HomePage: React.FC = () => {
     }
   }, []);
 
+  const filterByModality = useCallback(
+    (items: TournamentEditionList[], modality: string | null | undefined) =>
+      modality ? items.filter((t) => t.modality === modality) : items,
+    [],
+  );
+
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
+      // Fetch data that doesn't depend on profile in parallel
       const [closingData, recentData, alerts] = await Promise.all([
         closingSoon(14).catch(() => [] as TournamentEditionList[]),
         listEditions({ page_size: 8, ordering: '-created_at' }).catch(() => ({ results: [] as TournamentEditionList[] })),
         unreadAlerts().catch(() => [] as any[]),
       ]);
 
-      setClosing((closingData as TournamentEditionList[]).filter((t) => ACTIVE_STATUSES.has(t.status ?? '')).slice(0, 6));
-      setRecent(((recentData as any).results || []).slice(0, 6));
       setUnreadCount((alerts || []).length);
 
       let primary: PlayerProfile | null = null;
@@ -102,6 +107,13 @@ export const HomePage: React.FC = () => {
       setProfile(primary);
       setActiveChildName(childName);
 
+      // Apply modality filter now that we know the active profile's preferred modality
+      const modality = primary?.preferred_modality;
+      const allClosing = closingData as TournamentEditionList[];
+      const allRecent = ((recentData as any).results || []) as TournamentEditionList[];
+      setClosing(filterByModality(allClosing, modality).filter((t) => ACTIVE_STATUSES.has(t.status ?? '')).slice(0, 6));
+      setRecent(filterByModality(allRecent, modality).slice(0, 6));
+
       if (primary) {
         await loadCompat(primary);
       } else {
@@ -112,7 +124,7 @@ export const HomePage: React.FC = () => {
       setLoading(false);
       hasLoadedRef.current = true;
     }
-  }, [user?.id, user?.role, loadCompat]);
+  }, [user?.id, user?.role, loadCompat, filterByModality]);
 
   async function switchProfile(opt: ProfileOption) {
     if (opt.profile.id === profile?.id) return;
@@ -122,6 +134,15 @@ export const HomePage: React.FC = () => {
     // Clear saved tournament filters so TournamentsPage re-applies the new
     // profile's modality as the default filter on the next visit.
     try { sessionStorage.removeItem('tenfy_tournament_filters'); } catch {}
+    // Re-fetch closing soon filtered by the new profile's modality
+    const newModality = opt.profile.preferred_modality;
+    const modalityFilters: Record<string, string> = newModality ? { modality: newModality } : {};
+    closingSoon(14, modalityFilters)
+      .catch(() => [] as TournamentEditionList[])
+      .then((data) => {
+        const arr = data as TournamentEditionList[];
+        setClosing(arr.filter((t) => ACTIVE_STATUSES.has(t.status ?? '')).slice(0, 6));
+      });
     await loadCompat(opt.profile);
   }
 

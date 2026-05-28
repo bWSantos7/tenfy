@@ -162,7 +162,7 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
         days = int(request.query_params.get('days', 14))
         now = timezone.now()
         end = now + timedelta(days=days)
-        qs = self.get_queryset().filter(
+        qs = self.filter_queryset(self.get_queryset()).filter(
             entry_close_at__isnull=False,
             entry_close_at__gte=now,
             entry_close_at__lte=end,

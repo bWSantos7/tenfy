@@ -69,9 +69,10 @@ export async function getEdition(id: number) {
   return res.data;
 }
 
-export async function closingSoon(days = 14) {
+export async function closingSoon(days = 14, filters: Record<string, string> = {}) {
+  const params = new URLSearchParams({ days: String(days), ...filters });
   const res = await api.get<Paginated<TournamentEditionList> | TournamentEditionList[]>(
-    `/api/tournaments/editions/closing_soon/?days=${days}`,
+    `/api/tournaments/editions/closing_soon/?${params}`,
   );
   const d = res.data as Paginated<TournamentEditionList>;
   return d.results ?? (res.data as TournamentEditionList[]);

@@ -631,22 +631,29 @@ def parse_fpt_entries(html_or_text: str, source_url: str = '') -> dict:
     """
     FPT entry parser.
 
-    STATUS: LIMITED.
-    - FPT /Inscricao/Lista/ returns 404.
-    - /Torneio/Info/ pages may contain entry tables — try HTML extraction.
-    - Use case: admin pastes HTML from FPT tournament info page.
+    Two modes depending on the URL:
+    - FPT (SP / Paulista) uses fpt.tenisintegrado.com.br (same platform as CBT).
+      Auto-fetch via POST /torneio_painel_insc/index/{id} — no html_or_text needed.
+    - FPT (PR / Paranaense) uses fpt.com.br. /Inscricao/Lista/ returns 404.
+      Requires pasted HTML or manual CSV.
     """
     source = 'fpt'
     ranking_source = 'FPT'
+
+    # FPT SP uses Tenis Integrado — same auto-fetch as CBT/FBT
+    is_tenisintegrado = 'tenisintegrado' in (source_url or '').lower()
+    if is_tenisintegrado and not (html_or_text or '').strip():
+        return fetch_tenisintegrado_entries(source_url, source=source)
 
     if not (html_or_text or '').strip():
         return {
             'entries': [],
             'parser_warning': True,
             'warning_message': (
-                'FPT: sem dados de entrada. '
+                'FPT (PR): sem dados de entrada. '
                 '/Inscricao/Lista/ retorna 404. '
-                'Cole HTML da página de inscritos FPT como input.'
+                'Para FPT (SP), forneça source_url do torneio TenisIntegrado. '
+                'Para FPT (PR), cole HTML da página de inscritos como input.'
             ),
             'confidence': 'low',
             'source': source,
@@ -660,7 +667,7 @@ def parse_fpt_entries(html_or_text: str, source_url: str = '') -> dict:
             'parser_warning': True,
             'warning_message': (
                 'FPT: nenhum inscrito extraído. '
-                'FPT não expõe lista nominal via endpoint público (/Inscricao/Lista/ 404). '
+                'FPT (PR) não expõe lista nominal via endpoint público. '
                 'Use importação manual CSV ou cole HTML da página de inscritos.'
             ),
             'confidence': 'low',
@@ -788,8 +795,8 @@ PARSER_LIMITATIONS = {
         'Forneça source_url do torneio para busca automática por categoria.'
     ),
     'fpt': (
-        '/Inscricao/Lista/ retorna 404. '
-        'Sem endpoint público de inscritos. Import manual.'
+        'FPT (SP / Paulista): usa TenisIntegrado — auto-fetch via POST /torneio_painel_insc/. '
+        'FPT (PR / Paranaense): /Inscricao/Lista/ retorna 404 — import manual.'
     ),
     'fbt': (
         'Sem endpoint público de inscritos conhecido. '
@@ -807,7 +814,7 @@ PARSER_LIMITATIONS = {
 # Sources that can fetch their own data from source_url without html_or_text input.
 # Used by quality_gate in parse-entries: empty html_or_text is valid for these sources
 # when source_url is provided and the parser returned entries successfully.
-SOURCES_AUTO_FETCH = {'cbt', 'fct', 'fbt'}
+SOURCES_AUTO_FETCH = {'cbt', 'fct', 'fbt', 'fpt'}
 
 
 def get_parser(source: str):

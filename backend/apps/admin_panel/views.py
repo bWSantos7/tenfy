@@ -86,12 +86,11 @@ def dashboard(request):
     last_7d = now - timedelta(days=7)
 
     editions_qs = TournamentEdition.objects.all()
-    youth_qs = editions_qs.filter(Q(is_youth=True) | Q(is_youth__isnull=True))
     return Response({
         'counts': {
-            'tournaments_total': youth_qs.count(),
-            'tournaments_open': youth_qs.filter(status=TournamentEdition.STATUS_OPEN).count(),
-            'tournaments_closing_soon': youth_qs.filter(
+            'tournaments_total': editions_qs.count(),
+            'tournaments_open': editions_qs.filter(status=TournamentEdition.STATUS_OPEN).count(),
+            'tournaments_closing_soon': editions_qs.filter(
                 status__in=[
                     TournamentEdition.STATUS_CLOSING_SOON,
                     TournamentEdition.STATUS_OPEN,
@@ -101,11 +100,11 @@ def dashboard(request):
             ).count(),
             'data_sources_enabled': DataSource.objects.filter(enabled=True).count(),
             'data_sources_total': DataSource.objects.count(),
-            'manual_overrides': youth_qs.filter(is_manual_override=True).count(),
-            'low_confidence': youth_qs.filter(
+            'manual_overrides': editions_qs.filter(is_manual_override=True).count(),
+            'low_confidence': editions_qs.filter(
                 data_confidence=TournamentEdition.CONFIDENCE_LOW
             ).count(),
-            'missing_official_url': youth_qs.filter(
+            'missing_official_url': editions_qs.filter(
                 Q(official_source_url='') | Q(official_source_url__isnull=True)
             ).count(),
         },

@@ -7,7 +7,7 @@
  *
  * Reference: https://docs.asaas.com/reference/tokenizar-cartao-de-credito
  */
-import axios from 'axios';
+import axios, { AxiosInstance } from 'axios';
 
 const ASAAS_SANDBOX = 'https://sandbox.asaas.com/api/v3';
 const ASAAS_PRODUCTION = 'https://api.asaas.com/v3';
@@ -89,7 +89,7 @@ export async function tokenizeCard(
  * Get or create the Asaas customer ID for the current user.
  * Our backend handles this and returns the customer ID.
  */
-export async function getAsaasCustomerId(apiClient: any, userId: number): Promise<string | null> {
+export async function getAsaasCustomerId(apiClient: AxiosInstance, userId: number): Promise<string | null> {
   try {
     const res = await apiClient.get('/api/billing/asaas-customer-id/');
     return res.data?.customer_id || null;

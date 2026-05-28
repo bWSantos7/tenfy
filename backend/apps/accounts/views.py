@@ -1,7 +1,10 @@
 import ipaddress
 import logging
+import secrets
 
 from django.conf import settings
+from django.db import transaction
+from django.http import JsonResponse
 from django.contrib.auth import get_user_model
 from django.contrib.auth.tokens import default_token_generator
 from django.utils import timezone
@@ -223,13 +226,10 @@ def delete_account(request):
     LGPD Art. 18: anonimização real — remove todos os dados pessoais identificáveis.
     Registros financeiros e de auditoria são mantidos com referência anonimizada.
     """
-    import secrets as _secrets
-    from django.db import transaction as _tx
-
     user = request.user
-    anon_token = _secrets.token_hex(16)
+    anon_token = secrets.token_hex(16)
 
-    with _tx.atomic():
+    with transaction.atomic():
         # Invalidate all JWT tokens
         try:
             from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
@@ -781,8 +781,6 @@ def data_export(request):
         'alerts': alerts,
     }
 
-    from django.http import JsonResponse
-    import json
     response = JsonResponse(payload, json_dumps_params={'ensure_ascii': False, 'indent': 2})
     response['Content-Disposition'] = f'attachment; filename="tenfy_data_{user.id}.json"'
     return response

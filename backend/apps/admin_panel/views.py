@@ -7,6 +7,8 @@ Admin panel: consolidated endpoints used by the admin web UI:
 - Edition inline patch (manual override / confidence update)
 - Data source management
 """
+import re
+import unicodedata
 from datetime import timedelta, date
 from django.contrib.auth import get_user_model
 from django.db.models import Q, Count
@@ -353,7 +355,6 @@ class EditionCreateSerializer(serializers.ModelSerializer):
         )
 
         # Get or create the tournament identity
-        import re, unicodedata
         title = validated_data.get('title', '')
         slug = re.sub(r'[^a-z0-9]+', '-', unicodedata.normalize('NFKD', title).encode('ascii', 'ignore').decode().lower()).strip('-')[:200]
         tournament, _ = Tournament.objects.get_or_create(

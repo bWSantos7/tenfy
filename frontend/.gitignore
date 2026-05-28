@@ -15,3 +15,10 @@ dist-ssr
 *.env
 *.env.backup.local
 !.env.example
+
+# TypeScript build cache
+*.tsbuildinfo
+
+# Vite compiled config artifacts (keep only vite.config.ts)
+vite.config.js
+vite.config.d.ts

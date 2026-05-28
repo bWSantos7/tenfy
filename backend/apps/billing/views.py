@@ -14,6 +14,8 @@ Endpoints:
 import logging
 from datetime import date
 
+from django.contrib.auth import get_user_model
+
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import permissions, status
@@ -559,7 +561,6 @@ def _map_billing_type(billing_type: str) -> str:
 
 
 def _user_from_external_ref(ref: str):
-    from django.contrib.auth import get_user_model
     User = get_user_model()
     try:
         return User.objects.get(pk=int(ref))
@@ -656,7 +657,6 @@ def family_members(request):
     ser.is_valid(raise_exception=True)
     d = ser.validated_data
 
-    from django.contrib.auth import get_user_model
     User = get_user_model()
     target = None
     if d.get('user_id'):

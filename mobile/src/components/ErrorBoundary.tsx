@@ -8,25 +8,26 @@ interface Props {
 
 interface State {
   hasError: boolean;
-  errorMessage: string;
 }
 
 export class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props);
-    this.state = { hasError: false, errorMessage: '' };
+    this.state = { hasError: false };
   }
 
   static getDerivedStateFromError(_error: Error): State {
-    return { hasError: true, errorMessage: '' };
+    return { hasError: true };
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
-    console.error('[ErrorBoundary] Uncaught error:', error, info.componentStack);
+    if (__DEV__) {
+      console.error('[ErrorBoundary] Uncaught error:', error, info.componentStack);
+    }
   }
 
   handleReset = () => {
-    this.setState({ hasError: false, errorMessage: '' });
+    this.setState({ hasError: false });
   };
 
   render() {

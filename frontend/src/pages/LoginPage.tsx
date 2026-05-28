@@ -40,12 +40,18 @@ export const LoginPage: React.FC = () => {
     <div className="min-h-screen bg-bg-base flex flex-col items-center justify-center px-4">
       <div className="w-full max-w-sm">
 
-        {/* Logo largo — igual ao mobile */}
+        {/* Logo horizontal — colorida em light, branca em dark */}
         <div className="flex justify-center mb-8">
           <img
-            src="/icons/logo_login_tr.png"
+            src="/logos/logo1.png"
             alt="Tenfy Logo"
-            className="h-12 object-contain"
+            className="h-14 object-contain dark:hidden"
+            style={{ maxWidth: 240 }}
+          />
+          <img
+            src="/logos/logo6.png"
+            alt="Tenfy Logo"
+            className="h-10 object-contain hidden dark:block"
             style={{ maxWidth: 200 }}
           />
         </div>

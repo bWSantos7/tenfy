@@ -8,12 +8,13 @@ from django.utils import timezone
 from apps.sources.models import DataSource
 from apps.tournaments.models import TournamentEdition, TournamentChangeEvent
 from .connectors.base import get_connector, ConnectorError
-from .connectors import cbt as _cbt      # noqa: F401
-from .connectors import cosat as _cosat  # noqa: F401
-from .connectors import fct as _fct      # noqa: F401
-from .connectors import fpt as _fpt      # noqa: F401
-from .connectors import itf as _itf      # noqa: F401
-from .connectors import utr as _utr      # noqa: F401
+from .connectors import cbt as _cbt          # noqa: F401
+from .connectors import cosat as _cosat      # noqa: F401
+from .connectors import fct as _fct          # noqa: F401
+from .connectors import fpt as _fpt          # noqa: F401
+from .connectors import fpt_sp as _fpt_sp    # noqa: F401
+from .connectors import itf as _itf          # noqa: F401
+from .connectors import utr as _utr          # noqa: F401
 from .models import IngestionRun
 from .persistence import TournamentPersister
 

@@ -119,6 +119,9 @@ export const HomePage: React.FC = () => {
     setProfile(opt.profile);
     setActiveChildName(opt.childName);
     if (user?.id) persistActiveProfileId(user.id, opt.profile.id);
+    // Clear saved tournament filters so TournamentsPage re-applies the new
+    // profile's modality as the default filter on the next visit.
+    try { sessionStorage.removeItem('tenfy_tournament_filters'); } catch {}
     await loadCompat(opt.profile);
   }
 

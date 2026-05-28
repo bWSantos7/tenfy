@@ -8,6 +8,7 @@ from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 
 from .base import BaseConnector, register_connector
+from apps.ingestion.modality_utils import infer_modality
 
 
 @register_connector
@@ -86,7 +87,7 @@ class FPTPublicConnector(BaseConnector):
         city = detail.get('city') or city
         state = detail.get('state') or state
 
-        modality = 'beach_tennis' if 'BEACH' in badge.upper() or 'BEACH' in title.upper() else 'tennis'
+        modality = infer_modality(title, badge, subtitle_text or '')
         circuit = self._infer_circuit(badge, subtitle_text)
         status = self._infer_status(detail.get('status_text') or deadline_text, start_date, end_date, entry_close)
         registration_link = self._extract_registration_link(card)

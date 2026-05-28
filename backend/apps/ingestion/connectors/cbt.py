@@ -8,6 +8,7 @@ import logging
 from datetime import datetime
 
 from .base import BaseConnector, ConnectorError, register_connector
+from apps.ingestion.modality_utils import infer_modality
 
 logger = logging.getLogger('apps.ingestion.cbt')
 
@@ -241,13 +242,11 @@ class CBTPublicConnector(BaseConnector):
         return datetime(date_value.year, date_value.month, date_value.day, hour, minute)
 
     def _infer_modality(self, item: dict) -> str:
-        route = (item.get('route') or '').lower()
-        department = (item.get('nome_depto') or '').lower()
-        if 'beach' in route or 'beach' in department:
-            return 'beach_tennis'
-        if 'wheelchair' in route or 'cadeira' in department:
-            return 'wheelchair'
-        return 'tennis'
+        return infer_modality(
+            item.get('nome_torneio') or '',
+            item.get('route') or '',
+            item.get('nome_depto') or '',
+        )
 
     def _infer_status(self, text: str | None) -> str:
         low = (text or '').strip().lower()

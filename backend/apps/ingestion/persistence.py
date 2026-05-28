@@ -116,15 +116,36 @@ class TournamentPersister:
 
     @transaction.atomic
     def upsert(self, data: dict):
-        tournament, _ = Tournament.objects.get_or_create(
+        new_modality = (data.get('modality') or 'tennis').strip()
+        new_circuit = (data.get('circuit') or '').strip()[:100]
+
+        tournament, created_t = Tournament.objects.get_or_create(
             canonical_slug=data['canonical_slug'],
             defaults={
                 'canonical_name': data['canonical_name'],
                 'organization': self.data_source.organization,
-                'circuit': data.get('circuit', ''),
-                'modality': data.get('modality', 'tennis'),
+                'circuit': new_circuit,
+                'modality': new_modality,
             },
         )
+
+        # Always sync modality and circuit from the connector on re-ingestion.
+        # This fixes tournaments that were created with an incorrect modality
+        # (e.g. beach_tennis imported as tennis before the inference was improved).
+        if not created_t:
+            t_updates: dict = {}
+            if new_modality and tournament.modality != new_modality:
+                t_updates['modality'] = new_modality
+                logger.info(
+                    'Modality corrected for tournament %s: %s → %s',
+                    tournament.canonical_slug, tournament.modality, new_modality,
+                )
+            if new_circuit and tournament.circuit != new_circuit:
+                t_updates['circuit'] = new_circuit
+            if t_updates:
+                for k, v in t_updates.items():
+                    setattr(tournament, k, v)
+                tournament.save(update_fields=list(t_updates.keys()) + ['updated_at'])
 
         venue = None
         v = data.get('venue') or {}
@@ -192,7 +213,25 @@ class TournamentPersister:
         )
 
         v_city = (data.get('venue') or {}).get('city', '')
-        v_state = (data.get('venue') or {}).get('state', '')
+        v_state = (data.get('venue') or {}).get('state', '').upper()[:2]
+
+        # Detect UF mismatch: org has a state but the venue is in a different state.
+        # This often signals a wrong source assignment or bad scraping.
+        # We store the warning in validation_errors rather than blocking ingestion.
+        ingest_validation_errors: list = []
+        org_state = (getattr(self.data_source.organization, 'state', None) or '').upper()[:2]
+        if org_state and v_state and org_state != v_state:
+            warn = (
+                f'uf_mismatch: org_state={org_state} venue_state={v_state} '
+                f'(org={self.data_source.organization.short_name or self.data_source.organization.name})'
+            )
+            ingest_validation_errors.append(warn)
+            logger.warning(
+                'UF mismatch for %s: org_state=%s venue_state=%s title=%s',
+                self.data_source.connector_key, org_state, v_state,
+                data.get('title', ''),
+            )
+
         fingerprint = _dedup_fingerprint(
             data.get('title') or data.get('canonical_name', ''),
             data.get('start_date'),
@@ -225,6 +264,7 @@ class TournamentPersister:
                 data_confidence=TournamentEdition.CONFIDENCE_MED,
                 is_youth=is_youth,
                 dedup_fingerprint=fingerprint,
+                validation_errors=ingest_validation_errors,
             )
             created = True
             TournamentChangeEvent.objects.create(
@@ -294,6 +334,9 @@ class TournamentPersister:
                     ed.is_youth = is_youth
                 if fingerprint and not ed.dedup_fingerprint:
                     ed.dedup_fingerprint = fingerprint
+                # Refresh validation_errors so stale UF mismatches are resolved if
+                # the organisation or venue data was corrected in a later run.
+                ed.validation_errors = ingest_validation_errors
                 ed.save()
 
                 if changes:

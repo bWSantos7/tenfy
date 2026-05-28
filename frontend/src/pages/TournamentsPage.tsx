@@ -154,7 +154,15 @@ export const TournamentsPage: React.FC = () => {
         if (activeId) primary = list.find((p: any) => p.id === activeId) ?? null;
       }
       if (!primary) primary = pickBestProfile(list);
-      if (primary) setPrimaryProfileId(primary.id);
+      if (primary) {
+        setPrimaryProfileId(primary.id);
+        // On the very first visit (no filters saved in sessionStorage), pre-apply
+        // the profile's modality so the user sees only their sport by default.
+        // They can manually clear the modality filter to browse all modalities.
+        if (primary.preferred_modality && saved.current === null) {
+          setFilters((f) => ({ ...f, modality: primary.preferred_modality }));
+        }
+      }
     }).catch(() => {});
     listOrganizations().then(setOrganizations).catch(() => setOrganizations([]));
   }, [user?.id, user?.role]);

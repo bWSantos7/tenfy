@@ -1,6 +1,5 @@
 """
-Tests for tournament filters and views.
-Focused on COSAT visibility regression and search filter coverage.
+Tests for tournament filters, views, modality isolation and UF validation.
 """
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
@@ -293,4 +292,217 @@ class CompatibleEndpointModalityTestCase(TestCase):
         self.assertNotIn(
             'tennis', modalities,
             f'Beach tennis profile must not see tennis editions. Got modalities: {modalities}',
+        )
+
+
+# ─── Modality inference utility ───────────────────────────────────────────────
+
+class ModalityUtilsTestCase(TestCase):
+    """Unit tests for apps.ingestion.modality_utils.infer_modality."""
+
+    def _infer(self, *args):
+        from apps.ingestion.modality_utils import infer_modality
+        return infer_modality(*args)
+
+    def test_beach_in_title(self):
+        self.assertEqual(self._infer('Copa Beach Tennis SP 2026', 'FPT'), 'beach_tennis')
+
+    def test_praia_in_title(self):
+        self.assertEqual(self._infer('Open de Praia Masculino', ''), 'beach_tennis')
+
+    def test_wheelchair_in_title(self):
+        self.assertEqual(self._infer('Open Wheelchair SP', 'CBT'), 'wheelchair')
+
+    def test_cadeira_in_title(self):
+        self.assertEqual(self._infer('Torneio Cadeira de Rodas', ''), 'wheelchair')
+
+    def test_padel_in_title(self):
+        self.assertEqual(self._infer('Campeonato de Padel', ''), 'padel')
+
+    def test_tennis_default(self):
+        self.assertEqual(self._infer('Aberto Masculino São Paulo', 'FPT'), 'tennis')
+
+    def test_empty_inputs(self):
+        self.assertEqual(self._infer('', ''), 'tennis')
+
+    def test_beach_in_circuit_not_title(self):
+        self.assertEqual(self._infer('Torneio Outono', 'Beach Tennis Brasil'), 'beach_tennis')
+
+    def test_case_insensitive(self):
+        self.assertEqual(self._infer('COPA BEACH TENNIS', ''), 'beach_tennis')
+
+
+# ─── Persistence: modality update on re-ingestion ─────────────────────────────
+
+class PersistenceModalityUpdateTestCase(TestCase):
+    """
+    Tests that Tournament.modality is updated when a connector yields a
+    different value on a subsequent ingestion run.
+    """
+
+    def setUp(self):
+        from apps.sources.models import Organization, DataSource
+        from apps.ingestion.models import IngestionRun
+        self.org, _ = Organization.objects.get_or_create(
+            name='PERSIST_MOD_ORG',
+            defaults={'short_name': 'PMO', 'type': Organization.TYPE_FEDERATION},
+        )
+        self.ds, _ = DataSource.objects.get_or_create(
+            connector_key='persist_mod_test',
+            defaults={
+                'organization': self.org,
+                'source_name': 'Persist Modality Test',
+                'slug': 'persist-mod-test',
+                'source_type': DataSource.SOURCE_TYPE_JSON,
+                'base_url': 'https://example.com',
+            },
+        )
+        self.run = IngestionRun.objects.create(data_source=self.ds, triggered_by='test')
+
+    def _upsert(self, slug, modality, title='Test'):
+        from apps.ingestion.persistence import TournamentPersister
+        persister = TournamentPersister(self.ds, self.run)
+        data = {
+            'external_id': f'pm:{slug}',
+            'canonical_name': title,
+            'canonical_slug': slug,
+            'circuit': 'TestCircuit',
+            'modality': modality,
+            'season_year': 2026,
+            'title': title,
+        }
+        ed, created, changes = persister.upsert(data)
+        return ed
+
+    def test_modality_corrected_on_second_upsert(self):
+        """Tournament created as tennis is corrected to beach_tennis on re-run."""
+        from apps.tournaments.models import Tournament
+        slug = 'pm-modality-fix-test'
+
+        # First upsert: wrong modality (legacy data)
+        self._upsert(slug, 'tennis', 'Copa Beach Test')
+        t = Tournament.objects.get(canonical_slug=slug)
+        self.assertEqual(t.modality, 'tennis')  # stored as-is first time
+
+        # Second upsert: connector now correctly infers beach_tennis
+        self._upsert(slug, 'beach_tennis', 'Copa Beach Test')
+        t.refresh_from_db()
+        self.assertEqual(
+            t.modality, 'beach_tennis',
+            'Tournament.modality must be updated when connector infers a new value',
+        )
+
+    def test_correct_modality_unchanged(self):
+        """Tournament already with correct modality is not unnecessarily updated."""
+        from apps.tournaments.models import Tournament
+        slug = 'pm-correct-mod-test'
+
+        self._upsert(slug, 'tennis', 'Aberto SP')
+        self._upsert(slug, 'tennis', 'Aberto SP')  # same value
+        t = Tournament.objects.get(canonical_slug=slug)
+        self.assertEqual(t.modality, 'tennis')
+
+
+# ─── Persistence: UF mismatch validation ──────────────────────────────────────
+
+class PersistenceUFValidationTestCase(TestCase):
+    """
+    Tests that a UF mismatch between organization.state and venue.state
+    is recorded in TournamentEdition.validation_errors.
+    """
+
+    def setUp(self):
+        from apps.sources.models import Organization, DataSource
+        from apps.ingestion.models import IngestionRun
+        self.org, _ = Organization.objects.get_or_create(
+            name='UF_VAL_ORG_SP',
+            defaults={
+                'short_name': 'UVSP',
+                'type': Organization.TYPE_FEDERATION,
+                'state': 'SP',
+            },
+        )
+        self.ds, _ = DataSource.objects.get_or_create(
+            connector_key='uf_val_test',
+            defaults={
+                'organization': self.org,
+                'source_name': 'UF Val Test',
+                'slug': 'uf-val-test',
+                'source_type': DataSource.SOURCE_TYPE_JSON,
+                'base_url': 'https://example.com',
+            },
+        )
+        self.run = __import__('apps.ingestion.models', fromlist=['IngestionRun']).IngestionRun.objects.create(
+            data_source=self.ds, triggered_by='test'
+        )
+
+    def _upsert(self, slug, venue_state):
+        from apps.ingestion.persistence import TournamentPersister
+        persister = TournamentPersister(self.ds, self.run)
+        data = {
+            'external_id': f'ufv:{slug}',
+            'canonical_name': f'UF Test {slug}',
+            'canonical_slug': slug,
+            'circuit': 'Test',
+            'modality': 'tennis',
+            'season_year': 2026,
+            'title': f'UF Test {slug}',
+            'venue': {'name': 'Arena Test', 'city': 'Cidade Teste', 'state': venue_state},
+        }
+        ed, _, _ = persister.upsert(data)
+        return ed
+
+    def test_uf_mismatch_recorded_in_validation_errors(self):
+        """Edition with venue in PR but org in SP gets a uf_mismatch error."""
+        ed = self._upsert('uf-mismatch-test', 'PR')
+        ed.refresh_from_db()
+        self.assertTrue(
+            any('uf_mismatch' in str(e) for e in (ed.validation_errors or [])),
+            f'Expected uf_mismatch in validation_errors, got: {ed.validation_errors}',
+        )
+
+    def test_uf_match_no_validation_error(self):
+        """Edition with venue in SP and org in SP produces no UF validation error."""
+        ed = self._upsert('uf-match-test', 'SP')
+        ed.refresh_from_db()
+        self.assertFalse(
+            any('uf_mismatch' in str(e) for e in (ed.validation_errors or [])),
+            f'No uf_mismatch expected, got: {ed.validation_errors}',
+        )
+
+    def test_no_org_state_no_error(self):
+        """Org without state (e.g. national confederation) does not trigger uf_mismatch."""
+        from apps.sources.models import Organization, DataSource
+        from apps.ingestion.models import IngestionRun
+        org_national, _ = Organization.objects.get_or_create(
+            name='UF_VAL_NATIONAL',
+            defaults={'short_name': 'CBT', 'type': Organization.TYPE_CONFEDERATION, 'state': ''},
+        )
+        ds_national, _ = DataSource.objects.get_or_create(
+            connector_key='uf_val_national_test',
+            defaults={
+                'organization': org_national,
+                'source_name': 'UF Val National Test',
+                'slug': 'uf-val-national-test',
+                'source_type': DataSource.SOURCE_TYPE_JSON,
+                'base_url': 'https://example.com',
+            },
+        )
+        run = IngestionRun.objects.create(data_source=ds_national, triggered_by='test')
+        from apps.ingestion.persistence import TournamentPersister
+        persister = TournamentPersister(ds_national, run)
+        ed, _, _ = persister.upsert({
+            'external_id': 'ufv:national-no-state',
+            'canonical_name': 'CBT National Test',
+            'canonical_slug': 'ufv-national-no-state',
+            'circuit': 'CBT',
+            'modality': 'tennis',
+            'season_year': 2026,
+            'title': 'CBT National Test',
+            'venue': {'name': 'Arena', 'city': 'Curitiba', 'state': 'PR'},
+        })
+        ed.refresh_from_db()
+        self.assertFalse(
+            any('uf_mismatch' in str(e) for e in (ed.validation_errors or [])),
+            'National org with no state must not produce uf_mismatch errors.',
         )

@@ -8,6 +8,7 @@ from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 
 from .base import BaseConnector, register_connector
+from apps.ingestion.modality_utils import infer_modality
 
 
 @register_connector
@@ -90,8 +91,8 @@ class FCTPublicConnector(BaseConnector):
 
         city, state, start_date, end_date = self._parse_info(info_text, fallback_year)
         entry_close = self._parse_detail_deadline(detail.get('deadline'))
-        modality = 'beach_tennis' if 'BEACH' in title.upper() else 'tennis'
         circuit = self._infer_circuit(title)
+        modality = infer_modality(title, circuit)
         status = self._infer_status(detail.get('status_text') or status_text, start_date, end_date, entry_close)
 
         return {

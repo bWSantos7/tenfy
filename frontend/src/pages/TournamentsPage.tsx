@@ -390,37 +390,6 @@ export const TournamentsPage: React.FC = () => {
                 ))}
               </select>
             </div>
-            {profileModality ? (
-              <div>
-                <label className="text-xs text-text-secondary mb-1 block">Modalidade</label>
-                <div className="input-base flex items-center gap-2 cursor-default select-none opacity-80">
-                  <span className="text-sm">
-                    {profileModality === 'tennis' ? 'Tênis'
-                      : profileModality === 'beach_tennis' ? 'Beach Tennis'
-                      : profileModality === 'padel' ? 'Padel'
-                      : profileModality === 'wheelchair' ? 'Cadeira de rodas'
-                      : profileModality}
-                  </span>
-                  <span className="ml-auto text-[10px] text-text-muted border border-border-subtle rounded px-1 py-0.5">perfil</span>
-                </div>
-              </div>
-            ) : (
-              <div>
-                <label className="text-xs text-text-secondary mb-1 block">Modalidade</label>
-                <select
-                  className="input-base"
-                  value={filters.modality || ''}
-                  onChange={(e) => { setPage(1); setFilters((f) => ({ ...f, modality: e.target.value })); }}
-                  data-testid="filter-modality"
-                >
-                  <option value="">Todas</option>
-                  <option value="tennis">Tênis</option>
-                  <option value="beach_tennis">Beach Tennis</option>
-                  <option value="wheelchair">Cadeira de rodas</option>
-                  <option value="padel">Padel</option>
-                </select>
-              </div>
-            )}
             <div>
               <label className="text-xs text-text-secondary mb-1 block">Data inicial</label>
               <input

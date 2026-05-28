@@ -39,6 +39,12 @@ TASKS = [
         'cron': {'minute': '30', 'hour': '*/6', 'day_of_week': '*', 'day_of_month': '*', 'month_of_year': '*'},
         'description': 'Sync COSAT tournaments from MongoDB every 6 hours (00:30, 06:30, 12:30, 18:30 UTC)',
     },
+    {
+        'name': 'sync-fpt-sp-entries-hourly',
+        'task': 'apps.registrations.tasks.sync_fpt_sp_entries_task',
+        'cron': {'minute': '45', 'hour': '*', 'day_of_week': '*', 'day_of_month': '*', 'month_of_year': '*'},
+        'description': 'Sync FPT (SP) tournament inscritos from fpt.tenisintegrado.com.br every hour at :45',
+    },
 ]
 
 

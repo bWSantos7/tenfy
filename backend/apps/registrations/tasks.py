@@ -262,3 +262,88 @@ def models_end_date_filter(today):
     """Return a Q filter for editions that are still active or have no end date."""
     from django.db.models import Q
     return Q(end_date__gte=today) | Q(end_date__isnull=True)
+
+
+@shared_task(bind=True, max_retries=2, default_retry_delay=300)
+def sync_fpt_sp_entries_task(self, limit: int = 50):
+    """Sync FPT (SP) tournament inscritos from fpt.tenisintegrado.com.br."""
+    import unicodedata as _ud
+    import re as _re
+    from django.utils import timezone as _tz
+    from apps.registrations.parsers import fetch_tenisintegrado_entries
+    from apps.tournaments.models import TournamentEdition
+    from apps.sources.models import Organization
+
+    log = logging.getLogger('apps.registrations.sync_fpt_sp')
+
+    fpt_sp = Organization.objects.filter(short_name='FPT', state='SP').first()
+    if not fpt_sp:
+        log.error('FPT (SP) org not found')
+        return {'error': 'org_not_found'}
+
+    qs = (
+        TournamentEdition.objects
+        .filter(tournament__organization=fpt_sp, official_source_url__icontains='tenisintegrado')
+        .exclude(status__in=[TournamentEdition.STATUS_CANCELED, TournamentEdition.STATUS_FINISHED])
+        .select_related('tournament')
+        .order_by('entry_close_at', 'start_date')
+    )[:limit]
+
+    def _slug(t):
+        s = _ud.normalize('NFKD', t).encode('ascii', 'ignore').decode()
+        return _re.sub(r'[^a-z0-9]+', '-', s.lower()).strip('-')[:50]
+
+    created_total = updated_total = skipped_total = 0
+    now = _tz.now()
+
+    for edition in qs:
+        try:
+            result = fetch_tenisintegrado_entries(edition.official_source_url, source='fpt')
+        except Exception as exc:
+            log.warning('sync_fpt_sp fetch failed edition=%s: %s', edition.id, exc)
+            skipped_total += 1
+            continue
+
+        entries = result.get('entries', [])
+        if not entries or result.get('parser_warning'):
+            skipped_total += 1
+            continue
+
+        for entry_data in entries:
+            player_name = (entry_data.get('player_name') or '').strip()
+            category_text = (entry_data.get('category_text') or '').strip()
+            if not player_name or not category_text:
+                continue
+
+            raw_eid = (entry_data.get('player_external_id') or '').strip()
+            external_id = raw_eid or f'fpt:{_slug(player_name)}:{_slug(category_text)}'
+
+            raw_pay = (entry_data.get('payment_status') or FederationEntry.PAYMENT_UNKNOWN).strip()
+            if raw_pay not in {FederationEntry.PAYMENT_PAID, FederationEntry.PAYMENT_PENDING, FederationEntry.PAYMENT_UNKNOWN}:
+                raw_pay = FederationEntry.PAYMENT_UNKNOWN
+
+            try:
+                _, created = FederationEntry.objects.update_or_create(
+                    edition=edition,
+                    player_external_id=external_id,
+                    defaults={
+                        'player_name': player_name[:200],
+                        'category_text': category_text[:200],
+                        'ranking_position': entry_data.get('ranking_position'),
+                        'payment_status': raw_pay,
+                        'removed_or_replaced': bool(entry_data.get('removed_or_replaced', False)),
+                        'source': FederationEntry.SOURCE_FPT,
+                        'source_url': (entry_data.get('source_url') or edition.official_source_url)[:500],
+                        'confidence': FederationEntry.CONFIDENCE_HIGH,
+                        'synced_at': now,
+                    },
+                )
+                if created:
+                    created_total += 1
+                else:
+                    updated_total += 1
+            except Exception as exc:
+                log.warning('sync_fpt_sp upsert failed: %s', exc)
+
+    log.info('sync_fpt_sp done: created=%s updated=%s skipped=%s', created_total, updated_total, skipped_total)
+    return {'created': created_total, 'updated': updated_total, 'skipped': skipped_total}

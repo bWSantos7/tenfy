@@ -332,11 +332,13 @@ export const TournamentsPage: React.FC = () => {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && applySearch()}
+            data-testid="tournaments-search"
           />
         </div>
         <button
           className="btn-secondary !px-3 relative"
           onClick={() => setShowFilters((v) => !v)}
+          data-testid="tournaments-filter-toggle"
         >
           <Filter className="w-4 h-4" />
           {hasAnyFilter && (
@@ -363,6 +365,7 @@ export const TournamentsPage: React.FC = () => {
                 className="input-base"
                 value={filters.state || ''}
                 onChange={(e) => { setPage(1); setFilters((f) => ({ ...f, state: e.target.value })); }}
+                data-testid="filter-state"
               >
                 {STATES.map((s) => (
                   <option key={s} value={s}>{s || 'Todos'}</option>
@@ -387,6 +390,7 @@ export const TournamentsPage: React.FC = () => {
                 className="input-base"
                 value={filters.modality || ''}
                 onChange={(e) => { setPage(1); setFilters((f) => ({ ...f, modality: e.target.value })); }}
+                data-testid="filter-modality"
               >
                 <option value="">Todas</option>
                 <option value="tennis">Tênis</option>
@@ -477,7 +481,7 @@ export const TournamentsPage: React.FC = () => {
               Nenhum torneio encontrado com estes filtros.
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-3" data-testid="tournament-list">
               {compareMode && (
                 <div className="flex items-center gap-2 px-1 py-1.5 text-xs text-text-muted">
                   <GitCompareArrows className="w-3.5 h-3.5 text-accent-neon" />

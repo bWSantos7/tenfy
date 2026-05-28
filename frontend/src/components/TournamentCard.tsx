@@ -19,6 +19,9 @@ export const TournamentCard: React.FC<Props> = ({ edition, showEligibility = fal
     <Link
       to={`/torneios/${edition.id}`}
       className="card hover:border-accent-neon/50 transition-colors active:scale-[0.99] block"
+      data-testid="tournament-card"
+      data-modality={edition.modality || ''}
+      data-venue-state={edition.venue_state || ''}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">

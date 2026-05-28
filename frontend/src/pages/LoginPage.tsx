@@ -169,6 +169,7 @@ export const LoginPage: React.FC = () => {
                   placeholder="voce@exemplo.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  data-testid="login-email"
                 />
               </div>
 
@@ -194,6 +195,7 @@ export const LoginPage: React.FC = () => {
                     placeholder="••••••••"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    data-testid="login-password"
                   />
                   <button
                     type="button"
@@ -208,7 +210,7 @@ export const LoginPage: React.FC = () => {
 
               {/* Erro de login */}
               {loginError && (
-                <div className="flex items-start gap-2.5 bg-red-500/10 border border-red-500/20 rounded-xl px-3.5 py-3">
+                <div className="flex items-start gap-2.5 bg-red-500/10 border border-red-500/20 rounded-xl px-3.5 py-3" data-testid="login-error">
                   <AlertCircle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
                   <span className="text-sm text-red-400 leading-snug">{loginError}</span>
                 </div>
@@ -219,6 +221,7 @@ export const LoginPage: React.FC = () => {
                 type="submit"
                 disabled={submitting}
                 className="btn-primary w-full flex items-center justify-center gap-2 !py-3.5 text-[15px] font-bold mt-1"
+                data-testid="login-submit"
               >
                 {submitting
                   ? <><Loader2 className="w-5 h-5 animate-spin" /> Entrando...</>

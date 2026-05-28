@@ -195,6 +195,7 @@ export const HomePage: React.FC = () => {
                 <button
                   key={opt.profile.id}
                   onClick={() => switchProfile(opt)}
+                  data-testid={`profile-switch-${opt.profile.id}`}
                   className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors ${
                     isActive
                       ? 'bg-accent-neon text-bg-base border-accent-neon'

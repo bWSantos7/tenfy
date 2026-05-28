@@ -99,5 +99,19 @@ frontend/playwright-report/
 frontend/test-results/
 frontend/e2e/fixtures/beta-storage-state.json
 
+# QA Agent — outputs e credenciais (NUNCA COMMITAR)
+qa-agent/.env.qa
+qa-agent/node_modules/
+qa-agent/reports/html/
+qa-agent/reports/screenshots/*
+!qa-agent/reports/screenshots/.gitkeep
+qa-agent/reports/traces/*
+!qa-agent/reports/traces/.gitkeep
+qa-agent/reports/videos/*
+!qa-agent/reports/videos/.gitkeep
+qa-agent/reports/test-results/
+qa-agent/reports/results.json
+qa-agent/dist/
+
 # Test plan files
 *.xlsx

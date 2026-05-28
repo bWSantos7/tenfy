@@ -1,0 +1,21 @@
+{
+  "name": "tenfy-qa-agent",
+  "version": "1.0.0",
+  "description": "Agente QA automatizado do Tenfy usando Playwright + TypeScript",
+  "scripts": {
+    "qa:prod": "npx playwright test --reporter=list,html && npx ts-node utils/generate-report.ts",
+    "qa:auth": "npx playwright test tests/auth.spec.ts",
+    "qa:modality": "npx playwright test tests/tournaments-modality.spec.ts",
+    "qa:filters": "npx playwright test tests/tournaments-filters.spec.ts",
+    "qa:dependents": "npx playwright test tests/dependents-switch.spec.ts",
+    "qa:details": "npx playwright test tests/tournament-details.spec.ts",
+    "qa:agenda": "npx playwright test tests/agenda-results.spec.ts",
+    "report": "npx playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.44.0",
+    "dotenv": "^16.4.5",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5"
+  }
+}

@@ -142,6 +142,8 @@ export const TournamentsPage: React.FC = () => {
   const [q, setQ] = useState(saved.current?.q ?? '');
   const [nearMe, setNearMe] = useState(saved.current?.nearMe ?? false);
   const [primaryProfileId, setPrimaryProfileId] = useState<number | null>(null);
+  // Tracks the active profile's sport so clearFilters can restore it as default
+  const [profileModality, setProfileModality] = useState<string>('');
   const [organizations, setOrganizations] = useState<OrganizationOption[]>([]);
   const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -156,12 +158,12 @@ export const TournamentsPage: React.FC = () => {
       if (!primary) primary = pickBestProfile(list);
       if (primary) {
         setPrimaryProfileId(primary.id);
-        // Always apply the profile's modality as default when no modality has
-        // been explicitly saved — covers first visit, post-clear, and returning
-        // sessions that pre-date the modality filter. The user can still change
-        // the modality pill to browse other sports.
-        if (primary.preferred_modality && !saved.current?.filters?.modality) {
-          setFilters((f) => ({ ...f, modality: primary.preferred_modality }));
+        const mod = primary.preferred_modality || '';
+        setProfileModality(mod);
+        // Apply the profile's modality whenever it isn't already explicitly set
+        // in the saved session — covers first visit, post-clear, and old sessions.
+        if (mod && !saved.current?.filters?.modality) {
+          setFilters((f) => ({ ...f, modality: mod }));
         }
       }
     }).catch(() => {});
@@ -242,7 +244,7 @@ export const TournamentsPage: React.FC = () => {
 
   function clearFilters() {
     setQ('');
-    setFilters({ status: '', state: '' });
+    setFilters({ status: '', state: '', ...(profileModality ? { modality: profileModality } : {}) });
     setNearMe(false);
     setPage(1);
     try { sessionStorage.removeItem(FILTER_SESSION_KEY); } catch {}

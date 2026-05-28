@@ -73,9 +73,18 @@ class Command(BaseCommand):
         skipped = 0
         strong_only = 0
 
-        for t in qs.iterator(chunk_size=500):
-            combined = (t.canonical_name + ' ' + t.circuit).lower()
-            inferred = infer_modality(t.canonical_name, t.circuit)
+        for t in qs.prefetch_related('editions__venue').iterator(chunk_size=500):
+            # Also inspect venue names from related editions so that tournaments
+            # held at "Arena Guto Beach Tennis" are correctly classified even
+            # when the title itself has no beach/praia keyword.
+            venue_names = list({
+                v for ed in t.editions.all()
+                if ed.venue and ed.venue.name
+                for v in [ed.venue.name]
+            })
+            venue_text = ' '.join(venue_names)
+            combined = (t.canonical_name + ' ' + t.circuit + ' ' + venue_text).lower()
+            inferred = infer_modality(t.canonical_name, t.circuit, venue_text)
 
             if inferred == t.modality:
                 continue

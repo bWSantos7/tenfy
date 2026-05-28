@@ -27,7 +27,13 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        // HTML must NOT be precached — browser must always fetch it fresh so
+        // new asset hashes are discovered after each deploy.
+        globPatterns: ['**/*.{js,css,ico,png,svg,woff2}'],
+        // Activate the new service worker immediately instead of waiting for
+        // all tabs to close (prevents the "need incognito" symptom).
+        skipWaiting: true,
+        clientsClaim: true,
         runtimeCaching: [
           {
             urlPattern: /^https?:\/\/.*\/api\/(tournaments|players\/categories)/,

@@ -160,9 +160,9 @@ export const TournamentsPage: React.FC = () => {
         setPrimaryProfileId(primary.id);
         const mod = primary.preferred_modality || '';
         setProfileModality(mod);
-        // Apply the profile's modality whenever it isn't already explicitly set
-        // in the saved session — covers first visit, post-clear, and old sessions.
-        if (mod && !saved.current?.filters?.modality) {
+        // Profile modality is a hard constraint: always apply it, overriding any
+        // saved session value. The user cannot change it from the filter UI.
+        if (mod) {
           setFilters((f) => ({ ...f, modality: mod }));
         }
       }
@@ -182,11 +182,14 @@ export const TournamentsPage: React.FC = () => {
 
   const hasAnyFilter = useMemo(
     () => !!(
-      filters.status || filters.state || filters.q || filters.modality
+      filters.status || filters.state || filters.q
+      // Profile modality is a locked constraint, not a user-applied filter.
+      // Only flag it as "active" if it differs from the profile's modality.
+      || (filters.modality && filters.modality !== profileModality)
       || filters.from_date || filters.to_date
       || filters.organization || filters.category
     ),
-    [filters],
+    [filters, profileModality],
   );
 
   // Persist filters in sessionStorage so they survive navigation to detail and back
@@ -387,21 +390,37 @@ export const TournamentsPage: React.FC = () => {
                 ))}
               </select>
             </div>
-            <div>
-              <label className="text-xs text-text-secondary mb-1 block">Modalidade</label>
-              <select
-                className="input-base"
-                value={filters.modality || ''}
-                onChange={(e) => { setPage(1); setFilters((f) => ({ ...f, modality: e.target.value })); }}
-                data-testid="filter-modality"
-              >
-                <option value="">Todas</option>
-                <option value="tennis">Tênis</option>
-                <option value="beach_tennis">Beach Tennis</option>
-                <option value="wheelchair">Cadeira de rodas</option>
-                <option value="padel">Padel</option>
-              </select>
-            </div>
+            {profileModality ? (
+              <div>
+                <label className="text-xs text-text-secondary mb-1 block">Modalidade</label>
+                <div className="input-base flex items-center gap-2 cursor-default select-none opacity-80">
+                  <span className="text-sm">
+                    {profileModality === 'tennis' ? 'Tênis'
+                      : profileModality === 'beach_tennis' ? 'Beach Tennis'
+                      : profileModality === 'padel' ? 'Padel'
+                      : profileModality === 'wheelchair' ? 'Cadeira de rodas'
+                      : profileModality}
+                  </span>
+                  <span className="ml-auto text-[10px] text-text-muted border border-border-subtle rounded px-1 py-0.5">perfil</span>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <label className="text-xs text-text-secondary mb-1 block">Modalidade</label>
+                <select
+                  className="input-base"
+                  value={filters.modality || ''}
+                  onChange={(e) => { setPage(1); setFilters((f) => ({ ...f, modality: e.target.value })); }}
+                  data-testid="filter-modality"
+                >
+                  <option value="">Todas</option>
+                  <option value="tennis">Tênis</option>
+                  <option value="beach_tennis">Beach Tennis</option>
+                  <option value="wheelchair">Cadeira de rodas</option>
+                  <option value="padel">Padel</option>
+                </select>
+              </div>
+            )}
             <div>
               <label className="text-xs text-text-secondary mb-1 block">Data inicial</label>
               <input

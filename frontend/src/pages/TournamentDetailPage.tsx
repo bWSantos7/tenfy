@@ -483,9 +483,14 @@ export const TournamentDetailPage: React.FC = () => {
         {(!elig || elig.total_count === 0) && ed.categories.length > 0 && (
           <div className="space-y-2">
             {ed.categories.map((c) => (
-              <div key={c.id} className="flex items-center justify-between text-sm">
-                <span>{c.source_category_text}</span>
-                {c.price_brl && <span className="text-text-muted">{fmtBRL(c.price_brl)}</span>}
+              <div key={c.id} className="flex items-center justify-between text-sm gap-2">
+                <div className="flex flex-col min-w-0">
+                  <span>{c.source_category_text}</span>
+                  {c.notes && (
+                    <span className="text-[11px] text-text-muted">{c.notes}</span>
+                  )}
+                </div>
+                {c.price_brl && <span className="text-text-muted shrink-0">{fmtBRL(c.price_brl)}</span>}
               </div>
             ))}
             {!profile && (

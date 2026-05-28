@@ -26,7 +26,7 @@ ORGANIZATIONS = [
     },
     {
         'name': 'Federação Paranaense de Tênis',
-        'short_name': 'FPaT',
+        'short_name': 'FPT (Paraná)',
         'type': Organization.TYPE_FEDERATION,
         'website_url': 'https://fpt.com.br',
         'state': 'PR',

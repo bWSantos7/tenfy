@@ -183,7 +183,7 @@ export const TournamentsPage: React.FC = () => {
   const hasAnyFilter = useMemo(
     () => !!(
       filters.status || filters.state || filters.q || filters.modality
-      || filters.surface || filters.from_date || filters.to_date
+      || filters.from_date || filters.to_date
       || filters.organization || filters.category
     ),
     [filters],
@@ -400,20 +400,6 @@ export const TournamentsPage: React.FC = () => {
                 <option value="beach_tennis">Beach Tennis</option>
                 <option value="wheelchair">Cadeira de rodas</option>
                 <option value="padel">Padel</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-text-secondary mb-1 block">Superfície</label>
-              <select
-                className="input-base"
-                value={filters.surface || ''}
-                onChange={(e) => { setPage(1); setFilters((f) => ({ ...f, surface: e.target.value })); }}
-              >
-                <option value="">Todas</option>
-                <option value="clay">Saibro</option>
-                <option value="hard">Rápida</option>
-                <option value="grass">Grama</option>
-                <option value="sand">Areia</option>
               </select>
             </div>
             <div>

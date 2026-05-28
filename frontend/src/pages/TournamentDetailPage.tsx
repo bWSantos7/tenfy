@@ -21,6 +21,8 @@ import {
 } from '../utils/format';
 import { extractApiError } from '../services/api';
 import { pickBestProfile } from '../utils/profile';
+import { useAuth } from '../contexts/AuthContext';
+import { getActiveProfileId } from '../utils/activeProfile';
 
 const STALE_HOURS = 24;
 function isStale(syncedAt: string | null): boolean {
@@ -52,6 +54,7 @@ const CONFIDENCE_CONFIG: Record<string, { icon: React.ReactNode; color: string; 
 export const TournamentDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const nav = useNavigate();
+  const { user } = useAuth();
   const [ed, setEd] = useState<TournamentEditionDetail | null>(null);
   const [elig, setElig] = useState<EditionEligibility | null>(null);
   const [profile, setProfile] = useState<PlayerProfile | null>(null);
@@ -89,7 +92,15 @@ export const TournamentDetailPage: React.FC = () => {
           myRegistrations().catch(() => [] as TournamentRegistration[]),
         ]);
         setEd(edition);
-        const primary = pickBestProfile(profiles);
+        // Respect active profile: parent viewing as dependent should use the
+        // dependent's profile so watchlist and eligibility target the right player.
+        const profileList = Array.isArray(profiles) ? profiles : (profiles as any).results ?? [];
+        let primary: PlayerProfile | null = null;
+        if (user?.role === 'parent' && user.id) {
+          const activeId = getActiveProfileId(user.id);
+          if (activeId) primary = profileList.find((p: any) => p.id === activeId) ?? null;
+        }
+        if (!primary) primary = pickBestProfile(profileList);
         setProfile(primary);
         const watchItem = watchlist.find((w) => w.edition === edId);
         setWatching(!!watchItem);

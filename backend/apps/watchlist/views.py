@@ -140,36 +140,50 @@ class WatchlistViewSet(viewsets.ModelViewSet):
         except TournamentEdition.DoesNotExist:
             return Response({'error': 'Edição não encontrada'}, status=404)
         owner = request.user
+        parent_also_watches = False  # flag: parent adding for a dependent
         if profile_id:
             from apps.players.models import PlayerProfile
             try:
                 profile = PlayerProfile.objects.select_related('user').get(pk=profile_id)
             except PlayerProfile.DoesNotExist:
-                return Response({'error': 'Perfil nÃ£o encontrado'}, status=404)
+                return Response({'error': 'Perfil não encontrado'}, status=404)
 
             if request.user.role == 'parent':
                 if profile.user_id not in self._managed_child_ids():
                     return Response(
-                        {'detail': 'Este perfil nÃ£o pertence a um dependente gerenciado por vocÃª.'},
+                        {'detail': 'Este perfil não pertence a um dependente gerenciado por você.'},
                         status=status.HTTP_403_FORBIDDEN,
                     )
                 owner = profile.user
+                # Parent should mirror the action in their own agenda too
+                parent_also_watches = (owner.pk != request.user.pk)
             elif profile.user_id != request.user.id:
                 return Response(
-                    {'detail': 'Este perfil nÃ£o pertence ao usuÃ¡rio autenticado.'},
+                    {'detail': 'Este perfil não pertence ao usuário autenticado.'},
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
         item = WatchlistItem.objects.filter(user=owner, edition=edition).first()
         if item:
             item.delete()
+            # Mirror removal: remove from parent's agenda too
+            if parent_also_watches:
+                WatchlistItem.objects.filter(user=request.user, edition=edition).delete()
             _audit(request.user, 'watchlist.remove', str(edition_id), f'Removed edition {edition_id} from watchlist')
             return Response({'watching': False, 'edition_id': edition_id})
+
         item = WatchlistItem.objects.create(
             user=owner,
             edition=edition,
             profile_id=profile_id,
         )
+        # Mirror add: parent also gets the tournament in their own agenda
+        if parent_also_watches:
+            WatchlistItem.objects.get_or_create(
+                user=request.user,
+                edition=edition,
+                defaults={'profile_id': None},
+            )
         _audit(request.user, 'watchlist.add', str(edition_id), f'Added edition {edition_id} to watchlist')
         return Response({
             'watching': True,

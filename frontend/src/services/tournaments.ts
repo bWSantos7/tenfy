@@ -40,11 +40,10 @@ export async function listOrganizations(): Promise<OrganizationOption[]> {
       OrganizationOption[] | { count: number; results: OrganizationOption[] }
     >('/api/sources/organizations/');
     if (Array.isArray(res.data)) return res.data;
-    // Handle paginated response (legacy behaviour before pagination_class=None)
     const paged = res.data as { results?: OrganizationOption[] };
     if (Array.isArray(paged.results)) return paged.results;
-  } catch {
-    // ignore
+  } catch (err) {
+    console.warn('[listOrganizations] falhou ao carregar organizações:', err);
   }
   return [];
 }

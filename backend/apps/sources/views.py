@@ -6,19 +6,38 @@ from .serializers import OrganizationSerializer, DataSourceSerializer
 from apps.core.permissions import IsAdminOrReadOnly, IsAdmin
 
 
+class _SilentJWTAuthentication:
+    """
+    JWT authentication that never raises AuthenticationFailed.
+    Expired or malformed tokens are treated as anonymous requests instead of
+    returning 401, which would break public read endpoints for logged-in users
+    whose token has just expired (before the frontend auto-refreshes it).
+    """
+    def authenticate(self, request):
+        try:
+            from rest_framework_simplejwt.authentication import JWTAuthentication
+            return JWTAuthentication().authenticate(request)
+        except Exception:
+            return None
+
+    def authenticate_header(self, request):
+        return 'Bearer'
+
+
 class OrganizationViewSet(viewsets.ModelViewSet):
     serializer_class = OrganizationSerializer
     permission_classes = [IsAdminOrReadOnly]
+    # Use silent JWT so an expired token doesn't return 401 on this public endpoint.
+    # Invalid/expired tokens are treated as anonymous; valid tokens are honoured.
+    authentication_classes = [_SilentJWTAuthentication]
     filterset_fields = ('type', 'state', 'is_active')
     search_fields = ('name', 'short_name')
-    # No pagination: this is a reference list consumed as a flat array by the
-    # frontend filter dropdowns. Global pagination would break listOrganizations().
+    # No pagination: consumed as a flat array by the frontend filter dropdown.
     pagination_class = None
 
     def get_queryset(self):
         qs = Organization.objects.filter(is_active=True).order_by('short_name', 'name')
-        # For the public list action, return only orgs that have at least one
-        # tournament so the filter dropdown doesn't show unused entries.
+        # Non-admins only see orgs that have at least one tournament.
         if self.action == 'list' and not (
             self.request.user.is_staff or self.request.user.is_superuser
         ):

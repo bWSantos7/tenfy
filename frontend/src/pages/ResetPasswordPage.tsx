@@ -46,8 +46,9 @@ export const ResetPasswordPage: React.FC = () => {
     <div className="min-h-screen bg-bg-base flex flex-col items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-accent-neon flex items-center justify-center shadow-glow mb-4 overflow-hidden">
-            <img src="/icons/logo_login_tr.png" alt="Tenfy" className="w-12 h-12 object-contain" />
+          <div className="flex justify-center mb-5">
+            <img src="/logos/logo1.png" alt="Tenfy" className="h-12 object-contain dark:hidden" style={{ maxWidth: 220 }} />
+            <img src="/logos/logo1.png" alt="Tenfy" className="h-12 object-contain hidden dark:block" style={{ maxWidth: 220, filter: 'brightness(0) invert(1)' }} />
           </div>
           <h1 className="text-2xl font-bold">Nova senha</h1>
           <p className="text-text-muted text-sm mt-1">Crie uma senha segura</p>

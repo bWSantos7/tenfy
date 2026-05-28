@@ -348,7 +348,8 @@ export const RegisterPage: React.FC = () => {
 
         {/* Logo */}
         <div className="flex justify-center mb-5">
-          <img src="/icons/logo_login_tr.png" alt="Tenfy" className="h-10 object-contain" style={{ maxWidth: 180 }} />
+          <img src="/logos/logo1.png" alt="Tenfy" className="h-12 object-contain dark:hidden" style={{ maxWidth: 220 }} />
+          <img src="/logos/logo1.png" alt="Tenfy" className="h-12 object-contain hidden dark:block" style={{ maxWidth: 220, filter: 'brightness(0) invert(1)' }} />
         </div>
         <h1 className="text-xl font-bold text-center mb-5">Criar conta</h1>
 

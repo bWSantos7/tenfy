@@ -176,19 +176,26 @@ def infer_source_from_edition(edition: TournamentEdition) -> str:
 
     # tenisintegrado is ambiguous — check hints before defaulting to cbt
     if 'tenisintegrado' in url.lower():
-        # Check source_name for FCT/FMT hint
+        # FPT SP uses fpt.tenisintegrado.com.br — check URL subdomain first
+        if 'fpt.tenisintegrado' in url.lower():
+            return 'fpt'
+        # Check source_name for FCT/FMT/FPT hint
         sname = (edition.source_name or '').upper()
         if 'FCT' in sname:
             return 'fct'
         if 'FMT' in sname:
             return 'fmt'
-        # Check raw_payload host field (CBT connector sets 'host': 'cbt-tenis.com.br')
+        if 'FPT' in sname:
+            return 'fpt'
+        # Check raw_payload host field
         payload = edition.raw_payload or {}
         host = str(payload.get('host', '')).lower()
         if 'fct' in host:
             return 'fct'
         if 'fmt' in host:
             return 'fmt'
+        if 'fpt' in host:
+            return 'fpt'
         # Default for tenisintegrado when no distinguishing hint: cbt (most common)
         return 'cbt'
 

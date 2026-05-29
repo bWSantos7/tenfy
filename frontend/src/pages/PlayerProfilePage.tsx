@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
-import { PlayerProfile, TiData, TournamentRegistration } from '../types';
+import { PlayerProfile, TiData, TiRankingEntry, TournamentRegistration } from '../types';
 import { fetchTiData, listProfiles, syncTiData } from '../services/data';
 import { myRegistrations } from '../services/registrations';
 import { mediaUrl } from '../services/api';
@@ -212,45 +212,19 @@ export const PlayerProfilePage: React.FC = () => {
                         onClick={handleTiSync}
                         disabled={tiSyncing}
                         className="flex items-center gap-1 text-xs text-text-muted hover:text-accent-neon transition-colors disabled:opacity-50"
-                        title="Atualizar rankings"
                       >
                         <RefreshCw className={`w-3.5 h-3.5 ${tiSyncing ? 'animate-spin' : ''}`} />
                         {tiSyncing ? 'Atualizando...' : 'Atualizar'}
                       </button>
                     )}
                   </div>
+
                   {tiLoading ? (
                     <div className="card flex items-center justify-center py-6">
                       <Loader2 className="w-5 h-5 text-accent-neon animate-spin" />
                     </div>
                   ) : tiData?.rankings && tiData.rankings.length > 0 ? (
-                    <div className="card divide-y divide-border-subtle">
-                      {tiData.rankings.map((r, i) => (
-                        <div key={i} className="py-3 first:pt-0 last:pb-0 flex items-center gap-3">
-                          {r.position && (
-                            <div className="w-10 h-10 rounded-full bg-accent-neon/15 flex items-center justify-center shrink-0">
-                              <span className="text-accent-neon font-bold text-sm">#{r.position}</span>
-                            </div>
-                          )}
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold">{r.category || r.ranking_name || '—'}</p>
-                            <div className="flex items-center gap-2 text-xs text-text-muted mt-0.5 flex-wrap">
-                              {r.federation && <span>{r.federation}</span>}
-                              {r.modality && <span>• {r.modality}</span>}
-                              {r.class_label && <span>• {r.class_label}</span>}
-                            </div>
-                          </div>
-                          {r.points && (
-                            <span className="text-xs font-bold px-2 py-1 rounded-lg bg-accent-blue/15 text-accent-blue border border-accent-blue/20 shrink-0">
-                              {r.points} pts
-                            </span>
-                          )}
-                        </div>
-                      ))}
-                      {tiData.is_stale && (
-                        <p className="text-[10px] text-text-muted pt-2">Dados podem estar desatualizados.</p>
-                      )}
-                    </div>
+                    <RankingsDisplay rankings={tiData.rankings} isStale={!!tiData.is_stale} />
                   ) : (
                     <div className="card text-center py-4">
                       <p className="text-xs text-text-muted">Nenhum ranking encontrado no Tênis Integrado.</p>
@@ -334,6 +308,96 @@ export const PlayerProfilePage: React.FC = () => {
     </div>
   );
 };
+
+// ── RankingsDisplay ───────────────────────────────────────────────────────────
+
+function RankingsDisplay({ rankings, isStale }: { rankings: TiRankingEntry[]; isStale: boolean }) {
+  const wtn = rankings.filter((r) => r.federation === 'World Tennis Number');
+  const fed = rankings.filter((r) => r.federation !== 'World Tennis Number');
+
+  return (
+    <div className="space-y-3">
+      {/* WTN block */}
+      {wtn.length > 0 && (
+        <div className="card !p-0 overflow-hidden">
+          <div className="px-4 py-2.5 bg-bg-elevated/60 border-b border-border-subtle flex items-center gap-2">
+            <Trophy className="w-3.5 h-3.5 text-accent-blue shrink-0" />
+            <span className="text-xs font-bold text-accent-blue">WTN — World Tennis Number</span>
+          </div>
+          <div className="grid grid-cols-2 divide-x divide-border-subtle">
+            {wtn.map((r, i) => (
+              <div key={i} className="flex flex-col items-center justify-center py-4 gap-1">
+                <span className="text-2xl font-black text-text-primary tabular-nums">{r.points ?? '—'}</span>
+                <span className="text-[11px] text-text-muted font-medium">{r.modality || r.category}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Federation rankings */}
+      {fed.length > 0 && (
+        <div className="card !p-0 overflow-hidden">
+          <div className="px-4 py-2.5 bg-bg-elevated/60 border-b border-border-subtle">
+            <span className="text-xs font-bold text-text-muted">Rankings federativos</span>
+          </div>
+          <div className="divide-y divide-border-subtle">
+            {fed.map((r, i) => {
+              const pos = r.position ? Number(r.position) : null;
+              const medalColor =
+                pos === 1 ? 'text-yellow-400 bg-yellow-400/15 border-yellow-400/30' :
+                pos === 2 ? 'text-slate-300 bg-slate-300/15 border-slate-300/30' :
+                pos === 3 ? 'text-amber-600 bg-amber-600/15 border-amber-600/30' :
+                'text-accent-neon bg-accent-neon/12 border-accent-neon/25';
+
+              return (
+                <div key={i} className="flex items-center gap-3 px-4 py-3">
+                  {/* Position */}
+                  <div className={`w-11 h-11 rounded-xl flex flex-col items-center justify-center border shrink-0 ${pos ? medalColor : 'text-text-muted bg-bg-elevated border-border-subtle'}`}>
+                    {pos ? (
+                      <>
+                        <span className="text-sm font-black leading-none">{pos}º</span>
+                      </>
+                    ) : (
+                      <span className="text-xs text-text-muted">—</span>
+                    )}
+                  </div>
+
+                  {/* Name + federation */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold leading-snug line-clamp-2">{r.ranking_name || r.category || '—'}</p>
+                    <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                      {r.federation && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-accent-blue/12 text-accent-blue font-medium border border-accent-blue/20">
+                          {r.federation}
+                        </span>
+                      )}
+                      {r.date && (
+                        <span className="text-[10px] text-text-muted">{r.date}</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Points */}
+                  {r.points && (
+                    <div className="text-right shrink-0">
+                      <span className="text-base font-black text-text-primary tabular-nums">{r.points}</span>
+                      <p className="text-[10px] text-text-muted">pontos</p>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {isStale && (
+        <p className="text-[10px] text-text-muted text-center">Dados podem estar desatualizados. Clique em Atualizar.</p>
+      )}
+    </div>
+  );
+}
 
 function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (

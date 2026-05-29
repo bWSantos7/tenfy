@@ -10,7 +10,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { fetchTiData, listProfiles, syncTiData } from '../../services/data';
 import { myRegistrations } from '../../services/registrations';
 import { mediaUrl } from '../../services/api';
-import { PlayerProfile, TiData, TournamentRegistration } from '../../types';
+import { PlayerProfile, TiData, TiRankingEntry, TournamentRegistration } from '../../types';
 import { GENDER_LABELS, LEVEL_LABELS, ROLE_LABELS } from '../../utils/format';
 import { AppText, Button, Card, EmptyState, LoadingBlock, Screen, SectionHeader } from '../../components/ui';
 
@@ -219,7 +219,7 @@ export function PlayerProfileScreen(_: Props) {
               {/* ── Rankings (Tênis Integrado) ────────────────────── */}
               {(tiLoading || (tiData && tiData.has_ti_id)) ? (
                 <>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                     <AppText variant="section">Rankings</AppText>
                     {tiData?.ti_id ? (
                       <Pressable
@@ -239,45 +239,13 @@ export function PlayerProfileScreen(_: Props) {
                       </Pressable>
                     ) : null}
                   </View>
+
                   {tiLoading ? (
                     <Card style={{ marginBottom: 12 }}>
                       <AppText variant="muted" style={{ textAlign: 'center', paddingVertical: 8 }}>Carregando rankings...</AppText>
                     </Card>
                   ) : tiData?.rankings && tiData.rankings.length > 0 ? (
-                    <Card style={{ marginBottom: 12 }}>
-                      {tiData.rankings.map((r, i) => (
-                        <View
-                          key={i}
-                          style={{ paddingVertical: 9, borderBottomWidth: i < tiData.rankings.length - 1 ? 1 : 0, borderBottomColor: colors.borderSubtle, gap: 4 }}
-                        >
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                            {r.position ? (
-                              <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: `${colors.accentNeon}18`, alignItems: 'center', justifyContent: 'center' }}>
-                                <AppText variant="caption" style={{ color: colors.accentNeon, fontWeight: '800', fontSize: 13 }}>#{r.position}</AppText>
-                              </View>
-                            ) : null}
-                            <View style={{ flex: 1 }}>
-                              <AppText variant="caption" style={{ fontWeight: '600', fontSize: 13 }}>{r.category || r.ranking_name || '—'}</AppText>
-                              {r.federation ? <AppText variant="muted" style={{ fontSize: 11 }}>{r.federation}</AppText> : null}
-                            </View>
-                            {r.points ? (
-                              <View style={{ backgroundColor: `${colors.accentBlue}18`, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 }}>
-                                <AppText variant="caption" style={{ color: colors.accentBlue, fontWeight: '700' }}>{r.points} pts</AppText>
-                              </View>
-                            ) : null}
-                          </View>
-                          {(r.modality || r.class_label) ? (
-                            <View style={{ flexDirection: 'row', gap: 6, marginLeft: r.position ? 44 : 0 }}>
-                              {r.modality ? <AppText variant="muted" style={{ fontSize: 10 }}>{r.modality}</AppText> : null}
-                              {r.class_label ? <AppText variant="muted" style={{ fontSize: 10 }}>• {r.class_label}</AppText> : null}
-                            </View>
-                          ) : null}
-                        </View>
-                      ))}
-                      {tiData.is_stale ? (
-                        <AppText variant="muted" style={{ fontSize: 10, marginTop: 6 }}>Dados podem estar desatualizados. Toque em ↻ para atualizar.</AppText>
-                      ) : null}
-                    </Card>
+                    <RankingsMobile rankings={tiData.rankings} isStale={!!tiData.is_stale} colors={colors} />
                   ) : tiData?.has_ti_id ? (
                     <Card style={{ marginBottom: 12 }}>
                       <AppText variant="muted" style={{ textAlign: 'center', paddingVertical: 8 }}>Nenhum ranking encontrado para este perfil.</AppText>
@@ -380,6 +348,93 @@ function Row({ icon, label, value, colors }: { icon: string; label: string; valu
       <Ionicons name={icon as any} size={14} color={colors.textMuted} style={{ width: 16 }} />
       <AppText variant="muted" style={{ fontSize: 12, width: 90 }}>{label}</AppText>
       <AppText variant="caption" style={{ flex: 1, fontWeight: '500' }}>{value}</AppText>
+    </View>
+  );
+}
+
+// ── RankingsMobile ────────────────────────────────────────────────────────────
+
+function RankingsMobile({ rankings, isStale, colors }: { rankings: TiRankingEntry[]; isStale: boolean; colors: any }) {
+  const wtn = rankings.filter((r) => r.federation === 'World Tennis Number');
+  const fed = rankings.filter((r) => r.federation !== 'World Tennis Number');
+
+  return (
+    <View style={{ gap: 10, marginBottom: 12 }}>
+      {/* WTN block */}
+      {wtn.length > 0 && (
+        <View style={{ backgroundColor: colors.bgCard, borderRadius: 16, borderWidth: 1, borderColor: colors.borderSubtle, overflow: 'hidden' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: `${colors.bgElevated}CC`, borderBottomWidth: 1, borderBottomColor: colors.borderSubtle }}>
+            <Ionicons name="globe-outline" size={13} color={colors.accentBlue} />
+            <AppText variant="caption" style={{ color: colors.accentBlue, fontWeight: '700', fontSize: 12 }}>WTN — World Tennis Number</AppText>
+          </View>
+          <View style={{ flexDirection: 'row' }}>
+            {wtn.map((r, i) => (
+              <View
+                key={i}
+                style={{ flex: 1, alignItems: 'center', paddingVertical: 16, borderRightWidth: i < wtn.length - 1 ? 1 : 0, borderRightColor: colors.borderSubtle }}
+              >
+                <AppText style={{ fontSize: 28, fontWeight: '900', color: colors.textPrimary }}>{r.points ?? '—'}</AppText>
+                <AppText variant="muted" style={{ fontSize: 11, marginTop: 2 }}>{r.modality || r.category}</AppText>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
+
+      {/* Federation rankings */}
+      {fed.length > 0 && (
+        <View style={{ backgroundColor: colors.bgCard, borderRadius: 16, borderWidth: 1, borderColor: colors.borderSubtle, overflow: 'hidden' }}>
+          <View style={{ paddingHorizontal: 14, paddingVertical: 10, backgroundColor: `${colors.bgElevated}CC`, borderBottomWidth: 1, borderBottomColor: colors.borderSubtle }}>
+            <AppText variant="muted" style={{ fontWeight: '700', fontSize: 11 }}>Rankings federativos</AppText>
+          </View>
+          {fed.map((r, i) => {
+            const pos = r.position ? Number(r.position) : null;
+            const posColor = pos === 1 ? '#FFD700' : pos === 2 ? '#C0C0C0' : pos === 3 ? '#CD7F32' : colors.accentNeon;
+            return (
+              <View
+                key={i}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 12, borderTopWidth: i === 0 ? 0 : 1, borderTopColor: colors.borderSubtle }}
+              >
+                {/* Position box */}
+                <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: pos ? `${posColor}18` : colors.bgElevated, borderWidth: 1, borderColor: pos ? `${posColor}40` : colors.borderSubtle, alignItems: 'center', justifyContent: 'center' }}>
+                  {pos ? (
+                    <AppText style={{ fontSize: 14, fontWeight: '900', color: posColor }}>{pos}º</AppText>
+                  ) : (
+                    <AppText variant="muted" style={{ fontSize: 12 }}>—</AppText>
+                  )}
+                </View>
+
+                {/* Name + federation + date */}
+                <View style={{ flex: 1 }}>
+                  <AppText variant="caption" style={{ fontWeight: '600', fontSize: 13, lineHeight: 18 }} numberOfLines={2}>
+                    {r.ranking_name || r.category || '—'}
+                  </AppText>
+                  <View style={{ flexDirection: 'row', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+                    {r.federation ? (
+                      <View style={{ paddingHorizontal: 6, paddingVertical: 1, borderRadius: 20, backgroundColor: `${colors.accentBlue}20` }}>
+                        <AppText variant="muted" style={{ fontSize: 10, color: colors.accentBlue, fontWeight: '600' }}>{r.federation}</AppText>
+                      </View>
+                    ) : null}
+                    {r.date ? <AppText variant="muted" style={{ fontSize: 10 }}>{r.date}</AppText> : null}
+                  </View>
+                </View>
+
+                {/* Points */}
+                {r.points ? (
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <AppText style={{ fontSize: 16, fontWeight: '900', color: colors.textPrimary }}>{r.points}</AppText>
+                    <AppText variant="muted" style={{ fontSize: 9 }}>pontos</AppText>
+                  </View>
+                ) : null}
+              </View>
+            );
+          })}
+        </View>
+      )}
+
+      {isStale && (
+        <AppText variant="muted" style={{ fontSize: 10, textAlign: 'center' }}>Dados podem estar desatualizados. Toque em ↻ para atualizar.</AppText>
+      )}
     </View>
   );
 }

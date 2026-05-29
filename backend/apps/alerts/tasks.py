@@ -393,7 +393,12 @@ def dispatch_change_alert(self, edition_id: int, event_id: int):
         # Human-readable body — no raw field names exposed to users
         body = _build_change_body(event.field_changes)
 
-        dedup = f'{kind}:{edition_id}:{event_id}'
+        # Dedup key: edition + event_type + today's date
+        # Using event_id caused duplicates when multiple ingestion runs detected
+        # the same change and created multiple TournamentChangeEvent records.
+        import pytz
+        today_brt = timezone.now().astimezone(pytz.timezone('America/Sao_Paulo')).strftime('%Y-%m-%d')
+        dedup = f'{kind}:{edition_id}:{event.event_type}:{today_brt}'
 
         if prefs.in_app_enabled:
             a = _create_alert(

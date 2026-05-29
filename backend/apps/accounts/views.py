@@ -986,12 +986,10 @@ class DependentInviteViewSet(viewsets.GenericViewSet):
                     link.is_active = True
                     link.save(update_fields=['is_active'])
 
-            # Mark the alert as read
+            # Remove the invite alert — it's no longer actionable
             try:
                 from apps.alerts.models import Alert
-                Alert.objects.filter(dedup_key=f'dependent_invite:{invite.id}').update(
-                    status=Alert.STATUS_READ,
-                )
+                Alert.objects.filter(dedup_key=f'dependent_invite:{invite.id}').delete()
             except Exception:
                 pass
 

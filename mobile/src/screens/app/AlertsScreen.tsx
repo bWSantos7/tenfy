@@ -222,8 +222,14 @@ export function AlertsScreen(_: Props) {
       // Remove the invite alert from the list since we responded
       setAlerts((prev) => prev.filter((a) => a.id !== alert.id));
     } catch (err: any) {
-      const msg = err?.response?.data?.detail || 'Não foi possível processar a resposta.';
-      Toast.show({ type: 'error', text1: 'Erro', text2: msg });
+      const httpStatus = err?.response?.status;
+      if (httpStatus === 400) {
+        setAlerts((prev) => prev.filter((a) => a.id !== alert.id));
+        Toast.show({ type: 'info', text1: 'Este convite já não está mais disponível.' });
+      } else {
+        const msg = err?.response?.data?.detail || 'Não foi possível processar a resposta.';
+        Toast.show({ type: 'error', text1: 'Erro', text2: msg });
+      }
     } finally {
       setRespondingInvite(null);
     }

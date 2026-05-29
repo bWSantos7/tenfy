@@ -78,8 +78,15 @@ export const AlertsPage: React.FC = () => {
         toast('Convite recusado.');
       }
       setItems((prev) => prev.filter((a) => a.id !== alert.id));
-    } catch (err) {
-      toast.error(extractApiError(err));
+    } catch (err: any) {
+      const httpStatus = err?.response?.status;
+      // Invite already responded or canceled — remove the stale alert from the list
+      if (httpStatus === 400) {
+        setItems((prev) => prev.filter((a) => a.id !== alert.id));
+        toast('Este convite já não está mais disponível.');
+      } else {
+        toast.error(extractApiError(err));
+      }
     } finally {
       setRespondingInvite(null);
     }

@@ -49,9 +49,9 @@ export const AppLayout: React.FC = () => {
         <div className="mx-auto max-w-6xl px-4 h-14 flex items-center gap-2">
 
           {/* Logo */}
-          <NavLink to="/inicio" className="flex items-center gap-2 shrink-0 mr-2">
-            <img src="/logos/logo1.png" alt="Tenfy" className="h-7 object-contain dark:hidden" style={{ maxWidth: 110 }} />
-            <img src="/logos/logo1.png" alt="Tenfy" className="h-7 object-contain hidden dark:block" style={{ maxWidth: 110, filter: 'brightness(0) invert(1)' }} />
+          <NavLink to="/inicio" className="flex items-center shrink-0 mr-3">
+            <img src="/logos/logo1.png"     alt="Tenfy" className="h-8 w-auto object-contain dark:hidden" style={{ maxHeight: 32, maxWidth: 140 }} />
+            <img src="/logos/logo_white.png" alt="Tenfy" className="h-8 w-auto object-contain hidden dark:block" style={{ maxHeight: 32, maxWidth: 140 }} />
           </NavLink>
 
           {/* ── Nav items — só visível em desktop (md+) ── */}

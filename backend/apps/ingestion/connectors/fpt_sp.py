@@ -113,9 +113,12 @@ class FPTSPPublicConnector(BaseConnector):
         category_items = (detail_payload.get('category') or []) if detail_payload else []
         value_items = (detail_payload.get('values') or []) if detail_payload else []
 
-        title = (item.get('nome_torneio') or '').strip()
-        if not title:
+        import re as _re
+        raw_title = (item.get('nome_torneio') or '').strip()
+        if not raw_title:
             return None
+        # FPT SP API prefixes titles with the tournament ID, e.g. "22888 - Nome do Torneio"
+        title = _re.sub(r'^\d+\s*[-–]\s*', '', raw_title).strip() or raw_title
 
         route = (item.get('route') or '').strip()
         season_year = int(item.get('ano') or datetime.now().year)

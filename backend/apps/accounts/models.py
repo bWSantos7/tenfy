@@ -1,6 +1,8 @@
 from django.conf import settings
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.db import models
+from datetime import timedelta
+
 from django.db.models import Q
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
@@ -130,7 +132,7 @@ def _invite_token():
 
 
 def _invite_expires():
-    return timezone.now() + timezone.timedelta(days=7)
+    return timezone.now() + timedelta(days=7)
 
 
 class DependentInvite(TimestampedModel):

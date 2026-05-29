@@ -10,8 +10,9 @@ def _invite_token():
 
 
 def _invite_expires():
+    from datetime import timedelta
     from django.utils import timezone
-    return timezone.now() + timezone.timedelta(days=7)
+    return timezone.now() + timedelta(days=7)
 
 
 class Migration(migrations.Migration):

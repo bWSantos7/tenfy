@@ -36,18 +36,6 @@ SOURCES = [
         'legal_notes': 'API pública Tennis Tool — mesma plataforma do CBT. Host: fpt.tenisintegrado.com.br. Dados públicos.',
     },
     {
-        'org_short': 'FPT',
-        'source_name': 'FPT Calendário Público',
-        'connector_key': 'fpt_public',
-        'source_type': 'html',
-        'base_url': 'https://fpt.com.br/Torneio/Calendario/',
-        'fetch_schedule_cron': '0 */2 * * *',  # every 2 hours
-        'priority': 'P1',
-        'enabled': False,
-        'config_json': {'years': [CURRENT_YEAR]},
-        'legal_notes': 'Public calendar page — fpt.com.br (Federação Paranaense). Scraping respects rate limits.',
-    },
-    {
         'org_short': 'CBT',
         'source_name': 'CBT / Tênis Integrado API',
         'connector_key': 'cbt_public',

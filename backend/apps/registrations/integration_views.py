@@ -102,7 +102,6 @@ _CONNECTOR_TO_SOURCE = {
 
 # URL domain → source (tenisintegrado handled separately: could be cbt/fct/fmt)
 _URL_DOMAIN_TO_SOURCE = [
-    ('fpt.com.br',                   'fpt'),
     ('fbt.com.br',                   'fbt'),
     ('cbt-tenis.com.br',             'cbt'),
     ('tennistool.tenisintegrado.com', None),   # need connector_key to distinguish
@@ -258,21 +257,7 @@ def derive_entries_source_url(edition: TournamentEdition):
         entries_url = source_url
         return entries_url, ranking_url, candidates
 
-    # 2. FPT: derive inscrição URL from /Torneio/Info/ pattern
-    if 'fpt.com.br' in source_url:
-        m = re.search(r'/Torneio/Info/(.+)-(\d+)/?$', source_url)
-        if m:
-            slug, tid = m.group(1), m.group(2)
-            fpt_candidates = [
-                f'https://fpt.com.br/Inscricao/Torneio/{slug}-{tid}',
-                f'https://fpt.com.br/Inscricao/InscricaoTorneio/Tenis/{slug}-{tid}',
-                f'https://fpt.com.br/Torneio/Inscritos/{slug}-{tid}',
-            ]
-            candidates.extend(fpt_candidates)
-            if not entries_url:
-                entries_url = fpt_candidates[0]
-
-    # 3. CBT/Tenisintegrado: check raw_payload + extract tournament ID
+    # 2. CBT/Tenisintegrado: check raw_payload + extract tournament ID
     if not entries_url and ('tenisintegrado' in source_url or 'cbt-tenis' in source_url.lower()):
         payload = edition.raw_payload or {}
         redirect = (

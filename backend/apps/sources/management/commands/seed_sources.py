@@ -18,7 +18,7 @@ ORGANIZATIONS = [
         'name': 'Federacao Paulista de Tenis',
         'short_name': 'FPT',
         'type': Organization.TYPE_FEDERATION,
-        'website_url': 'https://fpt.com.br',
+        'website_url': 'https://fpt.tenisintegrado.com.br',
         'state': 'SP',
     },
     {
@@ -78,19 +78,14 @@ DATA_SOURCES = [
     },
     {
         'org_short': 'FPT',
-        'source_name': 'FPT - Area Publica (sisfpt) + tenispaulista',
-        'slug': 'fpt-public',
-        'source_type': DataSource.SOURCE_TYPE_HTML,
-        'base_url': 'https://sisfpt.com.br',
-        'connector_key': 'fpt_public',
+        'source_name': 'FPT (SP) - Tennis Tool API',
+        'slug': 'fpt-sp-tennistool',
+        'source_type': DataSource.SOURCE_TYPE_JSON,
+        'base_url': 'https://api.tennistool.tenisintegrado.com/tournaments/tournament/getTournamentDepartmentList',
+        'connector_key': 'fpt_sp_public',
         'fetch_schedule_cron': '15 */2 * * *',
         'priority': 'P0',
-        'config_json': {
-            'urls': [
-                'https://sisfpt.com.br/area-publica/torneios/abertos',
-                'https://www.tenispaulista.com.br/category/calendario/',
-            ],
-        },
+        'config_json': {},
     },
     {
         'org_short': 'FCT',

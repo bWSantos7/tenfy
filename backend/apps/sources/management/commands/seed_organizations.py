@@ -1,5 +1,5 @@
 """
-Seed core organizations (CBT, FPT, COSAT, ITF, UTR, FMT) and their data source stubs.
+Seed core organizations (CBT, FPT, COSAT, ITF, UTR, FMT, FCT) and their data source stubs.
 
 Usage:
     python manage.py seed_organizations
@@ -23,14 +23,6 @@ ORGANIZATIONS = [
         'website_url': 'https://fpt.tenisintegrado.com.br',
         'state': 'SP',
         'description': 'Federação estadual de São Paulo (SP), com maior densidade de torneios abertos no país. Plataforma: fpt.tenisintegrado.com.br.',
-    },
-    {
-        'name': 'Federação Paranaense de Tênis',
-        'short_name': 'FPT (Paraná)',
-        'type': Organization.TYPE_FEDERATION,
-        'website_url': 'https://fpt.com.br',
-        'state': 'PR',
-        'description': 'Federação estadual do Paraná (PR). Calendário em fpt.com.br.',
     },
     {
         'name': 'Confederação Sulamericana de Tênis',
@@ -97,17 +89,6 @@ DATA_SOURCES = [
         'priority': 'P0',
         'legal_notes': 'API pública Tennis Tool para o departamento Tennis Kids (tipo_depto=7) da FPT (SP). Dados públicos sem autenticação.',
         'enabled': False,
-    },
-    {
-        'org_short': 'FPaT',
-        'source_name': 'FPaT (PR) – Área pública de torneios abertos',
-        'slug': 'fpat-public-tournaments',
-        'source_type': DataSource.SOURCE_TYPE_HTML,
-        'base_url': 'https://fpt.com.br/Torneio/Calendario',
-        'connector_key': 'fpt_public',
-        'fetch_schedule_cron': '0 */4 * * *',
-        'priority': 'P1',
-        'legal_notes': 'Calendário público FPaT (Federação Paranaense de Tênis). Dados acessíveis sem autenticação.',
     },
     {
         'org_short': 'FPT',
@@ -184,7 +165,7 @@ DATA_SOURCES = [
 
 
 class Command(BaseCommand):
-    help = 'Seed core organizations (CBT, FPT, FPaT, COSAT, ITF, UTR, FMT, FCT) and data source stubs'
+    help = 'Seed core organizations (CBT, FPT, COSAT, ITF, UTR, FMT, FCT) and data source stubs'
 
     def handle(self, *args, **options):
         org_map: dict[str, Organization] = {}

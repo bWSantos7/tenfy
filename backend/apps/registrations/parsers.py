@@ -629,18 +629,14 @@ def parse_cbt_entries(html_or_text: str, source_url: str = '') -> dict:
 
 def parse_fpt_entries(html_or_text: str, source_url: str = '') -> dict:
     """
-    FPT entry parser.
+    FPT (SP / Paulista) entry parser.
 
-    Two modes depending on the URL:
-    - FPT (SP / Paulista) uses fpt.tenisintegrado.com.br (same platform as CBT).
-      Auto-fetch via POST /torneio_painel_insc/index/{id} — no html_or_text needed.
-    - FPT (PR / Paranaense) uses fpt.com.br. /Inscricao/Lista/ returns 404.
-      Requires pasted HTML or manual CSV.
+    Uses fpt.tenisintegrado.com.br (same platform as CBT).
+    Auto-fetch via POST /torneio_painel_insc/index/{id} — no html_or_text needed.
     """
     source = 'fpt'
     ranking_source = 'FPT'
 
-    # FPT SP uses Tenis Integrado — same auto-fetch as CBT/FBT
     is_tenisintegrado = 'tenisintegrado' in (source_url or '').lower()
     if is_tenisintegrado and not (html_or_text or '').strip():
         return fetch_tenisintegrado_entries(source_url, source=source)
@@ -650,10 +646,8 @@ def parse_fpt_entries(html_or_text: str, source_url: str = '') -> dict:
             'entries': [],
             'parser_warning': True,
             'warning_message': (
-                'FPT (PR): sem dados de entrada. '
-                '/Inscricao/Lista/ retorna 404. '
-                'Para FPT (SP), forneça source_url do torneio TenisIntegrado. '
-                'Para FPT (PR), cole HTML da página de inscritos como input.'
+                'FPT (SP): forneça source_url do torneio TenisIntegrado '
+                'ou cole HTML da página de inscritos como input.'
             ),
             'confidence': 'low',
             'source': source,
@@ -667,7 +661,6 @@ def parse_fpt_entries(html_or_text: str, source_url: str = '') -> dict:
             'parser_warning': True,
             'warning_message': (
                 'FPT: nenhum inscrito extraído. '
-                'FPT (PR) não expõe lista nominal via endpoint público. '
                 'Use importação manual CSV ou cole HTML da página de inscritos.'
             ),
             'confidence': 'low',

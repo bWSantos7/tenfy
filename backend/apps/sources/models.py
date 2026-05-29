@@ -66,7 +66,7 @@ class DataSource(TimestampedModel):
     base_url = models.URLField()
     connector_key = models.CharField(
         max_length=100,
-        help_text='Key matching a connector class (e.g. fpt_public, cbt_regulation)'
+        help_text='Key matching a connector class (e.g. fpt_sp_public, cbt_public)'
     )
     fetch_schedule_cron = models.CharField(
         max_length=100,

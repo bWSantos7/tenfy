@@ -2,7 +2,6 @@ from . import base    # noqa
 from . import cbt     # noqa
 from . import cosat   # noqa
 from . import fct     # noqa
-from . import fpt     # noqa
 from . import fpt_sp  # noqa
 from . import itf     # noqa
 from . import utr     # noqa
@@ -12,7 +11,7 @@ from . import utr     # noqa
 from .base import register_connector, registered_connectors  # noqa: F401
 
 __all__ = [
-    'base', 'cbt', 'cosat', 'fct', 'fpt', 'fpt_sp', 'itf', 'utr',
+    'base', 'cbt', 'cosat', 'fct', 'fpt_sp', 'itf', 'utr',
     'register_connector', 'registered_connectors',
 ]
 # CBTYouthConnector is registered in cbt module alongside CBTPublicConnector

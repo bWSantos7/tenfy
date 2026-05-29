@@ -1,7 +1,7 @@
 export type AppTheme = 'dark' | 'light';
 
-// Tenfy official brand palette
-// Azul Profundo: #0A1330 | Lima Tênis: #C6EF21 | Laranja Barro: #FF6A00
+// Tenfy brand palette — v2
+// Azul Profundo: #0A1330 | Esmeralda: #10B981 | Laranja Barro: #FF6A00
 // Off-white: #F6F7FA | Grafite: #1D232D
 export const palette = {
   light: {
@@ -16,10 +16,10 @@ export const palette = {
     // Primary CTA in light mode = Azul Profundo (navy button, white text)
     accentNeon: '#0A1330',
     accentNeonDark: '#060D20',
-    accentLime: '#C6EF21',
+    accentLime: '#10B981',
     accentOrange: '#FF6A00',
     accentBlue: '#3B82F6',
-    statusOpen: '#22C55E',
+    statusOpen: '#10B981',
     statusClosing: '#FF6A00',
     statusClosed: '#8C9AB5',
     statusDrawn: '#3B82F6',
@@ -38,13 +38,13 @@ export const palette = {
     textSecondary: '#AAB9CD',
     textMuted: '#5F738C',
     borderSubtle: '#2A3550',
-    // Primary CTA in dark mode = Lima Tênis (lime button, navy text)
-    accentNeon: '#C6EF21',
-    accentNeonDark: '#B0D61E',
-    accentLime: '#C6EF21',
+    // Primary CTA in dark mode = Esmeralda (emerald button, white text)
+    accentNeon: '#10B981',
+    accentNeonDark: '#059669',
+    accentLime: '#10B981',
     accentOrange: '#FF6A00',
     accentBlue: '#3B82F6',
-    statusOpen: '#C6EF21',
+    statusOpen: '#10B981',
     statusClosing: '#FF6A00',
     statusClosed: '#5F738C',
     statusDrawn: '#3B82F6',

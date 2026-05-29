@@ -30,8 +30,8 @@
   --text-muted:     95 115 140;  /* #5F738C */
   --border-subtle:  42 53 80;    /* #2A3550 */
 
-  /* Em dark mode o CTA é lima — texto escuro para contraste */
-  --btn-text: 10 19 48; /* navy sobre lima */
+  /* Em dark mode o CTA é esmeralda — texto branco para contraste */
+  --btn-text: 255 255 255; /* branco sobre esmeralda */
 }
 
 html, body, #root {

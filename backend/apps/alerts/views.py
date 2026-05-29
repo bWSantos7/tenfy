@@ -12,7 +12,13 @@ class AlertViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_fields = ('kind', 'channel', 'status')
 
     def get_queryset(self):
-        return Alert.objects.filter(user=self.request.user).select_related('edition').order_by('-created_at')
+        # Only in-app alerts appear in the inbox — push alerts are delivery records, not inbox items
+        return (
+            Alert.objects
+            .filter(user=self.request.user, channel=Alert.CHANNEL_IN_APP)
+            .select_related('edition')
+            .order_by('-created_at')
+        )
 
     @action(detail=False, methods=['get'])
     def unread(self, request):

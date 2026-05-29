@@ -45,6 +45,12 @@ TASKS = [
         'cron': {'minute': '45', 'hour': '*', 'day_of_week': '*', 'day_of_month': '*', 'month_of_year': '*'},
         'description': 'Sync FPT (SP) tournament inscritos from fpt.tenisintegrado.com.br every hour at :45',
     },
+    {
+        'name': 'sync-all-ti-profiles-every-2h',
+        'task': 'apps.players.tasks.sync_all_ti_profiles_task',
+        'cron': {'minute': '50', 'hour': '*/2', 'day_of_week': '*', 'day_of_month': '*', 'month_of_year': '*'},
+        'description': 'Sync TI results & rankings for all profiles with a Tênis Integrado ID every 2 hours at :50',
+    },
 ]
 
 

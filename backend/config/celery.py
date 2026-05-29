@@ -35,6 +35,10 @@ app.conf.beat_schedule = {
         'task': 'apps.ingestion.tasks.sync_cosat_from_mongo_task',
         'schedule': crontab(minute=30, hour='*/6'),  # 00:30, 06:30, 12:30, 18:30 UTC
     },
+    'sync-all-ti-profiles-every-2h': {
+        'task': 'apps.players.tasks.sync_all_ti_profiles_task',
+        'schedule': crontab(minute=50, hour='*/2'),  # 00:50, 02:50, 04:50 … UTC
+    },
 }
 
 

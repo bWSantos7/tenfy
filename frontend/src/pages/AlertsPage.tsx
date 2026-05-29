@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Bell, BellOff, BellRing, Loader2, CheckCheck, Clock, AlertCircle, Sparkles, XCircle, ExternalLink,
+  Bell, BellOff, BellRing, Loader2, CheckCheck, Clock, AlertCircle, Sparkles, XCircle, ExternalLink, Users,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Alert } from '../types';
-import { listAlerts, markAlertRead, markAllAlertsRead } from '../services/data';
+import { listAlerts, markAlertRead, markAllAlertsRead, respondDependentInvite } from '../services/data';
 import { fmtRelative } from '../utils/format';
 import { extractApiError } from '../services/api';
 import { usePushNotifications } from '../hooks/usePushNotifications';
@@ -22,6 +22,7 @@ export const AlertsPage: React.FC = () => {
   const [items, setItems] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
   const [pushGranted, setPushGranted] = useState<boolean | null>(null);
+  const [respondingInvite, setRespondingInvite] = useState<number | null>(null);
   const push = usePushNotifications();
 
   useEffect(() => {
@@ -62,6 +63,25 @@ export const AlertsPage: React.FC = () => {
       const ok = await push.subscribe();
       if (ok) { setPushGranted(true); toast.success('Notificações push ativadas!'); }
       else if (push.error) toast.error(push.error);
+    }
+  }
+
+  async function handleInviteResponse(alert: Alert, action: 'accept' | 'decline') {
+    const inviteId = alert.payload?.invite_id as number | undefined;
+    if (!inviteId) return;
+    setRespondingInvite(alert.id);
+    try {
+      await respondDependentInvite(inviteId, action);
+      if (action === 'accept') {
+        toast.success('Convite aceito! Você agora é dependente do responsável.');
+      } else {
+        toast('Convite recusado.');
+      }
+      setItems((prev) => prev.filter((a) => a.id !== alert.id));
+    } catch (err) {
+      toast.error(extractApiError(err));
+    } finally {
+      setRespondingInvite(null);
     }
   }
 
@@ -141,42 +161,69 @@ export const AlertsPage: React.FC = () => {
         </div>
       ) : (
         <div className="space-y-2">
-          {items.map((a) => (
-            <div
-              key={a.id}
-              onClick={() => a.status !== 'read' && markRead(a.id)}
-              className={`card flex gap-3 cursor-pointer hover:border-accent-neon/30 transition-colors ${
-                a.status === 'read' ? 'opacity-60' : ''
-              }`}
-            >
-              <div className="shrink-0 mt-0.5">{KIND_ICONS[a.kind]}</div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-start justify-between gap-2">
-                  <h3 className="font-semibold text-sm leading-tight">{a.title}</h3>
-                  {a.status !== 'read' && (
-                    <span className="w-2 h-2 rounded-full bg-accent-neon shrink-0 mt-1.5" />
-                  )}
+          {items.map((a) => {
+            const isInvite = a.payload?.action === 'dependent_invite';
+            const isRespondingThis = respondingInvite === a.id;
+            return (
+              <div
+                key={a.id}
+                onClick={() => !isInvite && a.status !== 'read' ? markRead(a.id) : undefined}
+                className={`card flex gap-3 transition-colors ${
+                  isInvite ? 'border-blue-500/30 bg-blue-500/5' : 'cursor-pointer hover:border-accent-neon/30'
+                } ${a.status === 'read' && !isInvite ? 'opacity-60' : ''}`}
+              >
+                <div className="shrink-0 mt-0.5">
+                  {isInvite ? <Users className="w-5 h-5 text-blue-400" /> : KIND_ICONS[a.kind]}
                 </div>
-                {a.body && (
-                  <p className="text-xs text-text-secondary mt-1 whitespace-pre-line line-clamp-3">
-                    {a.body}
-                  </p>
-                )}
-                <div className="flex items-center gap-3 mt-2 text-[10px] text-text-muted">
-                  <span>{fmtRelative(a.created_at)}</span>
-                  {a.edition && (
-                    <Link
-                      to={`/torneios/${a.edition}`}
-                      onClick={(e) => e.stopPropagation()}
-                      className="text-accent-blue hover:underline flex items-center gap-0.5"
-                    >
-                      <ExternalLink className="w-3 h-3" /> Ver torneio
-                    </Link>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="font-semibold text-sm leading-tight">{a.title}</h3>
+                    {a.status !== 'read' && (
+                      <span className="w-2 h-2 rounded-full bg-accent-neon shrink-0 mt-1.5" />
+                    )}
+                  </div>
+                  {a.body && (
+                    <p className="text-xs text-text-secondary mt-1 whitespace-pre-line line-clamp-3">
+                      {a.body}
+                    </p>
+                  )}
+                  <div className="flex items-center gap-3 mt-2 text-[10px] text-text-muted">
+                    <span>{fmtRelative(a.created_at)}</span>
+                    {!isInvite && a.edition && (
+                      <Link
+                        to={`/torneios/${a.edition}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-accent-blue hover:underline flex items-center gap-0.5"
+                      >
+                        <ExternalLink className="w-3 h-3" /> Ver torneio
+                      </Link>
+                    )}
+                    {isInvite && (
+                      <span className="text-blue-400 font-medium">Convite familiar</span>
+                    )}
+                  </div>
+                  {isInvite && (
+                    <div className="flex gap-2 mt-3">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleInviteResponse(a, 'decline'); }}
+                        disabled={isRespondingThis}
+                        className="flex-1 py-1.5 rounded-lg border border-red-400/40 text-red-400 text-xs font-bold hover:bg-red-400/10 disabled:opacity-50 transition-colors"
+                      >
+                        {isRespondingThis ? <Loader2 className="w-3 h-3 animate-spin mx-auto" /> : 'Recusar'}
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleInviteResponse(a, 'accept'); }}
+                        disabled={isRespondingThis}
+                        className="flex-1 py-1.5 rounded-lg bg-blue-500 text-white text-xs font-bold hover:bg-blue-600 disabled:opacity-50 transition-colors"
+                      >
+                        {isRespondingThis ? <Loader2 className="w-3 h-3 animate-spin mx-auto" /> : 'Aceitar'}
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

@@ -10,9 +10,9 @@ import {
 import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { ParentChild, PlayerProfile } from '../types';
-import { listProfiles, setPrimary, deleteProfile, updateProfile, requestDataExport, listChildren, removeChild, createChildWithProfile, listChildProfiles, createChildProfile, sendChildPasswordReset, updateChildAccount } from '../services/data';
-import { deleteAccount, uploadAvatar, linkExistingChild } from '../services/auth';
+import { DependentInvite, ParentChild, PlayerProfile, PlayerSearchResult } from '../types';
+import { listProfiles, setPrimary, deleteProfile, updateProfile, requestDataExport, listChildren, removeChild, createChildWithProfile, listChildProfiles, createChildProfile, sendChildPasswordReset, updateChildAccount, searchPlayersForInvite, sendDependentInvite, listSentInvites, cancelDependentInvite, respondDependentInvite } from '../services/data';
+import { deleteAccount, linkExistingChild, uploadAvatar } from '../services/auth';
 import { extractApiError, mediaUrl } from '../services/api';
 import { createChildAccount } from '../services/data';
 import { LEVEL_LABELS, GENDER_LABELS, TENNIS_CLASS_LABELS, ROLE_LABELS } from '../utils/format';
@@ -64,6 +64,8 @@ export const ProfilePage: React.FC = () => {
   const [loadingChildren, setLoadingChildren] = useState(false);
   const [showAddChild, setShowAddChild] = useState(false);
   const [confirmRemoveChild, setConfirmRemoveChild] = useState<number | null>(null);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [sentInvites, setSentInvites] = useState<DependentInvite[]>([]);
 
   async function load() {
     setLoading(true);
@@ -80,8 +82,12 @@ export const ProfilePage: React.FC = () => {
   async function loadChildren() {
     setLoadingChildren(true);
     try {
-      const data = await listChildren();
+      const [data, invites] = await Promise.all([
+        listChildren(),
+        listSentInvites().catch(() => [] as DependentInvite[]),
+      ]);
       setChildren(data);
+      setSentInvites(invites.filter((i) => i.status === 'pending'));
     } catch {
       // silently ignore if endpoint not available
     } finally {
@@ -344,18 +350,69 @@ export const ProfilePage: React.FC = () => {
               <h2 className="font-bold">Meus dependentes — Perfil esportivo</h2>
               <p className="text-xs text-text-muted mt-0.5">Gerencie os dependentes e seus perfis de jogador</p>
             </div>
-            <button
-              onClick={() => setShowAddChild((v) => !v)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-accent-neon bg-accent-neon/10 border border-accent-neon/30 hover:bg-accent-neon/20 transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5" /> Novo
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowInviteModal(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-blue-400 bg-blue-400/10 border border-blue-400/30 hover:bg-blue-400/20 transition-colors"
+              >
+                <Users className="w-3.5 h-3.5" /> Vincular
+              </button>
+              <button
+                onClick={() => setShowAddChild((v) => !v)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-accent-neon bg-accent-neon/10 border border-accent-neon/30 hover:bg-accent-neon/20 transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" /> Novo
+              </button>
+            </div>
           </div>
 
           {showAddChild && (
             <AddChildForm
               onAdded={() => { setShowAddChild(false); loadChildren(); }}
               onCancel={() => setShowAddChild(false)}
+            />
+          )}
+
+          {/* Pending sent invites */}
+          {sentInvites.length > 0 && (
+            <div className="mb-3 space-y-2">
+              <p className="text-xs font-bold text-text-muted">Convites aguardando resposta</p>
+              {sentInvites.map((inv) => (
+                <div key={inv.id} className="flex items-center gap-3 p-3 rounded-xl bg-blue-500/5 border border-blue-500/20">
+                  <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 font-bold text-sm shrink-0">
+                    {(inv.invitee_detail.full_name || inv.invitee_detail.email || 'J').slice(0, 1).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold truncate">{inv.invitee_detail.full_name || '—'}</p>
+                    <p className="text-xs text-text-muted truncate">{inv.invitee_detail.email}</p>
+                  </div>
+                  <span className="text-xs text-text-muted whitespace-nowrap">Aguardando</span>
+                  <button
+                    onClick={async () => {
+                      if (!confirm(`Cancelar o convite enviado para ${inv.invitee_detail.full_name || inv.invitee_detail.email}?`)) return;
+                      try {
+                        await cancelDependentInvite(inv.id);
+                        setSentInvites((prev) => prev.filter((i) => i.id !== inv.id));
+                        toast.success('Convite cancelado.');
+                      } catch (err) { toast.error(extractApiError(err)); }
+                    }}
+                    className="text-red-400 hover:text-red-500 shrink-0"
+                    title="Cancelar convite"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {showInviteModal && (
+            <LinkPlayerModal
+              onClose={() => setShowInviteModal(false)}
+              onInviteSent={(inv) => {
+                setSentInvites((prev) => prev.find((i) => i.id === inv.id) ? prev : [inv, ...prev]);
+                setShowInviteModal(false);
+              }}
             />
           )}
 
@@ -768,9 +825,15 @@ const AddChildForm: React.FC<{
     if (!account.email.trim()) return;
     setSaving(true);
     try {
-      await linkExistingChild(account.email.trim());
-      toast.success('Dependente vinculado com sucesso!');
-      onAdded();
+      const res = await linkExistingChild(account.email.trim());
+      if ((res as any).requires_invite) {
+        toast.success('Convite enviado! O jogador receberá uma notificação para aceitar o vínculo.');
+        setDuplicateEmailDetected(false);
+        // Não chamamos onAdded — o vínculo ainda não foi criado
+      } else {
+        toast.success('Dependente vinculado com sucesso!');
+        onAdded();
+      }
     } catch (err) {
       toast.error(extractApiError(err));
     } finally {
@@ -802,22 +865,24 @@ const AddChildForm: React.FC<{
         </div>
 
         {duplicateEmailDetected && (
-          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 space-y-2">
+          <div className="rounded-xl border border-blue-500/30 bg-blue-500/8 p-3 space-y-2">
             <div className="flex items-start gap-2">
-              <AlertTriangle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+              <Users className="w-4 h-4 text-blue-400 mt-0.5 shrink-0" />
               <div>
-                <p className="text-sm font-semibold text-amber-400">Este e-mail já possui cadastro no Tenfy.</p>
-                <p className="text-xs text-text-secondary mt-0.5">Deseja vincular esta conta existente como dependente do seu perfil?</p>
+                <p className="text-sm font-semibold text-blue-400">Este e-mail já possui uma conta no Tenfy.</p>
+                <p className="text-xs text-text-secondary mt-0.5">
+                  Envie um convite de vínculo. O jogador receberá uma notificação e precisará aceitar antes de ser vinculado como dependente.
+                </p>
               </div>
             </div>
             <div className="flex gap-2">
               <button
                 type="button"
-                className="btn-primary flex-1 !text-xs !py-1.5"
+                className="flex-1 py-1.5 rounded-lg text-xs font-bold text-white bg-blue-500 hover:bg-blue-600 disabled:opacity-50 transition-colors"
                 onClick={handleLinkExisting}
                 disabled={saving}
               >
-                {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin mx-auto" /> : 'Sim, vincular como dependente'}
+                {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin mx-auto" /> : 'Enviar convite de vínculo'}
               </button>
               <button
                 type="button"
@@ -1280,6 +1345,136 @@ const ChildProfileEditor: React.FC<{
         <button className="btn-primary flex-1 !text-xs !py-1.5" onClick={save} disabled={saving}>
           {saving ? <Loader2 className="w-3 h-3 animate-spin mx-auto" /> : 'Salvar'}
         </button>
+      </div>
+    </div>
+  );
+};
+
+// ─── LinkPlayerModal ─────────────────────────────────────────────────────────
+
+const LinkPlayerModal: React.FC<{
+  onClose: () => void;
+  onInviteSent: (invite: DependentInvite) => void;
+}> = ({ onClose, onInviteSent }) => {
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<PlayerSearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searchErr, setSearchErr] = useState<string | null>(null);
+  const [sending, setSending] = useState<number | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function handleQuery(text: string) {
+    setQuery(text);
+    setSearchErr(null);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (text.trim().length < 2) { setResults([]); return; }
+    debounceRef.current = setTimeout(async () => {
+      setSearching(true);
+      try {
+        setResults(await searchPlayersForInvite(text.trim()));
+      } catch (err) {
+        setSearchErr(extractApiError(err));
+      } finally {
+        setSearching(false);
+      }
+    }, 450);
+  }
+
+  async function invite(player: PlayerSearchResult) {
+    setSending(player.id);
+    try {
+      const inv = await sendDependentInvite(player.id);
+      toast.success(`Convite enviado para ${player.full_name || player.email}`);
+      onInviteSent(inv);
+    } catch (err) {
+      toast.error(extractApiError(err));
+    } finally {
+      setSending(null);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 p-4 pt-16 overflow-y-auto">
+      <div className="bg-bg-card border border-border-subtle rounded-2xl shadow-xl w-full max-w-md">
+        {/* Header */}
+        <div className="flex items-center gap-3 p-4 border-b border-border-subtle">
+          <button onClick={onClose} className="text-text-muted hover:text-text-primary transition-colors">
+            <ChevronDown className="w-5 h-5" />
+          </button>
+          <div>
+            <h2 className="font-bold text-sm">Vincular jogador existente</h2>
+            <p className="text-xs text-text-muted">O jogador receberá um convite para aceitar o vínculo</p>
+          </div>
+        </div>
+
+        {/* Search */}
+        <div className="p-4 border-b border-border-subtle">
+          <div className="flex items-center gap-2 bg-bg-base rounded-xl border border-border-subtle px-3 py-2">
+            {searching
+              ? <Loader2 className="w-4 h-4 text-text-muted animate-spin shrink-0" />
+              : <Bell className="w-4 h-4 text-text-muted shrink-0" />
+            }
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => handleQuery(e.target.value)}
+              placeholder="Buscar por nome do jogador..."
+              className="flex-1 bg-transparent text-sm outline-none text-text-primary placeholder:text-text-muted"
+              autoFocus
+            />
+            {query && (
+              <button onClick={() => { setQuery(''); setResults([]); }} className="text-text-muted hover:text-text-primary">
+                <ChevronDown className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+          {query.length > 0 && query.length < 2 && (
+            <p className="text-xs text-text-muted mt-1">Digite ao menos 2 letras para buscar</p>
+          )}
+          {searchErr && <p className="text-xs text-red-400 mt-1">{searchErr}</p>}
+        </div>
+
+        {/* Results */}
+        <div className="max-h-80 overflow-y-auto">
+          {results.length === 0 && query.trim().length >= 2 && !searching ? (
+            <div className="py-8 text-center text-text-muted space-y-1">
+              <p className="text-sm">Nenhum jogador encontrado</p>
+              <p className="text-xs">Verifique o nome ou peça ao jogador para criar uma conta no Tenfy.</p>
+            </div>
+          ) : (
+            results.map((player) => (
+              <div key={player.id} className="flex items-center gap-3 px-4 py-3 border-b border-border-subtle last:border-b-0">
+                <div className="w-9 h-9 rounded-full bg-accent-neon/20 flex items-center justify-center text-accent-neon font-bold text-sm shrink-0 overflow-hidden">
+                  {player.avatar
+                    ? <img src={mediaUrl(player.avatar)} alt="" className="w-full h-full object-cover" />
+                    : (player.full_name || player.email || 'J').slice(0, 1).toUpperCase()
+                  }
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold truncate">{player.full_name || '—'}</p>
+                  <p className="text-xs text-text-muted truncate">{player.email}</p>
+                </div>
+                <button
+                  onClick={() => invite(player)}
+                  disabled={sending === player.id}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-blue-400 bg-blue-400/10 border border-blue-400/30 hover:bg-blue-400/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {sending === player.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Users className="w-3 h-3" />}
+                  {sending === player.id ? 'Enviando...' : 'Convidar'}
+                </button>
+              </div>
+            ))
+          )}
+          {results.length === 0 && query.trim().length < 2 && (
+            <div className="py-6 text-center text-text-muted">
+              <p className="text-xs">Digite o nome para buscar jogadores cadastrados na plataforma.</p>
+            </div>
+          )}
+        </div>
+
+        <div className="p-4">
+          <button className="btn-secondary w-full !text-sm" onClick={onClose}>Fechar</button>
+        </div>
       </div>
     </div>
   );

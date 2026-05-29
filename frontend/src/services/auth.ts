@@ -75,7 +75,10 @@ export async function createChildAccount(payload: {
   return res.data;
 }
 
-export async function linkExistingChild(email: string): Promise<{ id: number; child: number; child_detail: { full_name: string; email: string } }> {
+export async function linkExistingChild(email: string): Promise<
+  { id: number; child: number; child_detail: { full_name: string; email: string } } |
+  { detail: string; requires_invite: true; invite: import('../types').DependentInvite }
+> {
   const res = await api.post('/api/auth/children/link/', { email });
   return res.data;
 }

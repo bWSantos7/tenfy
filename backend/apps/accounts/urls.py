@@ -17,6 +17,7 @@ from .views import (
     data_export,
     CoachAthleteViewSet,
     ParentChildViewSet,
+    DependentInviteViewSet,
 )
 
 class ThrottledTokenRefreshView(TokenRefreshView):
@@ -28,6 +29,7 @@ class ThrottledTokenRefreshView(TokenRefreshView):
 router = DefaultRouter()
 router.register('coach/athletes', CoachAthleteViewSet, basename='coach-athlete')
 router.register('children', ParentChildViewSet, basename='parent-child')
+router.register('invites', DependentInviteViewSet, basename='dependent-invite')
 
 urlpatterns = [
     path('', include(router.urls)),

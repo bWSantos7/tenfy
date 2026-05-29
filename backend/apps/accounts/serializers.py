@@ -177,6 +177,41 @@ class ChildAccountCreateSerializer(serializers.Serializer):
         return ParentChild.objects.create(parent=parent, child=child)
 
 
+class PlayerSearchSerializer(serializers.ModelSerializer):
+    """Minimal public data returned when a parent searches for a player to invite."""
+    class Meta:
+        model = User
+        fields = ('id', 'full_name', 'email', 'avatar', 'role')
+
+
+class DependentInviteSerializer(serializers.ModelSerializer):
+    parent_detail = serializers.SerializerMethodField()
+    invitee_detail = serializers.SerializerMethodField()
+    is_expired = serializers.SerializerMethodField()
+
+    class Meta:
+        from .models import DependentInvite
+        model = DependentInvite
+        fields = (
+            'id', 'parent', 'invitee',
+            'parent_detail', 'invitee_detail',
+            'status', 'is_expired',
+            'expires_at', 'responded_at', 'created_at',
+        )
+        read_only_fields = fields
+
+    def get_parent_detail(self, obj):
+        return {'id': obj.parent.id, 'full_name': obj.parent.full_name, 'email': obj.parent.email,
+                'avatar': obj.parent.avatar.url if obj.parent.avatar else None}
+
+    def get_invitee_detail(self, obj):
+        return {'id': obj.invitee.id, 'full_name': obj.invitee.full_name, 'email': obj.invitee.email,
+                'avatar': obj.invitee.avatar.url if obj.invitee.avatar else None}
+
+    def get_is_expired(self, obj) -> bool:
+        return obj.is_expired()
+
+
 class CoachAthleteSerializer(serializers.ModelSerializer):
     athlete_detail = AthleteUserSerializer(source='athlete', read_only=True)
     athlete_email = serializers.EmailField(write_only=True)

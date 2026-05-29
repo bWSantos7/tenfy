@@ -1,5 +1,5 @@
 import api from './api';
-import { Alert, CoachAthlete, Paginated, ParentChild, PlayerCategory, PlayerProfile, WatchlistItem } from '../types';
+import { Alert, CoachAthlete, DependentInvite, Paginated, ParentChild, PlayerCategory, PlayerProfile, PlayerSearchResult, WatchlistItem } from '../types';
 
 // ----- Players -----
 export async function listProfiles() {
@@ -156,6 +156,40 @@ export async function removeChild(linkId: number) {
 }
 export async function sendChildPasswordReset(linkId: number) {
   await api.post(`/api/auth/children/${linkId}/reset-password/`);
+}
+
+export async function updateChildAccount(linkId: number, data: { full_name?: string; email?: string }) {
+  const res = await api.patch<ParentChild>(`/api/auth/children/${linkId}/update-account/`, data);
+  return res.data;
+}
+export async function createChildAccount(data: { full_name: string; email: string; password: string; password_confirm: string; phone?: string }): Promise<ParentChild> {
+  const res = await api.post<ParentChild>('/api/auth/children/', data);
+  return res.data;
+}
+
+// ----- Dependent Invites -----
+export async function searchPlayersForInvite(q: string) {
+  const res = await api.get<PlayerSearchResult[]>(`/api/auth/children/search-players/?q=${encodeURIComponent(q)}`);
+  return res.data;
+}
+export async function sendDependentInvite(inviteeId: number) {
+  const res = await api.post<DependentInvite>('/api/auth/children/invite/', { invitee_id: inviteeId });
+  return res.data;
+}
+export async function listSentInvites() {
+  const res = await api.get<DependentInvite[]>('/api/auth/children/sent-invites/');
+  return res.data;
+}
+export async function cancelDependentInvite(inviteId: number) {
+  return api.delete(`/api/auth/children/sent-invites/${inviteId}/`);
+}
+export async function listReceivedInvites() {
+  const res = await api.get<DependentInvite[]>('/api/auth/invites/');
+  return res.data;
+}
+export async function respondDependentInvite(inviteId: number, action: 'accept' | 'decline') {
+  const res = await api.post<{ detail: string; link_id?: number }>(`/api/auth/invites/${inviteId}/respond/`, { action });
+  return res.data;
 }
 
 // ----- LGPD -----

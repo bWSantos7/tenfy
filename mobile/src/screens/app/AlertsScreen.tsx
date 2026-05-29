@@ -7,7 +7,7 @@ import Toast from 'react-native-toast-message';
 import { MainTabParamList } from '../../navigation/types';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Alert } from '../../types';
-import { listAlerts, markAlertRead, markAllAlertsRead } from '../../services/data';
+import { listAlerts, markAlertRead, markAllAlertsRead, respondDependentInvite } from '../../services/data';
 import { AppText, Button, Card, EmptyState, LoadingBlock, Screen } from '../../components/ui';
 import { haptic } from '../../hooks/useHaptic';
 import api from '../../services/api';
@@ -139,6 +139,7 @@ export function AlertsScreen(_: Props) {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [prefs, setPrefs] = useState<AlertPrefs | null>(null);
   const [savingPrefs, setSavingPrefs] = useState(false);
+  const [respondingInvite, setRespondingInvite] = useState<number | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -203,6 +204,28 @@ export function AlertsScreen(_: Props) {
       Toast.show({ type: 'success', text1: 'Todos os alertas marcados como lidos.' });
     } catch {
       Toast.show({ type: 'error', text1: 'Não foi possível concluir a ação' });
+    }
+  }
+
+  async function handleInviteResponse(alert: Alert, action: 'accept' | 'decline') {
+    const inviteId = alert.payload?.invite_id as number | undefined;
+    if (!inviteId) return;
+    haptic.select();
+    setRespondingInvite(alert.id);
+    try {
+      await respondDependentInvite(inviteId, action);
+      if (action === 'accept') {
+        Toast.show({ type: 'success', text1: 'Convite aceito!', text2: 'Você agora é dependente do responsável.' });
+      } else {
+        Toast.show({ type: 'info', text1: 'Convite recusado.' });
+      }
+      // Remove the invite alert from the list since we responded
+      setAlerts((prev) => prev.filter((a) => a.id !== alert.id));
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail || 'Não foi possível processar a resposta.';
+      Toast.show({ type: 'error', text1: 'Erro', text2: msg });
+    } finally {
+      setRespondingInvite(null);
     }
   }
 
@@ -273,43 +296,72 @@ export function AlertsScreen(_: Props) {
             alerts.map((alert) => {
               const cfg = KIND_CONFIG[alert.kind] ?? KIND_CONFIG['other'];
               const isUnread = alert.status !== 'read';
+              const isInvite = alert.payload?.action === 'dependent_invite';
+              const isRespondingThis = respondingInvite === alert.id;
+
               return (
                 <Pressable
                   key={alert.id}
-                  onPress={() => isUnread ? readOne(alert.id) : undefined}
+                  onPress={() => !isInvite && isUnread ? readOne(alert.id) : undefined}
                 >
                   <View style={{
                     backgroundColor: isUnread ? `${cfg.color}08` : colors.bgCard,
                     borderRadius: 16,
                     padding: 12,
                     marginBottom: 8,
-                    flexDirection: 'row',
-                    gap: 10,
                     borderWidth: 1,
                     borderColor: isUnread ? `${cfg.color}30` : colors.borderSubtle,
                   }}>
-                    <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: `${cfg.color}20`, alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      <Ionicons name={cfg.icon as any} size={18} color={cfg.color} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                        <AppText variant="body" style={{ fontWeight: isUnread ? '700' : '500', flex: 1, fontSize: 13 }}>{alert.title}</AppText>
-                        {isUnread && (
-                          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: cfg.color }} />
-                        )}
+                    <View style={{ flexDirection: 'row', gap: 10 }}>
+                      <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: `${cfg.color}20`, alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <Ionicons name={isInvite ? 'people-outline' : cfg.icon as any} size={18} color={cfg.color} />
                       </View>
-                      {alert.body ? (
-                        <AppText variant="caption" numberOfLines={3} style={{ marginBottom: 4 }}>
-                          {sanitizeAlertBody(alert.body)}
-                        </AppText>
-                      ) : null}
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                        <View style={{ backgroundColor: `${cfg.color}15`, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
-                          <AppText variant="muted" style={{ fontSize: 10, color: cfg.color }}>{cfg.label}</AppText>
+                      <View style={{ flex: 1 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                          <AppText variant="body" style={{ fontWeight: isUnread ? '700' : '500', flex: 1, fontSize: 13 }}>{alert.title}</AppText>
+                          {isUnread && (
+                            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: cfg.color }} />
+                          )}
                         </View>
-                        <AppText variant="muted" style={{ fontSize: 10 }}>{fmtAlertDate(alert.created_at)}</AppText>
+                        {alert.body ? (
+                          <AppText variant="caption" numberOfLines={3} style={{ marginBottom: 4 }}>
+                            {isInvite ? alert.body : sanitizeAlertBody(alert.body)}
+                          </AppText>
+                        ) : null}
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                          <View style={{ backgroundColor: `${cfg.color}15`, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
+                            <AppText variant="muted" style={{ fontSize: 10, color: cfg.color }}>
+                              {isInvite ? 'Convite familiar' : cfg.label}
+                            </AppText>
+                          </View>
+                          <AppText variant="muted" style={{ fontSize: 10 }}>{fmtAlertDate(alert.created_at)}</AppText>
+                        </View>
                       </View>
                     </View>
+
+                    {/* Invite accept/decline buttons */}
+                    {isInvite ? (
+                      <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+                        <Pressable
+                          onPress={() => handleInviteResponse(alert, 'decline')}
+                          disabled={isRespondingThis}
+                          style={{ flex: 1, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: colors.danger, alignItems: 'center' }}
+                        >
+                          <AppText variant="caption" style={{ color: colors.danger, fontWeight: '700' }}>
+                            {isRespondingThis ? '...' : 'Recusar'}
+                          </AppText>
+                        </Pressable>
+                        <Pressable
+                          onPress={() => handleInviteResponse(alert, 'accept')}
+                          disabled={isRespondingThis}
+                          style={{ flex: 1, paddingVertical: 8, borderRadius: 10, backgroundColor: colors.accentBlue, alignItems: 'center' }}
+                        >
+                          <AppText variant="caption" style={{ color: '#fff', fontWeight: '700' }}>
+                            {isRespondingThis ? '...' : 'Aceitar'}
+                          </AppText>
+                        </Pressable>
+                      </View>
+                    ) : null}
                   </View>
                 </Pressable>
               );

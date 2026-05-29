@@ -5,6 +5,7 @@ from html import escape as _esc
 from celery import shared_task
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
+from django.utils import timezone
 
 logger = logging.getLogger('apps.accounts')
 
@@ -235,3 +236,64 @@ def send_password_reset_email(self, user_id: int, email: str, full_name: str, re
     except Exception as exc:
         logger.warning('Password reset email failed for user %s (attempt %d): %s', user_id, self.request.retries + 1, exc)
         raise self.retry(exc=exc)
+
+
+# ── Dependent Invite Expiration ────────────────────────────────────────────────
+
+@shared_task(name='apps.accounts.tasks.expire_stale_invites')
+def expire_stale_invites():
+    """
+    Mark DependentInvite records that have passed their expires_at as expired.
+    Creates an in-app alert for the parent so they know to re-invite if needed.
+    Runs daily (registered in config/celery.py beat schedule).
+    """
+    from .models import DependentInvite
+    from apps.alerts.models import Alert
+
+    now = timezone.now()
+    stale = DependentInvite.objects.filter(
+        status=DependentInvite.STATUS_PENDING,
+        expires_at__lt=now,
+    ).select_related('parent', 'invitee')
+
+    expired_count = 0
+    for invite in stale:
+        invite.status = DependentInvite.STATUS_EXPIRED
+        invite.save(update_fields=['status'])
+
+        # Remove the in-app alert for the invitee (no longer actionable)
+        try:
+            Alert.objects.filter(dedup_key=f'dependent_invite:{invite.id}').delete()
+        except Exception:
+            pass
+
+        # Notify the parent that the invite expired
+        try:
+            invitee_name = invite.invitee.full_name or invite.invitee.email
+            Alert.objects.get_or_create(
+                dedup_key=f'invite_expired:{invite.id}',
+                defaults=dict(
+                    user=invite.parent,
+                    kind=Alert.KIND_OTHER,
+                    channel=Alert.CHANNEL_IN_APP,
+                    status=Alert.STATUS_SENT,
+                    title='Convite familiar expirado',
+                    body=(
+                        f'O convite enviado para {invitee_name} expirou sem resposta. '
+                        'Você pode enviar um novo convite a qualquer momento.'
+                    ),
+                    payload={
+                        'action': 'invite_expired',
+                        'invite_id': invite.id,
+                        'invitee_name': invitee_name,
+                        'invitee_email': invite.invitee.email,
+                    },
+                ),
+            )
+        except Exception as exc:
+            logger.warning('Could not create expiry alert for parent invite=%s: %s', invite.id, exc)
+
+        expired_count += 1
+
+    logger.info('expire_stale_invites: expired %d invite(s)', expired_count)
+    return expired_count

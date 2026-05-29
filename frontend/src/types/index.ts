@@ -92,6 +92,29 @@ export interface ParentChild {
   created_at: string;
 }
 
+export interface PlayerSearchResult {
+  id: number;
+  full_name: string;
+  email: string;
+  avatar: string | null;
+  role: string;
+}
+
+export type DependentInviteStatus = 'pending' | 'accepted' | 'declined' | 'canceled' | 'expired';
+
+export interface DependentInvite {
+  id: number;
+  parent: number;
+  invitee: number;
+  parent_detail: { id: number; full_name: string; email: string; avatar: string | null };
+  invitee_detail: { id: number; full_name: string; email: string; avatar: string | null };
+  status: DependentInviteStatus;
+  is_expired: boolean;
+  expires_at: string;
+  responded_at: string | null;
+  created_at: string;
+}
+
 export type RegistrationStatus = 'confirmed' | 'waiting_list' | 'pending_payment' | 'withdrawn';
 export type PaymentStatus = 'paid' | 'pending' | 'waived' | 'refunded' | 'unknown';
 

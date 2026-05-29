@@ -1,6 +1,8 @@
 from django.conf import settings
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.db import models
+from django.db.models import Q
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from apps.core.models import TimestampedModel
 
@@ -121,3 +123,60 @@ class ParentChild(TimestampedModel):
 
     def __str__(self):
         return f'{self.parent.email} -> {self.child.email}'
+
+
+def _invite_token():
+    return f'inv_{uuid.uuid4().hex}'
+
+
+def _invite_expires():
+    return timezone.now() + timezone.timedelta(days=7)
+
+
+class DependentInvite(TimestampedModel):
+    """Consent-based invite: responsible asks an existing player to become their dependent."""
+    STATUS_PENDING = 'pending'
+    STATUS_ACCEPTED = 'accepted'
+    STATUS_DECLINED = 'declined'
+    STATUS_CANCELED = 'canceled'
+    STATUS_EXPIRED = 'expired'
+    STATUS_CHOICES = [
+        (STATUS_PENDING, 'Pendente'),
+        (STATUS_ACCEPTED, 'Aceito'),
+        (STATUS_DECLINED, 'Recusado'),
+        (STATUS_CANCELED, 'Cancelado'),
+        (STATUS_EXPIRED, 'Expirado'),
+    ]
+
+    parent = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name='sent_dependent_invites',
+    )
+    invitee = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name='received_dependent_invites',
+    )
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=STATUS_PENDING)
+    token = models.CharField(max_length=64, unique=True, default=_invite_token, editable=False)
+    expires_at = models.DateTimeField(default=_invite_expires)
+    responded_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['invitee', 'status']),
+            models.Index(fields=['parent', 'status']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['parent', 'invitee'],
+                condition=Q(status='pending'),
+                name='unique_pending_dependent_invite',
+            ),
+        ]
+
+    def is_expired(self) -> bool:
+        return self.status == self.STATUS_PENDING and timezone.now() > self.expires_at
+
+    def __str__(self):
+        return f'DependentInvite({self.parent.email} -> {self.invitee.email}, {self.status})'

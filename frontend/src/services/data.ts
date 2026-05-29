@@ -1,5 +1,5 @@
 import api from './api';
-import { Alert, CoachAthlete, Paginated, ParentChild, PlayerCategory, PlayerProfile, WatchlistItem } from '../types';
+import { Alert, CoachAthlete, DependentInvite, Paginated, ParentChild, PlayerCategory, PlayerProfile, PlayerSearchResult, WatchlistItem } from '../types';
 
 // ----- Players -----
 export async function listProfiles() {
@@ -127,6 +127,37 @@ export async function createChildWithProfile(
 
 export async function sendChildPasswordReset(linkId: number): Promise<void> {
   await api.post(`/api/auth/children/${linkId}/reset-password/`);
+}
+
+// ----- Dependent Invites -----
+
+export async function searchPlayersForInvite(q: string): Promise<PlayerSearchResult[]> {
+  const res = await api.get<PlayerSearchResult[]>(`/api/auth/children/search-players/?q=${encodeURIComponent(q)}`);
+  return res.data;
+}
+
+export async function sendDependentInvite(inviteeId: number): Promise<DependentInvite> {
+  const res = await api.post<DependentInvite>('/api/auth/children/invite/', { invitee_id: inviteeId });
+  return res.data;
+}
+
+export async function listSentInvites(): Promise<DependentInvite[]> {
+  const res = await api.get<DependentInvite[]>('/api/auth/children/sent-invites/');
+  return res.data;
+}
+
+export async function cancelDependentInvite(inviteId: number): Promise<void> {
+  await api.delete(`/api/auth/children/sent-invites/${inviteId}/`);
+}
+
+export async function listReceivedInvites(): Promise<DependentInvite[]> {
+  const res = await api.get<DependentInvite[]>('/api/auth/invites/');
+  return res.data;
+}
+
+export async function respondDependentInvite(inviteId: number, action: 'accept' | 'decline'): Promise<{ detail: string; link_id?: number }> {
+  const res = await api.post<{ detail: string; link_id?: number }>(`/api/auth/invites/${inviteId}/respond/`, { action });
+  return res.data;
 }
 
 // ----- Coach -----

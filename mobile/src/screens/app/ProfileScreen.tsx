@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Alert, Image, Pressable, Share, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Alert, FlatList, Image, Modal, Pressable, Share, TextInput, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
 import Toast from 'react-native-toast-message';
@@ -10,13 +10,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { MainStackParamList, MainTabParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { deleteAccount, uploadAvatar, linkExistingChild } from '../../services/auth';
+import { deleteAccount, linkExistingChild, uploadAvatar } from '../../services/auth';
 import {
-  createChildProfile, createChildWithProfile, deleteProfile, listChildren, listChildProfiles,
-  listProfiles, removeChild, requestDataExport, sendChildPasswordReset, setPrimary, updateProfile,
+  cancelDependentInvite, createChildProfile, createChildWithProfile, deleteProfile, listChildren,
+  listChildProfiles, listProfiles, listSentInvites, removeChild, requestDataExport,
+  searchPlayersForInvite, sendChildPasswordReset, sendDependentInvite, setPrimary, updateProfile,
 } from '../../services/data';
 import { extractApiError, mediaUrl } from '../../services/api';
-import { ParentChild, PlayerProfile } from '../../types';
+import { DependentInvite, ParentChild, PlayerProfile, PlayerSearchResult } from '../../types';
 import { GENDER_LABELS, LEVEL_LABELS, ROLE_LABELS, TENNIS_CLASS_LABELS } from '../../utils/format';
 import { markProfileDirty } from '../../utils/profileRefresh';
 import { getProfileModality, setProfileModality, MODALITY_OPTIONS } from '../../utils/profileModality';
@@ -74,6 +75,8 @@ export function ProfileScreen(_: Props) {
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingDep, setEditingDep] = useState<{ link: ParentChild; profile: PlayerProfile } | null>(null);
   const [creatingProfileFor, setCreatingProfileFor] = useState<ParentChild | null>(null);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [sentInvites, setSentInvites] = useState<DependentInvite[]>([]);
 
   const isParent = user?.role === 'parent';
   const isManagedChild = !!user?.managed_by_parent;
@@ -92,6 +95,8 @@ export function ProfileScreen(_: Props) {
         );
         setDependents(withProfiles);
         if (user?.id) setActiveProfileIdState(await getActiveProfileId(user.id));
+        const invites = await listSentInvites().catch(() => [] as DependentInvite[]);
+        setSentInvites(invites.filter((i) => i.status === 'pending'));
       } else {
         setProfiles(await listProfiles() as PlayerProfile[]);
       }
@@ -349,19 +354,84 @@ export function ProfileScreen(_: Props) {
                 Gerencie os dependentes e seus perfis de jogador
               </AppText>
             </View>
-            <Pressable
-              onPress={() => { setShowAddForm(true); setEditingDep(null); setCreatingProfileFor(null); }}
-              style={{ backgroundColor: `${colors.accentNeon}20`, borderWidth: 1, borderColor: `${colors.accentNeon}55`, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 6, flexDirection: 'row', gap: 6, alignItems: 'center', marginLeft: 8 }}
-            >
-              <Ionicons name="add" size={16} color={colors.accentNeon} />
-              <AppText variant="caption" style={{ color: colors.accentNeon, fontWeight: '700' }}>Novo</AppText>
-            </Pressable>
+            <View style={{ flexDirection: 'row', gap: 6, marginLeft: 8 }}>
+              <Pressable
+                onPress={() => setShowInviteModal(true)}
+                style={{ backgroundColor: `${colors.accentBlue}20`, borderWidth: 1, borderColor: `${colors.accentBlue}55`, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 6, flexDirection: 'row', gap: 5, alignItems: 'center' }}
+              >
+                <Ionicons name="person-add-outline" size={14} color={colors.accentBlue} />
+                <AppText variant="caption" style={{ color: colors.accentBlue, fontWeight: '700' }}>Vincular</AppText>
+              </Pressable>
+              <Pressable
+                onPress={() => { setShowAddForm(true); setEditingDep(null); setCreatingProfileFor(null); }}
+                style={{ backgroundColor: `${colors.accentNeon}20`, borderWidth: 1, borderColor: `${colors.accentNeon}55`, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 6, flexDirection: 'row', gap: 5, alignItems: 'center' }}
+              >
+                <Ionicons name="add" size={16} color={colors.accentNeon} />
+                <AppText variant="caption" style={{ color: colors.accentNeon, fontWeight: '700' }}>Novo</AppText>
+              </Pressable>
+            </View>
           </View>
 
           {showAddForm ? (
             <AddDependentForm
               onSuccess={async () => { setShowAddForm(false); await load(); }}
               onCancel={() => setShowAddForm(false)}
+            />
+          ) : null}
+
+          {/* Sent invites pending */}
+          {sentInvites.length > 0 ? (
+            <View style={{ marginBottom: 12 }}>
+              <AppText variant="caption" style={{ fontWeight: '700', color: colors.textMuted, marginBottom: 6 }}>Convites enviados aguardando resposta</AppText>
+              {sentInvites.map((inv) => (
+                <View key={inv.id} style={{ backgroundColor: `${colors.accentBlue}08`, borderWidth: 1, borderColor: `${colors.accentBlue}25`, borderRadius: 12, padding: 10, marginBottom: 6, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: `${colors.accentBlue}20`, alignItems: 'center', justifyContent: 'center' }}>
+                    <AppText variant="caption" style={{ color: colors.accentBlue, fontWeight: '700', fontSize: 14 }}>
+                      {(inv.invitee_detail.full_name || inv.invitee_detail.email || 'J').slice(0, 1).toUpperCase()}
+                    </AppText>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <AppText variant="caption" style={{ fontWeight: '600' }}>{inv.invitee_detail.full_name || '—'}</AppText>
+                    <AppText variant="muted" style={{ fontSize: 11 }}>{inv.invitee_detail.email}</AppText>
+                    <AppText variant="muted" style={{ fontSize: 10, marginTop: 1 }}>Aguardando resposta</AppText>
+                  </View>
+                  <Pressable
+                    hitSlop={8}
+                    onPress={() => {
+                      Alert.alert('Cancelar convite', `Cancelar o convite enviado para ${inv.invitee_detail.full_name || inv.invitee_detail.email}?`, [
+                        { text: 'Voltar', style: 'cancel' },
+                        {
+                          text: 'Cancelar convite', style: 'destructive',
+                          onPress: async () => {
+                            try {
+                              await cancelDependentInvite(inv.id);
+                              setSentInvites((prev) => prev.filter((i) => i.id !== inv.id));
+                              Toast.show({ type: 'success', text1: 'Convite cancelado.' });
+                            } catch (err) {
+                              Toast.show({ type: 'error', text1: 'Erro ao cancelar convite', text2: extractApiError(err) });
+                            }
+                          },
+                        },
+                      ]);
+                    }}
+                  >
+                    <Ionicons name="close-circle-outline" size={20} color={colors.danger} />
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+          ) : null}
+
+          {showInviteModal ? (
+            <LinkExistingPlayerModal
+              onClose={() => setShowInviteModal(false)}
+              onInviteSent={(inv) => {
+                setSentInvites((prev) => {
+                  const already = prev.find((i) => i.id === inv.id);
+                  return already ? prev : [inv, ...prev];
+                });
+                setShowInviteModal(false);
+              }}
             />
           ) : null}
 
@@ -695,11 +765,23 @@ function AddDependentForm({ onSuccess, onCancel }: { onSuccess: () => Promise<vo
   async function handleLinkExisting() {
     setSubmitting(true);
     try {
-      await linkExistingChild(account.email.trim().toLowerCase());
-      Toast.show({ type: 'success', text1: 'Dependente vinculado!', text2: 'A conta existente foi vinculada ao seu perfil.' });
-      await onSuccess();
+      const res = await linkExistingChild(account.email.trim().toLowerCase());
+      // Backend now returns 202 if invite was sent (requires_invite=true) or 201/200 if link was created
+      if ((res as any).requires_invite) {
+        Toast.show({
+          type: 'info',
+          text1: 'Convite enviado!',
+          text2: 'O jogador receberá uma notificação para aceitar o vínculo.',
+          visibilityTime: 5000,
+        });
+        setDuplicateEmail(false);
+        // Don't call onSuccess — the link isn't created yet, just close the duplicate warning
+      } else {
+        Toast.show({ type: 'success', text1: 'Dependente vinculado!', text2: 'A conta existente foi vinculada ao seu perfil.' });
+        await onSuccess();
+      }
     } catch (err) {
-      Toast.show({ type: 'error', text1: 'Erro ao vincular', text2: extractApiError(err), visibilityTime: 6000 });
+      Toast.show({ type: 'error', text1: 'Erro ao enviar convite', text2: extractApiError(err), visibilityTime: 6000 });
     } finally {
       setSubmitting(false);
     }
@@ -731,22 +813,24 @@ function AddDependentForm({ onSuccess, onCancel }: { onSuccess: () => Promise<vo
       />
 
       {duplicateEmail ? (
-        <View style={{ backgroundColor: `${colors.statusClosing}18`, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: `${colors.statusClosing}44`, marginBottom: 4 }}>
+        <View style={{ backgroundColor: `${colors.accentBlue}10`, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: `${colors.accentBlue}35`, marginBottom: 4 }}>
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 10 }}>
-            <Ionicons name="warning-outline" size={18} color={colors.statusClosing} style={{ marginTop: 1 }} />
+            <Ionicons name="information-circle-outline" size={18} color={colors.accentBlue} style={{ marginTop: 1 }} />
             <View style={{ flex: 1 }}>
-              <AppText variant="caption" style={{ fontWeight: '700', color: colors.statusClosing }}>Este e-mail já possui cadastro no Tenfy.</AppText>
-              <AppText variant="muted" style={{ marginTop: 3, fontSize: 12 }}>Deseja vincular esta conta existente como dependente do seu perfil?</AppText>
+              <AppText variant="caption" style={{ fontWeight: '700', color: colors.accentBlue }}>Este e-mail já possui uma conta no Tenfy.</AppText>
+              <AppText variant="muted" style={{ marginTop: 3, fontSize: 12 }}>
+                Envie um convite de vínculo. O jogador receberá uma notificação para aceitar antes de ser vinculado como seu dependente.
+              </AppText>
             </View>
           </View>
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <Pressable
               onPress={handleLinkExisting}
               disabled={submitting}
-              style={{ flex: 1, paddingVertical: 10, borderRadius: 10, backgroundColor: colors.accentNeon, alignItems: 'center' }}
+              style={{ flex: 1, paddingVertical: 10, borderRadius: 10, backgroundColor: colors.accentBlue, alignItems: 'center' }}
             >
-              <AppText variant="caption" style={{ color: colors.bgBase, fontWeight: '700' }}>
-                {submitting ? 'Vinculando...' : 'Vincular como dependente'}
+              <AppText variant="caption" style={{ color: '#fff', fontWeight: '700' }}>
+                {submitting ? 'Enviando...' : 'Enviar convite de vínculo'}
               </AppText>
             </Pressable>
             <Pressable
@@ -1206,5 +1290,154 @@ function ProfileEditor({ profile, onSaved, onCancel, restrictedMode = false }: {
       <Button title="Salvar alterações" onPress={save} loading={saving} />
       <Button title="Cancelar" variant="ghost" onPress={onCancel} />
     </Card>
+  );
+}
+
+// ── LinkExistingPlayerModal ────────────────────────────────────────────────────
+
+function LinkExistingPlayerModal({
+  onClose,
+  onInviteSent,
+}: {
+  onClose: () => void;
+  onInviteSent: (invite: DependentInvite) => void;
+}) {
+  const { colors } = useTheme();
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<PlayerSearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [sending, setSending] = useState<number | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function handleQueryChange(text: string) {
+    setQuery(text);
+    setSearchError(null);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (text.trim().length < 2) {
+      setResults([]);
+      return;
+    }
+    debounceRef.current = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const data = await searchPlayersForInvite(text.trim());
+        setResults(data);
+      } catch (err) {
+        setSearchError(extractApiError(err));
+      } finally {
+        setSearching(false);
+      }
+    }, 450);
+  }
+
+  async function handleSendInvite(player: PlayerSearchResult) {
+    setSending(player.id);
+    try {
+      const invite = await sendDependentInvite(player.id);
+      Toast.show({ type: 'success', text1: 'Convite enviado!', text2: `${player.full_name || player.email} receberá uma notificação para aceitar.` });
+      onInviteSent(invite);
+    } catch (err) {
+      Toast.show({ type: 'error', text1: 'Erro ao enviar convite', text2: extractApiError(err) });
+    } finally {
+      setSending(null);
+    }
+  }
+
+  return (
+    <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: colors.bgBase }}>
+        {/* Header */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.borderSubtle }}>
+          <Pressable onPress={onClose} hitSlop={10}>
+            <Ionicons name="close" size={24} color={colors.textPrimary} />
+          </Pressable>
+          <View style={{ flex: 1 }}>
+            <AppText variant="body" style={{ fontWeight: '700', fontSize: 17 }}>Vincular jogador existente</AppText>
+            <AppText variant="muted" style={{ fontSize: 11 }}>O jogador receberá um convite para aceitar o vínculo</AppText>
+          </View>
+        </View>
+
+        {/* Search input */}
+        <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bgCard, borderRadius: 12, borderWidth: 1, borderColor: colors.borderSubtle, paddingHorizontal: 12, gap: 8 }}>
+            <Ionicons name="search-outline" size={18} color={colors.textMuted} />
+            <TextInput
+              value={query}
+              onChangeText={handleQueryChange}
+              placeholder="Buscar por nome do jogador..."
+              placeholderTextColor={colors.textMuted}
+              style={{ flex: 1, height: 44, color: colors.textPrimary, fontSize: 14 }}
+              autoFocus
+              returnKeyType="search"
+            />
+            {searching ? (
+              <Ionicons name="refresh-outline" size={16} color={colors.textMuted} />
+            ) : query.length > 0 ? (
+              <Pressable onPress={() => { setQuery(''); setResults([]); }}>
+                <Ionicons name="close-circle" size={18} color={colors.textMuted} />
+              </Pressable>
+            ) : null}
+          </View>
+          {query.length > 0 && query.length < 2 ? (
+            <AppText variant="muted" style={{ fontSize: 11, marginTop: 4 }}>Digite ao menos 2 letras para buscar</AppText>
+          ) : null}
+        </View>
+
+        {/* Results */}
+        {searchError ? (
+          <View style={{ paddingHorizontal: 16 }}>
+            <AppText variant="caption" style={{ color: colors.danger }}>{searchError}</AppText>
+          </View>
+        ) : results.length === 0 && query.trim().length >= 2 && !searching ? (
+          <View style={{ alignItems: 'center', marginTop: 40, gap: 8 }}>
+            <Ionicons name="search-outline" size={32} color={colors.textMuted} />
+            <AppText variant="caption" style={{ color: colors.textMuted }}>Nenhum jogador encontrado</AppText>
+            <AppText variant="muted" style={{ fontSize: 11, textAlign: 'center', maxWidth: 260 }}>
+              Verifique o nome ou peça para o jogador criar uma conta no Tenfy primeiro.
+            </AppText>
+          </View>
+        ) : (
+          <FlatList
+            data={results}
+            keyExtractor={(item) => String(item.id)}
+            contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 40 }}
+            renderItem={({ item }) => (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.borderSubtle }}>
+                <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: `${colors.accentNeon}22`, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                  {item.avatar
+                    ? <Image source={{ uri: mediaUrl(item.avatar) }} style={{ width: 44, height: 44 }} />
+                    : <AppText variant="body" style={{ color: colors.accentNeon, fontWeight: '700', fontSize: 16 }}>{(item.full_name || item.email || 'J').slice(0, 1).toUpperCase()}</AppText>
+                  }
+                </View>
+                <View style={{ flex: 1 }}>
+                  <AppText variant="body" style={{ fontWeight: '600', fontSize: 14 }}>{item.full_name || '—'}</AppText>
+                  <AppText variant="caption" style={{ color: colors.textMuted }}>{item.email}</AppText>
+                </View>
+                <Pressable
+                  onPress={() => handleSendInvite(item)}
+                  disabled={sending === item.id}
+                  style={{
+                    backgroundColor: sending === item.id ? colors.borderSubtle : `${colors.accentBlue}20`,
+                    borderWidth: 1,
+                    borderColor: sending === item.id ? colors.borderSubtle : `${colors.accentBlue}55`,
+                    borderRadius: 10,
+                    paddingHorizontal: 12,
+                    paddingVertical: 6,
+                  }}
+                >
+                  <AppText variant="caption" style={{ color: sending === item.id ? colors.textMuted : colors.accentBlue, fontWeight: '700' }}>
+                    {sending === item.id ? 'Enviando...' : 'Convidar'}
+                  </AppText>
+                </Pressable>
+              </View>
+            )}
+            ListHeaderComponent={results.length > 0 ? (
+              <AppText variant="muted" style={{ fontSize: 11, marginBottom: 8 }}>{results.length} resultado{results.length !== 1 ? 's' : ''} encontrado{results.length !== 1 ? 's' : ''}</AppText>
+            ) : null}
+          />
+        )}
+      </View>
+    </Modal>
   );
 }

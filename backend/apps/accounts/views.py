@@ -28,8 +28,10 @@ from .serializers import (
     CoachAthleteSerializer,
     ChildAccountCreateSerializer,
     ParentChildSerializer,
+    DependentInviteSerializer,
+    PlayerSearchSerializer,
 )
-from .models import CoachAthlete, ParentChild
+from .models import CoachAthlete, ParentChild, DependentInvite
 
 logger = logging.getLogger('apps.accounts')
 
@@ -546,16 +548,32 @@ class ParentChildViewSet(viewsets.ModelViewSet):
     @viewset_action(detail=False, methods=['post'], url_path='link')
     def link_existing_child(self, request):
         """
-        Link an *existing* user account as a child/dependent.
+        Send a consent invite to an existing player, or finalise an already-accepted invite.
+
         Accepts { "email": "<existing-user-email>" }.
-        Used when the child already has a Tenfy account and the parent
-        wants to manage it under the Família plan.
+        - Active link already exists      → return 200.
+        - Accepted DependentInvite exists → create ParentChild and return 201.
+        - No invite yet                   → create invite + in-app alert, return 202 (requires_invite).
+        - Staff accounts bypass the invite requirement.
         """
         email = (request.data.get('email') or '').strip().lower()
         if not email:
             return Response({'detail': 'E-mail obrigatório.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Plan limit check — same rules as create / create_with_profile
+        try:
+            child = User.objects.get(email=email, is_active=True)
+        except User.DoesNotExist:
+            return Response({'detail': 'Nenhum usuário encontrado com esse e-mail.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if child == request.user:
+            return Response({'detail': 'Você não pode vincular-se como seu próprio dependente.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Already linked — return existing link directly
+        existing = ParentChild.objects.filter(parent=request.user, child=child, is_active=True).first()
+        if existing:
+            return Response(ParentChildSerializer(existing, context={'request': request}).data, status=status.HTTP_200_OK)
+
+        # Plan limit check
         from apps.billing.models import Subscription, Plan
         current_dependents = ParentChild.objects.filter(parent=request.user, is_active=True).count()
         if not request.user.is_staff:
@@ -563,7 +581,7 @@ class ParentChildViewSet(viewsets.ModelViewSet):
                 sub = request.user.subscription
                 if sub.plan.slug == Plan.SLUG_INDIVIDUAL:
                     return Response(
-                        {'detail': 'O Plano Individual não permite cadastrar dependentes. Faça upgrade para o Plano Família.'},
+                        {'detail': 'O Plano Individual não permite dependentes. Faça upgrade para o Plano Família.'},
                         status=status.HTTP_403_FORBIDDEN,
                     )
                 max_dependents = sub.plan.max_members - 1
@@ -575,48 +593,81 @@ class ParentChildViewSet(viewsets.ModelViewSet):
             except Subscription.DoesNotExist:
                 if current_dependents >= 1:
                     return Response(
-                        {'detail': 'Você precisa de uma assinatura ativa do Plano Família para adicionar mais dependentes.'},
+                        {'detail': 'Você precisa do Plano Família para adicionar mais dependentes.'},
                         status=status.HTTP_403_FORBIDDEN,
                     )
 
+        # Staff bypass: create link directly without requiring an invite
+        if request.user.is_staff:
+            link, _ = ParentChild.objects.get_or_create(parent=request.user, child=child, defaults={'is_active': True})
+            if not link.is_active:
+                link.is_active = True
+                link.save(update_fields=['is_active'])
+            return Response(ParentChildSerializer(link, context={'request': request}).data, status=status.HTTP_201_CREATED)
+
+        # Accepted invite exists — finalise the link
+        accepted_invite = DependentInvite.objects.filter(
+            parent=request.user, invitee=child, status=DependentInvite.STATUS_ACCEPTED
+        ).first()
+        if accepted_invite:
+            link, _ = ParentChild.objects.get_or_create(parent=request.user, child=child, defaults={'is_active': True})
+            if not link.is_active:
+                link.is_active = True
+                link.save(update_fields=['is_active'])
+            logger.info('ParentChild link created via accepted invite: parent=%s child=%s', request.user.id, child.id)
+            return Response(ParentChildSerializer(link, context={'request': request}).data, status=status.HTTP_201_CREATED)
+
+        # Pending invite already exists — return it
+        pending = DependentInvite.objects.filter(
+            parent=request.user, invitee=child, status=DependentInvite.STATUS_PENDING
+        ).first()
+        if pending:
+            return Response(
+                {
+                    'detail': 'Um convite já foi enviado e aguarda resposta do jogador.',
+                    'invite': DependentInviteSerializer(pending, context={'request': request}).data,
+                    'requires_invite': True,
+                },
+                status=status.HTTP_202_ACCEPTED,
+            )
+
+        # No invite — create one and notify the invitee
+        invite = DependentInvite.objects.create(parent=request.user, invitee=child)
         try:
-            child = User.objects.get(email=email, is_active=True)
-        except User.DoesNotExist:
-            return Response(
-                {'detail': 'Nenhum usuário encontrado com esse e-mail.'},
-                status=status.HTTP_404_NOT_FOUND,
+            from apps.alerts.models import Alert
+            parent_name = request.user.full_name or request.user.email
+            Alert.objects.get_or_create(
+                dedup_key=f'dependent_invite:{invite.id}',
+                defaults=dict(
+                    user=child,
+                    kind=Alert.KIND_OTHER,
+                    channel=Alert.CHANNEL_IN_APP,
+                    status=Alert.STATUS_SENT,
+                    title=f'{parent_name} quer te vincular como dependente',
+                    body=(
+                        f'{parent_name} ({request.user.email}) enviou um convite para que você '
+                        'seja vinculado como dependente na plataforma Tenfy.'
+                    ),
+                    payload={
+                        'action': 'dependent_invite',
+                        'invite_id': invite.id,
+                        'parent_id': request.user.id,
+                        'parent_name': parent_name,
+                        'parent_email': request.user.email,
+                    },
+                ),
             )
+        except Exception as exc:
+            logger.warning('Could not create invite alert for link endpoint invite=%s: %s', invite.id, exc)
 
-        if child == request.user:
-            return Response(
-                {'detail': 'Você não pode vincular-se como seu próprio dependente.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        # If the link already exists and is active, return it directly
-        existing = ParentChild.objects.filter(parent=request.user, child=child).first()
-        if existing:
-            if existing.is_active:
-                return Response(
-                    ParentChildSerializer(existing, context={'request': request}).data,
-                    status=status.HTTP_200_OK,
-                )
-            # Re-activate a previously deactivated link
-            existing.is_active = True
-            existing.save(update_fields=['is_active'])
-            return Response(
-                ParentChildSerializer(existing, context={'request': request}).data,
-                status=status.HTTP_200_OK,
-            )
-
-        link = ParentChild.objects.create(parent=request.user, child=child)
-        logger.info(
-            'ParentChild link created: parent=%s -> child=%s (existing account)',
-            request.user.id, child.id,
-        )
+        logger.info('DependentInvite sent via link endpoint: parent=%s invitee=%s', request.user.id, child.id)
         return Response(
-            ParentChildSerializer(link, context={'request': request}).data,
-            status=status.HTTP_201_CREATED,
+            {
+                'detail': f'Convite enviado para {child.email}. O vínculo será criado após a aceitação.',
+                'invite': DependentInviteSerializer(invite, context={'request': request}).data,
+                'requires_invite': True,
+            },
+            status=status.HTTP_202_ACCEPTED,
         )
 
     @viewset_action(detail=True, methods=['patch'], url_path='update-account')
@@ -714,6 +765,281 @@ class ParentChildViewSet(viewsets.ModelViewSet):
                 logger.error('Password reset dispatch failed for child %s: %s', child.id, exc2)
 
         return Response({'detail': f'E-mail de recuperação enviado para {child.email}.'})
+
+    @viewset_action(detail=False, methods=['get'], url_path='search-players')
+    def search_players(self, request):
+        """Search existing players by name so the parent can choose who to invite."""
+        q = (request.data.get('q') or request.query_params.get('q') or '').strip()
+        if len(q) < 2:
+            return Response({'detail': 'Digite ao menos 2 caracteres.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        qs = (
+            User.objects
+            .filter(full_name__icontains=q, is_active=True, role=User.ROLE_PLAYER)
+            .exclude(pk=request.user.pk)
+            .order_by('full_name')[:20]
+        )
+        return Response(PlayerSearchSerializer(qs, many=True, context={'request': request}).data)
+
+    @viewset_action(detail=False, methods=['post'], url_path='invite')
+    def send_invite(self, request):
+        """Send a dependent-link invite to an existing player. Creates an in-app Alert for the invitee."""
+        invitee_id = request.data.get('invitee_id')
+        if not invitee_id:
+            return Response({'detail': 'invitee_id é obrigatório.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        from apps.billing.models import Subscription, Plan
+        current_dependents = ParentChild.objects.filter(parent=request.user, is_active=True).count()
+        if not request.user.is_staff:
+            try:
+                sub = request.user.subscription
+                if sub.plan.slug == Plan.SLUG_INDIVIDUAL:
+                    return Response(
+                        {'detail': 'O Plano Individual não permite dependentes. Faça upgrade para o Plano Família.'},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+                max_dependents = sub.plan.max_members - 1
+                if current_dependents >= max_dependents:
+                    return Response(
+                        {'detail': f'Limite de {max_dependents} dependente(s) atingido para o seu plano.'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+            except Subscription.DoesNotExist:
+                if current_dependents >= 1:
+                    return Response(
+                        {'detail': 'Você precisa do Plano Família para adicionar mais dependentes.'},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+
+        try:
+            invitee = User.objects.get(pk=invitee_id, is_active=True, role=User.ROLE_PLAYER)
+        except User.DoesNotExist:
+            return Response({'detail': 'Jogador não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if invitee == request.user:
+            return Response({'detail': 'Você não pode convidar a si mesmo.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Block if already an active dependent
+        if ParentChild.objects.filter(parent=request.user, child=invitee, is_active=True).exists():
+            return Response({'detail': 'Este jogador já é seu dependente.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Prevent duplicate pending invites
+        existing = DependentInvite.objects.filter(
+            parent=request.user, invitee=invitee, status=DependentInvite.STATUS_PENDING
+        ).first()
+        if existing:
+            return Response(
+                DependentInviteSerializer(existing, context={'request': request}).data,
+                status=status.HTTP_200_OK,
+            )
+
+        invite = DependentInvite.objects.create(parent=request.user, invitee=invitee)
+
+        # Create in-app alert for the invitee
+        try:
+            from apps.alerts.models import Alert
+            parent_name = request.user.full_name or request.user.email
+            Alert.objects.get_or_create(
+                dedup_key=f'dependent_invite:{invite.id}',
+                defaults=dict(
+                    user=invitee,
+                    kind=Alert.KIND_OTHER,
+                    channel=Alert.CHANNEL_IN_APP,
+                    status=Alert.STATUS_SENT,
+                    title=f'{parent_name} quer te vincular como dependente',
+                    body=(
+                        f'{parent_name} ({request.user.email}) enviou um convite para que você '
+                        'seja vinculado como dependente na plataforma Tenfy.'
+                    ),
+                    payload={
+                        'action': 'dependent_invite',
+                        'invite_id': invite.id,
+                        'parent_id': request.user.id,
+                        'parent_name': parent_name,
+                        'parent_email': request.user.email,
+                    },
+                ),
+            )
+        except Exception as exc:
+            logger.warning('Could not create invite alert for invite %s: %s', invite.id, exc)
+
+        logger.info('DependentInvite sent: parent=%s -> invitee=%s invite_id=%s',
+                    request.user.id, invitee.id, invite.id)
+        return Response(
+            DependentInviteSerializer(invite, context={'request': request}).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    @viewset_action(detail=False, methods=['get'], url_path='sent-invites')
+    def list_sent_invites(self, request):
+        """List invites sent by this parent (pending, accepted, declined)."""
+        qs = (
+            DependentInvite.objects
+            .filter(parent=request.user)
+            .exclude(status=DependentInvite.STATUS_CANCELED)
+            .select_related('invitee')
+            .order_by('-created_at')
+        )
+        return Response(DependentInviteSerializer(qs, many=True, context={'request': request}).data)
+
+    @viewset_action(detail=False, methods=['delete'], url_path=r'sent-invites/(?P<invite_id>[0-9]+)')
+    def cancel_invite(self, request, invite_id=None):
+        """Cancel a pending invite sent by this parent."""
+        try:
+            invite = DependentInvite.objects.get(pk=invite_id, parent=request.user, status=DependentInvite.STATUS_PENDING)
+        except DependentInvite.DoesNotExist:
+            return Response({'detail': 'Convite não encontrado ou já respondido.'}, status=status.HTTP_404_NOT_FOUND)
+
+        invite.status = DependentInvite.STATUS_CANCELED
+        invite.save(update_fields=['status'])
+
+        # Remove the alert for the invitee so it disappears from their inbox
+        try:
+            from apps.alerts.models import Alert
+            Alert.objects.filter(dedup_key=f'dependent_invite:{invite.id}').delete()
+        except Exception:
+            pass
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class DependentInviteViewSet(viewsets.GenericViewSet):
+    """Endpoints for any authenticated user to view and respond to received dependent invites."""
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = DependentInviteSerializer
+
+    def get_queryset(self):
+        return (
+            DependentInvite.objects
+            .filter(invitee=self.request.user)
+            .exclude(status__in=[DependentInvite.STATUS_CANCELED])
+            .select_related('parent', 'invitee')
+            .order_by('-created_at')
+        )
+
+    def list(self, request):
+        """List received invites."""
+        qs = self.get_queryset()
+        return Response(DependentInviteSerializer(qs, many=True, context={'request': request}).data)
+
+    @viewset_action(detail=True, methods=['post'], url_path='respond')
+    def respond(self, request, pk=None):
+        """Accept or decline a received invite. Only the invitee may call this."""
+        action = (request.data.get('action') or '').strip()
+        if action not in ('accept', 'decline'):
+            return Response({'detail': "action deve ser 'accept' ou 'decline'."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            invite = DependentInvite.objects.select_related('parent', 'invitee').get(
+                pk=pk, invitee=request.user
+            )
+        except DependentInvite.DoesNotExist:
+            return Response({'detail': 'Convite não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if invite.status != DependentInvite.STATUS_PENDING:
+            return Response({'detail': 'Este convite já foi respondido ou cancelado.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if invite.is_expired():
+            invite.status = DependentInvite.STATUS_EXPIRED
+            invite.save(update_fields=['status'])
+            return Response({'detail': 'Este convite expirou. Peça ao responsável que envie um novo convite.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        from django.utils import timezone as tz
+        now = tz.now()
+
+        if action == 'accept':
+            from apps.billing.models import Subscription, Plan
+            # Re-validate plan limit at accept time
+            current_dependents = ParentChild.objects.filter(parent=invite.parent, is_active=True).count()
+            if not invite.parent.is_staff:
+                try:
+                    sub = invite.parent.subscription
+                    if sub.plan.slug == Plan.SLUG_INDIVIDUAL:
+                        return Response(
+                            {'detail': 'O responsável não possui Plano Família ativo.'},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+                    max_dependents = sub.plan.max_members - 1
+                    if current_dependents >= max_dependents:
+                        return Response(
+                            {'detail': 'O responsável atingiu o limite de dependentes do plano.'},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+                except Subscription.DoesNotExist:
+                    if current_dependents >= 1:
+                        return Response(
+                            {'detail': 'O responsável não possui Plano Família ativo.'},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+
+            with transaction.atomic():
+                invite.status = DependentInvite.STATUS_ACCEPTED
+                invite.responded_at = now
+                invite.save(update_fields=['status', 'responded_at'])
+
+                link, _ = ParentChild.objects.get_or_create(
+                    parent=invite.parent,
+                    child=invite.invitee,
+                    defaults={'is_active': True},
+                )
+                if not link.is_active:
+                    link.is_active = True
+                    link.save(update_fields=['is_active'])
+
+            # Mark the alert as read
+            try:
+                from apps.alerts.models import Alert
+                Alert.objects.filter(dedup_key=f'dependent_invite:{invite.id}').update(
+                    status=Alert.STATUS_READ,
+                )
+            except Exception:
+                pass
+
+            logger.info('DependentInvite accepted: invite=%s parent=%s child=%s', invite.id, invite.parent.id, invite.invitee.id)
+            return Response({'detail': 'Convite aceito. Você agora é dependente do responsável.', 'link_id': link.id})
+
+        else:  # decline
+            with transaction.atomic():
+                invite.status = DependentInvite.STATUS_DECLINED
+                invite.responded_at = now
+                invite.save(update_fields=['status', 'responded_at'])
+
+            # Remove the invite alert from the invitee's inbox
+            try:
+                from apps.alerts.models import Alert
+                Alert.objects.filter(dedup_key=f'dependent_invite:{invite.id}').delete()
+            except Exception:
+                pass
+
+            # Notify the parent that the invite was declined
+            try:
+                from apps.alerts.models import Alert
+                invitee_name = invite.invitee.full_name or invite.invitee.email
+                Alert.objects.get_or_create(
+                    dedup_key=f'invite_declined:{invite.id}',
+                    defaults=dict(
+                        user=invite.parent,
+                        kind=Alert.KIND_OTHER,
+                        channel=Alert.CHANNEL_IN_APP,
+                        status=Alert.STATUS_SENT,
+                        title=f'Convite recusado',
+                        body=(
+                            f'{invitee_name} recusou seu convite de vínculo familiar. '
+                            'Você pode enviar um novo convite a qualquer momento.'
+                        ),
+                        payload={
+                            'action': 'invite_declined',
+                            'invite_id': invite.id,
+                            'invitee_name': invitee_name,
+                            'invitee_email': invite.invitee.email,
+                        },
+                    ),
+                )
+            except Exception as exc:
+                logger.warning('Could not create decline alert for parent invite=%s: %s', invite.id, exc)
+
+            logger.info('DependentInvite declined: invite=%s', invite.id)
+            return Response({'detail': 'Convite recusado.'})
 
 
 @api_view(['GET'])

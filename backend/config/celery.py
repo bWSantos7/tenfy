@@ -27,6 +27,10 @@ app.conf.beat_schedule = {
         'task': 'apps.audit.tasks.cleanup_old_logs',
         'schedule': crontab(hour=3, minute=0),
     },
+    'expire-stale-invites-daily': {
+        'task': 'apps.accounts.tasks.expire_stale_invites',
+        'schedule': crontab(hour=1, minute=30),  # 01:30 UTC daily
+    },
     'sync-cosat-every-6h': {
         'task': 'apps.ingestion.tasks.sync_cosat_from_mongo_task',
         'schedule': crontab(minute=30, hour='*/6'),  # 00:30, 06:30, 12:30, 18:30 UTC

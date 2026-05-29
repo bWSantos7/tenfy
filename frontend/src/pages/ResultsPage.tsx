@@ -2,9 +2,36 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Loader2, RefreshCw, LinkIcon } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { PlayerProfile, TiData } from '../types';
+import { PlayerProfile, TiData, TiResultEntry } from '../types';
 import { fetchTiData, listProfiles, syncTiData } from '../services/data';
 import { useAuth } from '../contexts/AuthContext';
+
+// ── helpers ──────────────────────────────────────────────────────────────────
+
+interface TournamentGroup {
+  key: string;
+  tournament: string;
+  date: string;
+  federation: string;
+  matches: TiResultEntry[];
+}
+
+function groupByTournament(results: TiResultEntry[]): TournamentGroup[] {
+  const groups: TournamentGroup[] = [];
+  const index: Record<string, number> = {};
+  for (const r of results) {
+    const key = `${r.tournament}||${r.date}`;
+    if (key in index) {
+      groups[index[key]].matches.push(r);
+    } else {
+      index[key] = groups.length;
+      groups.push({ key, tournament: r.tournament ?? '', date: r.date ?? '', federation: r.federation ?? '', matches: [r] });
+    }
+  }
+  return groups;
+}
+
+// ── component ─────────────────────────────────────────────────────────────────
 
 export const ResultsPage: React.FC = () => {
   const { user } = useAuth();
@@ -18,9 +45,9 @@ export const ResultsPage: React.FC = () => {
       .then((profs: PlayerProfile[]) => {
         const primary = profs.find((p) => p.is_primary) ?? profs[0];
         if (primary) setPrimaryProfileId(primary.id);
+        else setTiLoading(false);
       })
-      .catch(() => {})
-      .finally(() => setTiLoading(false));
+      .catch(() => setTiLoading(false));
   }, []);
 
   useEffect(() => {
@@ -47,12 +74,14 @@ export const ResultsPage: React.FC = () => {
     }
   }
 
-  const wins   = tiData?.results.filter((r) => r.outcome?.toUpperCase().startsWith('V') || r.outcome?.toUpperCase() === 'W').length ?? 0;
-  const losses = tiData?.results.filter((r) => r.outcome?.toUpperCase().startsWith('D')).length ?? 0;
-  const total  = (tiData?.results.length ?? 0);
+  const groups   = groupByTournament(tiData?.results ?? []);
+  const wins     = tiData?.results.filter((r) => r.outcome?.toUpperCase().startsWith('V') || r.outcome?.toUpperCase() === 'W').length ?? 0;
+  const losses   = tiData?.results.filter((r) => r.outcome?.toUpperCase().startsWith('D')).length ?? 0;
+  const total    = tiData?.results.length ?? 0;
 
   return (
     <div className="space-y-4 pb-4">
+      {/* Header */}
       <div className="flex items-start justify-between gap-2">
         <div>
           <h1 className="text-2xl font-bold">Resultados</h1>
@@ -70,7 +99,7 @@ export const ResultsPage: React.FC = () => {
         )}
       </div>
 
-      {/* Stats do TI */}
+      {/* Stats */}
       {tiData?.has_ti_id && total > 0 && (
         <div className="grid grid-cols-3 gap-2">
           {[
@@ -86,11 +115,12 @@ export const ResultsPage: React.FC = () => {
         </div>
       )}
 
-      {/* Conteúdo TI */}
+      {/* Content */}
       {tiLoading ? (
         <div className="card flex items-center justify-center py-12">
           <Loader2 className="w-7 h-7 text-accent-neon animate-spin" />
         </div>
+
       ) : !tiData?.has_ti_id ? (
         <div className="card flex items-start gap-3 py-6">
           <LinkIcon className="w-5 h-5 text-text-muted shrink-0 mt-0.5" />
@@ -102,34 +132,57 @@ export const ResultsPage: React.FC = () => {
             </p>
           </div>
         </div>
-      ) : tiData.results.length === 0 ? (
+
+      ) : groups.length === 0 ? (
         <div className="card text-center py-12">
           <p className="text-sm font-medium mb-1">Nenhum jogo encontrado</p>
           <p className="text-xs text-text-muted">Nenhum resultado foi encontrado no Tênis Integrado para este perfil.</p>
         </div>
+
       ) : (
-        <div className="space-y-2">
-          {tiData.results.map((r, i) => {
-            const isWin = r.outcome?.toUpperCase().startsWith('V') || r.outcome?.toUpperCase() === 'W';
-            return (
-              <div key={i} className="card flex items-center gap-3">
-                <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-sm font-bold ${isWin ? 'bg-status-open/15 text-status-open' : 'bg-status-canceled/15 text-status-canceled'}`}>
-                  {r.outcome ? r.outcome.slice(0, 1).toUpperCase() : '?'}
-                </div>
-                <div className="flex-1 min-w-0">
-                  {r.tournament && <p className="text-sm font-semibold truncate">{r.tournament}</p>}
-                  {r.opponent && <p className="text-xs text-text-muted">vs {r.opponent}</p>}
-                  <div className="flex items-center gap-2 text-[10px] text-text-muted mt-0.5 flex-wrap">
-                    {r.round    && <span>{r.round}</span>}
-                    {r.category && <span>• {r.category}</span>}
-                    {r.score    && <span>• {r.score}</span>}
-                    {r.date     && <span>• {r.date}</span>}
-                  </div>
-                </div>
+        <div className="space-y-3">
+          {groups.map((g) => (
+            <div key={g.key} className="card !p-0 overflow-hidden">
+              {/* Tournament header */}
+              <div className="px-4 py-3 border-b border-border-subtle bg-bg-elevated/60">
+                <p className="font-semibold text-sm leading-snug">{g.tournament}</p>
+                {g.date && <p className="text-[11px] text-text-muted mt-0.5">{g.date}</p>}
+                {g.federation && (
+                  <span className="inline-block mt-1.5 text-[10px] font-medium px-2 py-0.5 rounded-full bg-accent-blue/15 text-accent-blue">
+                    {g.federation}
+                  </span>
+                )}
               </div>
-            );
-          })}
-          {tiData.is_stale && (
+
+              {/* Match rows */}
+              <div className="divide-y divide-border-subtle">
+                {g.matches.map((m, i) => {
+                  const isWin = m.outcome?.toUpperCase().startsWith('V') || m.outcome?.toUpperCase() === 'W';
+                  return (
+                    <div key={i} className="flex items-center gap-3 px-4 py-2.5">
+                      {/* Phase */}
+                      <span className="w-8 text-[11px] font-mono text-text-muted shrink-0">{m.round ?? '—'}</span>
+
+                      {/* Opponent */}
+                      <span className="flex-1 text-xs text-text-secondary truncate">{m.opponent ?? '—'}</span>
+
+                      {/* Outcome + score */}
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 ${isWin ? 'bg-status-open/15 text-status-open' : 'bg-status-canceled/15 text-status-canceled'}`}>
+                          {m.outcome ? m.outcome.slice(0, 1).toUpperCase() : '?'}
+                        </span>
+                        {m.score && (
+                          <span className="text-[11px] text-text-muted font-mono">{m.score}</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+
+          {tiData?.is_stale && (
             <p className="text-[10px] text-text-muted text-center pt-1">
               Dados podem estar desatualizados. Clique em Atualizar.
             </p>

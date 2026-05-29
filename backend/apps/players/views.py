@@ -180,8 +180,10 @@ class PlayerProfileViewSet(viewsets.ModelViewSet):
             or (now - profile.ti_rankings_synced_at) > _TI_CACHE_TTL
         )
 
-        # Inline sync when force_refresh=True (with cooldown) or cache is missing
-        if force_refresh or not profile.ti_results_synced_at or not profile.ti_rankings_synced_at:
+        # Inline sync when: forced, cache timestamps missing, or cache is empty
+        # (empty cache catches old broken syncs that returned no data)
+        cache_empty = not profile.ti_results_cache and not profile.ti_rankings_cache
+        if force_refresh or not profile.ti_results_synced_at or not profile.ti_rankings_synced_at or cache_empty:
             cooldown_ok = (
                 not profile.ti_results_synced_at
                 or (now - profile.ti_results_synced_at) > _TI_SYNC_COOLDOWN

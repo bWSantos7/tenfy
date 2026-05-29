@@ -5,6 +5,7 @@ export interface TiResultEntry {
   tournament?: string;
   date?: string;
   category?: string;
+  federation?: string;
   round?: string;
   opponent?: string;
   outcome?: string;
@@ -21,6 +22,7 @@ export interface TiRankingEntry {
   points?: string;
   class_label?: string;
   ranking_name?: string;
+  date?: string;
   _raw?: Record<string, string>;
 }
 

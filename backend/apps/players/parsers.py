@@ -10,7 +10,6 @@ The caller is responsible for caching and rate-limiting.
 """
 import logging
 import re
-import time
 
 logger = logging.getLogger('apps.players.parsers')
 
@@ -251,32 +250,108 @@ def extract_ti_id(external_ids: dict) -> tuple[str | None, str | None]:
     return None, None
 
 
+def _get_soup(html: str):
+    """Return a BeautifulSoup object, preferring lxml then html.parser."""
+    try:
+        from bs4 import BeautifulSoup
+        try:
+            return BeautifulSoup(html, 'lxml')
+        except Exception:
+            return BeautifulSoup(html, 'html.parser')
+    except ImportError:
+        raise TenisScrapeError('BeautifulSoup not available')
+
+
+def _extract_category_from_title(title: str) -> str:
+    """Try to extract category code from tournament title (e.g. '14M', '12F')."""
+    m = re.search(r'\b(\d{2}[MF](?:D|MD)?)\b', title)
+    return m.group(1) if m else ''
+
+
 def fetch_ti_results(ti_id: str) -> list[dict]:
     """
     Fetch match results from /perfil2/jogos/{ti_id}.
+
+    The page uses <div class="panel last-results"> containing alternating:
+      - <div class="innerpanel-header"> — tournament name, location/date, organizer
+      - <ul class="list-group tournmt-results"> — list of <li> match rows
+
+    Each <li class="list-group-item"> has:
+      - <div class="round"> — phase (R16, Q, S, F …)
+      - <a class="avatar-name"> — opponent name
+      - <div class="result pull-right"> — "<span>V|D</span> score"
+
     Returns a list of normalised result dicts.
     Raises TenisScrapeError on failure.
     """
     url = f'{_BASE_URL}/perfil2/jogos/{ti_id}'
     logger.info('Fetching TI results: %s', url)
     html = _fetch(url)
-    tables = _parse_tables(html)
+    soup = _get_soup(html)
 
-    if not tables:
-        logger.info('No tables found on TI results page for id=%s', ti_id)
+    last_results = soup.find('div', class_='panel last-results')
+    if not last_results:
+        logger.info('No last-results panel on TI results page for id=%s', ti_id)
         return []
 
     results = []
-    for tbl in tables:
-        headers = tbl['headers']
-        for row in tbl['rows']:
-            if not any(c.strip() for c in row):
-                continue
-            entry = _normalise_result_row(headers, row)
-            # Only keep rows that look like actual game data (have some non-empty fields)
-            meaningful = {k: v for k, v in entry.items() if k != '_raw' and v}
-            if len(meaningful) >= 2:
-                results.append(entry)
+    current_tournament: dict = {}
+
+    for child in last_results.children:
+        if not hasattr(child, 'name') or not child.name:
+            continue
+        cls = child.get('class', [])
+
+        if 'innerpanel-header' in cls:
+            # Tournament header — extract name, date, organizer
+            title_a = child.find('a')
+            parts = [t.strip() for t in child.get_text(separator='|').split('|') if t.strip()]
+            title = title_a.get_text(strip=True) if title_a else (parts[0] if parts else '')
+            # parts[1] is usually "City - State, date range"
+            date_str = parts[1] if len(parts) > 1 else ''
+            federation = ''
+            for i, p in enumerate(parts):
+                if 'Criado' in p and i + 1 < len(parts):
+                    federation = parts[i + 1]
+                    break
+            current_tournament = {
+                'tournament': title,
+                'date': date_str,
+                'category': _extract_category_from_title(title),
+                'federation': federation,
+            }
+
+        elif 'tournmt-results' in cls:
+            # Game list for the current tournament
+            for li in child.find_all('li', class_='list-group-item'):
+                round_div = li.find(class_='round')
+                round_text = round_div.get_text(strip=True) if round_div else ''
+
+                opp_a = li.find('a', class_='avatar-name')
+                opponent = opp_a.get_text(strip=True) if opp_a else ''
+
+                result_div = li.find(class_='result')
+                outcome, score = '', ''
+                if result_div:
+                    full = result_div.get_text(separator=' ', strip=True)
+                    span = result_div.find('span')
+                    if span:
+                        outcome = span.get_text(strip=True)
+                        score = full.replace(outcome, '').strip()
+                    else:
+                        outcome = full[:1] if full else ''
+                        score = full[1:].strip()
+
+                results.append({
+                    'tournament': current_tournament.get('tournament', ''),
+                    'date': current_tournament.get('date', ''),
+                    'category': current_tournament.get('category', ''),
+                    'federation': current_tournament.get('federation', ''),
+                    'round': round_text,
+                    'opponent': opponent,
+                    'outcome': outcome,
+                    'score': score,
+                })
 
     logger.info('TI results fetched for id=%s: %d entries', ti_id, len(results))
     return results
@@ -285,28 +360,93 @@ def fetch_ti_results(ti_id: str) -> list[dict]:
 def fetch_ti_rankings(ti_id: str) -> list[dict]:
     """
     Fetch rankings from /perfil2/rankings/{ti_id}.
+
+    The page contains two data sources:
+    1. <table> elements in the sidebar — WTN (World Tennis Number) for Simples/Duplas.
+    2. <div class="ranking"> blocks — historical federation rankings, each with an
+       <div class="innerpanel-header"> containing name, date, organizer, and
+       position/points in the form "300.00 - 1º Colocado".
+
     Returns a list of normalised ranking dicts.
     Raises TenisScrapeError on failure.
     """
     url = f'{_BASE_URL}/perfil2/rankings/{ti_id}'
     logger.info('Fetching TI rankings: %s', url)
     html = _fetch(url)
-    tables = _parse_tables(html)
+    soup = _get_soup(html)
 
-    if not tables:
-        logger.info('No tables found on TI rankings page for id=%s', ti_id)
-        return []
+    rankings: list[dict] = []
 
-    rankings = []
-    for tbl in tables:
-        headers = tbl['headers']
-        for row in tbl['rows']:
-            if not any(c.strip() for c in row):
+    # 1. WTN from sidebar tables — cells like ['', '31,33Simples'] or ['', '31,88 Duplas']
+    for table in soup.find_all('table'):
+        for row in table.find_all('tr'):
+            cells = [td.get_text(strip=True) for td in row.find_all('td')]
+            if not cells:
                 continue
-            entry = _normalise_ranking_row(headers, row)
-            meaningful = {k: v for k, v in entry.items() if k != '_raw' and v}
-            if len(meaningful) >= 2:
-                rankings.append(entry)
+            full = ' '.join(cells).strip()
+            m = re.search(r'([\d]+[.,][\d]+)\s*(Simples|Duplas|Misto)', full, re.I)
+            if m:
+                wtn_value = m.group(1).replace(',', '.')
+                modality = m.group(2).capitalize()
+                rankings.append({
+                    'ranking_name': f'WTN - {modality}',
+                    'category': f'WTN {modality}',
+                    'modality': modality,
+                    'federation': 'World Tennis Number',
+                    'points': wtn_value,
+                    'position': '',
+                    'class_label': '',
+                })
+
+    # 2. Historical federation rankings from div.ranking blocks
+    for rd in soup.find_all('div', class_='ranking'):
+        header = rd.find(class_='innerpanel-header')
+        if not header:
+            continue
+
+        title_a = header.find('a')
+        name = title_a.get_text(strip=True) if title_a else ''
+        if not name:
+            parts = [t.strip() for t in header.get_text(separator='|').split('|') if t.strip()]
+            name = parts[0] if parts else ''
+        if not name:
+            continue
+
+        parts = [t.strip() for t in header.get_text(separator='|').split('|') if t.strip()]
+
+        # Federation/organizer: part after "Criado por"
+        organizer = ''
+        for i, p in enumerate(parts):
+            if 'Criado' in p and i + 1 < len(parts):
+                organizer = parts[i + 1]
+                break
+
+        # Position & points: "300.00 - 1º Colocado" pattern
+        position, points = '', ''
+        for p in parts:
+            m = re.search(r'([\d.,]+)\s*-\s*(\d+)\s*[ºo°]?\s*Colocado', p, re.I)
+            if m:
+                points = m.group(1).replace(',', '.')
+                position = m.group(2)
+                break
+
+        # Date
+        date_str = ''
+        for p in parts:
+            if re.search(r'\d{2}/\d{2}/\d{4}', p):
+                date_str = p
+                break
+
+        rankings.append({
+            'ranking_name': name,
+            'category': name,
+            'federation': organizer,
+            'position': position,
+            'points': points,
+            'modality': '',
+            'class_label': '',
+            'date': date_str,
+        })
 
     logger.info('TI rankings fetched for id=%s: %d entries', ti_id, len(rankings))
     return rankings

@@ -62,17 +62,6 @@ const MOCK_TOURNAMENTS: MockTournament[] = [
     classes: ['3ª Classe', '4ª Classe', 'Iniciante'],
   },
   {
-    id: 3,
-    title: 'Torneio Open de Curitiba - Graciosa CC',
-    federation: 'FPT (PR)',
-    state: 'PR',
-    location: 'Graciosa Country Club, Curitiba',
-    startDate: '10/07/2026',
-    endDate: '12/07/2026',
-    closingDate: '01/07/2026',
-    classes: ['1ª Classe', '2ª Classe', '3ª Classe'],
-  },
-  {
     id: 4,
     title: 'Copa Minas Tênis Clube de Classes',
     federation: 'FMT',

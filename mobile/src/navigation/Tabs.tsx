@@ -7,7 +7,7 @@ import { TournamentsScreen } from '../screens/app/TournamentsScreen';
 import { WatchlistScreen } from '../screens/app/WatchlistScreen';
 import { ResultsScreen } from '../screens/app/ResultsScreen';
 import { AlertsScreen } from '../screens/app/AlertsScreen';
-import { ProfileScreen } from '../screens/app/ProfileScreen';
+import { PlayerProfileScreen } from '../screens/app/PlayerProfileScreen';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -56,7 +56,7 @@ export function MainTabs() {
       <Tab.Screen name="Results"     component={ResultsScreen}     options={{ title: 'Resultados' }} />
       {/* Alerts tab hidden from bottom bar — accessible via notification icon on HomeScreen header */}
       <Tab.Screen name="Alerts"      component={AlertsScreen}      options={{ title: 'Alertas', tabBarButton: () => null, tabBarItemStyle: { display: 'none', width: 0, maxWidth: 0, minWidth: 0 } }} />
-      <Tab.Screen name="Profile"     component={ProfileScreen}     options={{ title: 'Perfil' }} />
+      <Tab.Screen name="Profile"     component={PlayerProfileScreen} options={{ title: 'Perfil' }} />
     </Tab.Navigator>
   );
 }

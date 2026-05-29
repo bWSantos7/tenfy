@@ -28,4 +28,5 @@ export type MainStackParamList = {
   PixPayment: { pixData: import('../types/billing').PixPaymentData };
   Subscription: undefined;
   TournamentCompare: { ids: number[] };
+  Settings: undefined;
 };

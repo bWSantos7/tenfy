@@ -14,6 +14,7 @@ const TournamentsPage     = React.lazy(() => import('./pages/TournamentsPage').t
 const TournamentDetailPage = React.lazy(() => import('./pages/TournamentDetailPage').then(m => ({ default: m.TournamentDetailPage })));
 const WatchlistPage       = React.lazy(() => import('./pages/WatchlistPage').then(m => ({ default: m.WatchlistPage })));
 const AlertsPage          = React.lazy(() => import('./pages/AlertsPage').then(m => ({ default: m.AlertsPage })));
+const PlayerProfilePage   = React.lazy(() => import('./pages/PlayerProfilePage').then(m => ({ default: m.PlayerProfilePage })));
 const ProfilePage         = React.lazy(() => import('./pages/ProfilePage').then(m => ({ default: m.ProfilePage })));
 const AdminPanelPage      = React.lazy(() => import('./pages/AdminPanelPage').then(m => ({ default: m.AdminPanelPage })));
 const ResultsPage         = React.lazy(() => import('./pages/ResultsPage').then(m => ({ default: m.ResultsPage })));
@@ -86,7 +87,8 @@ const App: React.FC = () => {
           <Route path="watchlist" element={<WatchlistPage />} />
           <Route path="resultados" element={<ResultsPage />} />
           <Route path="alertas" element={<AlertsPage />} />
-          <Route path="perfil" element={<ProfilePage />} />
+          <Route path="perfil" element={<PlayerProfilePage />} />
+          <Route path="configuracoes" element={<ProfilePage />} />
           <Route path="assinatura" element={<SubscriptionPage />} />
           <Route path="inscricoes" element={<InscricoesPage />} />
           <Route path="treinador" element={<CoachPage />} />

@@ -28,6 +28,7 @@ import { CheckoutScreen } from '../screens/app/CheckoutScreen';
 import { PixPaymentScreen } from '../screens/app/PixPaymentScreen';
 import { SubscriptionScreen } from '../screens/app/SubscriptionScreen';
 import { TournamentCompareScreen } from '../screens/app/TournamentCompareScreen';
+import { ProfileScreen as SettingsScreen } from '../screens/app/ProfileScreen';
 
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
 const MainStack = createNativeStackNavigator<MainStackParamList>();
@@ -164,6 +165,11 @@ export function RootNavigator() {
         name="TournamentCompare"
         component={TournamentCompareScreen}
         options={{ headerShown: true, title: 'Comparar torneios', headerBackTitle: 'Voltar' }}
+      />
+      <MainStack.Screen
+        name="Settings"
+        component={SettingsScreen}
+        options={{ headerShown: true, title: 'Configurações', headerBackTitle: 'Voltar' }}
       />
     </MainStack.Navigator>
     </>

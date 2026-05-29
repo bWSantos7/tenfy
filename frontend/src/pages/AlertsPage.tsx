@@ -45,12 +45,19 @@ export const AlertsPage: React.FC = () => {
 
   useEffect(() => { load(); }, []);
 
+  const dispatchUnread = (updatedItems: Alert[]) => {
+    const count = updatedItems.filter((a) => a.status !== 'read').length;
+    window.dispatchEvent(new CustomEvent('alerts-unread-changed', { detail: count }));
+  };
+
   async function markRead(id: number) {
     try {
       await markAlertRead(id);
-      setItems((prev) =>
-        prev.map((a) => (a.id === id ? { ...a, status: 'read', read_at: new Date().toISOString() } : a)),
-      );
+      setItems((prev) => {
+        const next = prev.map((a) => (a.id === id ? { ...a, status: 'read' as const, read_at: new Date().toISOString() } : a));
+        dispatchUnread(next);
+        return next;
+      });
     } catch { /* ignore */ }
   }
 
@@ -77,12 +84,20 @@ export const AlertsPage: React.FC = () => {
       } else {
         toast('Convite recusado.');
       }
-      setItems((prev) => prev.filter((a) => a.id !== alert.id));
+      setItems((prev) => {
+        const next = prev.filter((a) => a.id !== alert.id);
+        dispatchUnread(next);
+        return next;
+      });
     } catch (err: any) {
       const httpStatus = err?.response?.status;
       // Invite already responded or canceled — remove the stale alert from the list
       if (httpStatus === 400) {
-        setItems((prev) => prev.filter((a) => a.id !== alert.id));
+        setItems((prev) => {
+          const next = prev.filter((a) => a.id !== alert.id);
+          dispatchUnread(next);
+          return next;
+        });
         toast('Este convite já não está mais disponível.');
       } else {
         toast.error(extractApiError(err));
@@ -96,6 +111,7 @@ export const AlertsPage: React.FC = () => {
     try {
       await markAllAlertsRead();
       toast.success('Alertas marcados como lidos');
+      window.dispatchEvent(new CustomEvent('alerts-unread-changed', { detail: 0 }));
       load();
     } catch (err) {
       toast.error(extractApiError(err));

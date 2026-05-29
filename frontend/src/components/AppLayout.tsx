@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { Home, Calendar, Star, User, LogOut, ShieldCheck, Sun, Moon, Award, CreditCard, Users, Bell } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -18,11 +18,21 @@ const navItems = [
 export const AppLayout: React.FC = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const { theme, toggle: toggleTheme } = useTheme();
   const [unreadCount, setUnreadCount] = useState(0);
 
-  useEffect(() => {
+  const refreshUnread = () =>
     unreadAlerts().then((a) => setUnreadCount(Array.isArray(a) ? a.length : 0)).catch(() => {});
+
+  // Refresh on every route change (catches returning from /alertas after marking as read)
+  useEffect(() => { refreshUnread(); }, [location.pathname]);
+
+  // Also listen for immediate updates dispatched by AlertsPage
+  useEffect(() => {
+    const handler = (e: Event) => setUnreadCount((e as CustomEvent<number>).detail);
+    window.addEventListener('alerts-unread-changed', handler);
+    return () => window.removeEventListener('alerts-unread-changed', handler);
   }, []);
 
   const handleLogout = async () => {

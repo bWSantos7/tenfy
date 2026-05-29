@@ -1,5 +1,5 @@
-import React, { useCallback, useRef, useState } from 'react';
-import { Image, Pressable, View } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { DeviceEventEmitter, Image, Pressable, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -35,6 +35,14 @@ export function HomeScreen(_: Props) {
   const [recent, setRecent] = useState<TournamentEditionList[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const hasLoadedRef = useRef(false);
+
+  // Sync badge immediately when AlertsScreen marks alerts as read
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener('alerts-unread-changed', (count: number) => {
+      setUnreadCount(count);
+    });
+    return () => sub.remove();
+  }, []);
 
   const loadData = useCallback(async (active = { current: true }) => {
     setError(null);

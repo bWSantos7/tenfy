@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { Pressable, Switch, View } from 'react-native';
+import { DeviceEventEmitter, Pressable, Switch, View } from 'react-native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -186,11 +186,19 @@ export function AlertsScreen(_: Props) {
     }
   }
 
+  function emitUnread(updated: Alert[]) {
+    DeviceEventEmitter.emit('alerts-unread-changed', updated.filter((a) => a.status !== 'read').length);
+  }
+
   async function readOne(id: number) {
     haptic.select();
     try {
       await markAlertRead(id);
-      setAlerts((prev) => prev.map((a) => a.id === id ? { ...a, status: 'read', read_at: new Date().toISOString() } : a));
+      setAlerts((prev) => {
+        const next = prev.map((a) => a.id === id ? { ...a, status: 'read' as const, read_at: new Date().toISOString() } : a);
+        emitUnread(next);
+        return next;
+      });
     } catch {
       Toast.show({ type: 'error', text1: 'Não foi possível marcar o alerta' });
     }
@@ -200,7 +208,11 @@ export function AlertsScreen(_: Props) {
     haptic.success();
     try {
       await markAllAlertsRead();
-      setAlerts((prev) => prev.map((a) => ({ ...a, status: 'read', read_at: new Date().toISOString() })));
+      setAlerts((prev) => {
+        const next = prev.map((a) => ({ ...a, status: 'read' as const, read_at: new Date().toISOString() }));
+        emitUnread(next);
+        return next;
+      });
       Toast.show({ type: 'success', text1: 'Todos os alertas marcados como lidos.' });
     } catch {
       Toast.show({ type: 'error', text1: 'Não foi possível concluir a ação' });
@@ -219,12 +231,19 @@ export function AlertsScreen(_: Props) {
       } else {
         Toast.show({ type: 'info', text1: 'Convite recusado.' });
       }
-      // Remove the invite alert from the list since we responded
-      setAlerts((prev) => prev.filter((a) => a.id !== alert.id));
+      setAlerts((prev) => {
+        const next = prev.filter((a) => a.id !== alert.id);
+        emitUnread(next);
+        return next;
+      });
     } catch (err: any) {
       const httpStatus = err?.response?.status;
       if (httpStatus === 400) {
-        setAlerts((prev) => prev.filter((a) => a.id !== alert.id));
+        setAlerts((prev) => {
+          const next = prev.filter((a) => a.id !== alert.id);
+          emitUnread(next);
+          return next;
+        });
         Toast.show({ type: 'info', text1: 'Este convite já não está mais disponível.' });
       } else {
         const msg = err?.response?.data?.detail || 'Não foi possível processar a resposta.';

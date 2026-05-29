@@ -158,29 +158,54 @@ export const PlayerProfilePage: React.FC = () => {
               {/* ── Perfil esportivo ─────────────────────────────────── */}
               <section>
                 <h3 className="text-xs font-bold text-text-muted uppercase tracking-wide mb-2">Perfil esportivo</h3>
-                <div className="card space-y-2.5">
-                  {primary.display_name && (
-                    <InfoRow icon={<User className="w-3.5 h-3.5" />} label="Atleta" value={primary.display_name} />
-                  )}
-                  <InfoRow icon={<Trophy className="w-3.5 h-3.5" />} label="Nível" value={LEVEL_LABELS[primary.competitive_level] ?? primary.competitive_level} />
-                  {primary.tennis_class && (
-                    <InfoRow icon={<Trophy className="w-3.5 h-3.5" />} label="Classe" value={TENNIS_CLASS_LABELS[primary.tennis_class] ?? primary.tennis_class} />
-                  )}
-                  {primary.preferred_modality && (
-                    <InfoRow icon={<span className="text-[10px]">🎾</span>} label="Modalidade" value={MODALITY_LABELS[primary.preferred_modality] ?? primary.preferred_modality} />
-                  )}
-                  {primary.gender && (
-                    <InfoRow icon={<User className="w-3.5 h-3.5" />} label="Gênero" value={GENDER_LABELS[primary.gender] ?? primary.gender} />
-                  )}
-                  {primary.birth_year && (
-                    <InfoRow icon={<Calendar className="w-3.5 h-3.5" />} label="Nascimento" value={String(primary.birth_year)} />
-                  )}
-                  {primary.sporting_age != null && (
-                    <InfoRow icon={<Calendar className="w-3.5 h-3.5" />} label="Idade esportiva" value={`${primary.sporting_age} anos`} />
-                  )}
-                  {(primary.home_city || primary.home_state) && (
-                    <InfoRow icon={<MapPin className="w-3.5 h-3.5" />} label="Local" value={[primary.home_city, primary.home_state].filter(Boolean).join(' / ')} />
-                  )}
+                <div className="card !p-0 overflow-hidden">
+
+                  {/* Name + location header */}
+                  <div className="px-5 pt-4 pb-3 border-b border-border-subtle">
+                    <h2 className="text-lg font-bold leading-tight">{primary.display_name || '—'}</h2>
+                    {(primary.home_city || primary.home_state) && (
+                      <div className="flex items-center gap-1.5 mt-1 text-text-muted text-xs">
+                        <MapPin className="w-3 h-3 shrink-0" />
+                        <span>{[primary.home_city, primary.home_state].filter(Boolean).join(' / ')}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Key attributes grid */}
+                  <div className="grid grid-cols-3 divide-x divide-border-subtle border-b border-border-subtle">
+                    {[
+                      { label: 'Nível',      value: LEVEL_LABELS[primary.competitive_level] ?? primary.competitive_level },
+                      { label: 'Modalidade', value: primary.preferred_modality ? (MODALITY_LABELS[primary.preferred_modality] ?? primary.preferred_modality) : '—' },
+                      { label: 'Gênero',     value: primary.gender ? (GENDER_LABELS[primary.gender] ?? primary.gender) : '—' },
+                    ].map((item) => (
+                      <div key={item.label} className="flex flex-col items-center justify-center py-3 gap-0.5 px-2">
+                        <span className="text-sm font-bold text-text-primary text-center leading-tight">{item.value}</span>
+                        <span className="text-[10px] text-text-muted">{item.label}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Secondary info row */}
+                  <div className="px-5 py-3 flex items-center gap-4 flex-wrap">
+                    {primary.birth_year && (
+                      <div className="flex items-center gap-1.5 text-xs text-text-secondary">
+                        <Calendar className="w-3.5 h-3.5 text-text-muted shrink-0" />
+                        <span>Nasc. {primary.birth_year}</span>
+                        {primary.sporting_age != null && (
+                          <span className="text-text-muted">({primary.sporting_age} anos)</span>
+                        )}
+                      </div>
+                    )}
+                    {primary.tennis_class && (
+                      <div className="flex items-center gap-1.5 text-xs">
+                        <Trophy className="w-3.5 h-3.5 text-text-muted shrink-0" />
+                        <span className="font-semibold px-2 py-0.5 rounded-full bg-accent-neon/12 text-accent-neon border border-accent-neon/25 text-[11px]">
+                          {TENNIS_CLASS_LABELS[primary.tennis_class] ?? `Classe ${primary.tennis_class}`}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
                 </div>
               </section>
 

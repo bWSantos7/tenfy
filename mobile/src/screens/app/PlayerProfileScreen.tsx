@@ -164,32 +164,56 @@ export function PlayerProfileScreen(_: Props) {
             <>
               {/* ── Perfil esportivo ───────────────────────────────── */}
               <SectionHeader title="Perfil esportivo" />
-              <Card style={{ marginBottom: 12 }}>
-                <View style={{ gap: 7 }}>
-                  {primary.display_name ? (
-                    <Row icon="person-outline" label="Atleta" value={primary.display_name} colors={colors} />
-                  ) : null}
-                  <Row icon="trophy-outline" label="Nível" value={LEVEL_LABELS[primary.competitive_level] ?? primary.competitive_level} colors={colors} />
-                  {primary.tennis_class ? (
-                    <Row icon="ribbon-outline" label="Classe" value={CLASS_LABELS[primary.tennis_class] ?? primary.tennis_class} colors={colors} />
-                  ) : null}
-                  {primary.preferred_modality ? (
-                    <Row icon="tennisball-outline" label="Modalidade" value={MODALITY_LABELS[primary.preferred_modality] ?? primary.preferred_modality} colors={colors} />
-                  ) : null}
-                  {primary.gender ? (
-                    <Row icon="male-female-outline" label="Gênero" value={GENDER_LABELS[primary.gender] ?? primary.gender} colors={colors} />
-                  ) : null}
-                  {primary.birth_year ? (
-                    <Row icon="calendar-outline" label="Nascimento" value={String(primary.birth_year)} colors={colors} />
-                  ) : null}
-                  {primary.sporting_age != null ? (
-                    <Row icon="time-outline" label="Idade esportiva" value={`${primary.sporting_age} anos`} colors={colors} />
-                  ) : null}
+              <View style={{ backgroundColor: colors.bgCard, borderRadius: 16, borderWidth: 1, borderColor: colors.borderSubtle, overflow: 'hidden', marginBottom: 12 }}>
+
+                {/* Name + location */}
+                <View style={{ paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: colors.borderSubtle }}>
+                  <AppText style={{ fontSize: 18, fontWeight: '800', color: colors.textPrimary }}>{primary.display_name || '—'}</AppText>
                   {(primary.home_city || primary.home_state) ? (
-                    <Row icon="location-outline" label="Local" value={[primary.home_city, primary.home_state].filter(Boolean).join(' / ')} colors={colors} />
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                      <Ionicons name="location-outline" size={12} color={colors.textMuted} />
+                      <AppText variant="muted" style={{ fontSize: 12 }}>{[primary.home_city, primary.home_state].filter(Boolean).join(' / ')}</AppText>
+                    </View>
                   ) : null}
                 </View>
-              </Card>
+
+                {/* Key attributes grid */}
+                <View style={{ flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.borderSubtle }}>
+                  {[
+                    { label: 'Nível',      value: LEVEL_LABELS[primary.competitive_level] ?? primary.competitive_level },
+                    { label: 'Modalidade', value: primary.preferred_modality ? (MODALITY_LABELS[primary.preferred_modality] ?? primary.preferred_modality) : '—' },
+                    { label: 'Gênero',     value: primary.gender ? (GENDER_LABELS[primary.gender] ?? primary.gender) : '—' },
+                  ].map((item, i) => (
+                    <View
+                      key={item.label}
+                      style={{ flex: 1, alignItems: 'center', paddingVertical: 12, borderRightWidth: i < 2 ? 1 : 0, borderRightColor: colors.borderSubtle }}
+                    >
+                      <AppText style={{ fontSize: 13, fontWeight: '700', color: colors.textPrimary, textAlign: 'center' }} numberOfLines={1}>{item.value}</AppText>
+                      <AppText variant="muted" style={{ fontSize: 10, marginTop: 2 }}>{item.label}</AppText>
+                    </View>
+                  ))}
+                </View>
+
+                {/* Secondary info */}
+                <View style={{ paddingHorizontal: 16, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+                  {primary.birth_year ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                      <Ionicons name="calendar-outline" size={13} color={colors.textMuted} />
+                      <AppText variant="muted" style={{ fontSize: 12 }}>
+                        Nasc. {primary.birth_year}{primary.sporting_age != null ? ` (${primary.sporting_age} anos)` : ''}
+                      </AppText>
+                    </View>
+                  ) : null}
+                  {primary.tennis_class ? (
+                    <View style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20, backgroundColor: `${colors.accentNeon}18`, borderWidth: 1, borderColor: `${colors.accentNeon}30` }}>
+                      <AppText style={{ fontSize: 11, color: colors.accentNeon, fontWeight: '700' }}>
+                        {CLASS_LABELS[primary.tennis_class] ?? `Classe ${primary.tennis_class}`}
+                      </AppText>
+                    </View>
+                  ) : null}
+                </View>
+
+              </View>
 
               {/* ── Categorias ────────────────────────────────────── */}
               {primary.categories?.length > 0 ? (

@@ -10,8 +10,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { AppText, Button, EmptyState, LoadingBlock, Screen, SectionHeader, SelectField } from '../../components/ui';
 import { TournamentListSkeleton } from '../../components/Skeleton';
-import { listChildren, listChildProfiles, listChildWatchlist, listProfiles, listWatchlist, saveResult } from '../../services/data';
-import { ParentChild, PlayerProfile, WatchlistItem } from '../../types';
+import { fetchTiData, listChildren, listChildProfiles, listChildWatchlist, listProfiles, listWatchlist, saveResult, syncTiData } from '../../services/data';
+import { ParentChild, PlayerProfile, TiData, WatchlistItem } from '../../types';
 
 type Props = BottomTabScreenProps<MainTabParamList, 'Results'>;
 type Nav = NativeStackNavigationProp<MainStackParamList>;
@@ -277,6 +277,10 @@ export function ResultsScreen(_: Props) {
   const [error, setError] = useState<string | null>(null);
   const [editingItem, setEditingItem] = useState<WatchlistItem | null>(null);
   const [profileNames, setProfileNames] = useState<Record<number, string>>({});
+  const [tiData, setTiData] = useState<TiData | null>(null);
+  const [tiLoading, setTiLoading] = useState(false);
+  const [tiSyncing, setTiSyncing] = useState(false);
+  const [primaryProfileId, setPrimaryProfileId] = useState<number | null>(null);
 
   async function buildData(): Promise<{ allItems: WatchlistItem[]; nameMap: Record<number, string> }> {
     if (user?.role === 'parent') {
@@ -303,6 +307,8 @@ export function ResultsScreen(_: Props) {
       return { allItems, nameMap };
     }
     const [list, profs] = await Promise.all([listWatchlist(), listProfiles().catch(() => [] as PlayerProfile[])]);
+    const primary = (profs as PlayerProfile[]).find((p) => p.is_primary) ?? (profs as PlayerProfile[])[0];
+    if (primary) setPrimaryProfileId(primary.id);
     return {
       allItems: (list as WatchlistItem[]).filter((it) => it.user_status === 'registered_declared' || !!it.result),
       nameMap: Object.fromEntries((profs as PlayerProfile[]).map((p) => [p.id, p.display_name])),
@@ -337,7 +343,19 @@ export function ResultsScreen(_: Props) {
     }
   }
 
-  useFocusEffect(useCallback(() => { load(); }, []));
+  useFocusEffect(useCallback(() => {
+    load();
+  }, []));
+
+  // Load TI results whenever the primary profile changes
+  React.useEffect(() => {
+    if (!primaryProfileId || user?.role === 'parent') return;
+    setTiLoading(true);
+    fetchTiData(primaryProfileId)
+      .then((d) => setTiData(d))
+      .catch(() => {})
+      .finally(() => setTiLoading(false));
+  }, [primaryProfileId]);
 
   function onSaved(updated: WatchlistItem) {
     setItems((prev) => prev.map((i) => i.id === updated.id ? updated : i));
@@ -428,6 +446,97 @@ export function ResultsScreen(_: Props) {
         />
       ) : (
         renderGroupedResults()
+      )}
+
+      {/* ── Resultados do Tênis Integrado ─────────────────────────────────── */}
+      {user?.role !== 'parent' && (
+        <>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 20, marginBottom: 12 }}>
+            <View>
+              <AppText variant="section">Jogos (Tênis Integrado)</AppText>
+              <AppText variant="caption" style={{ marginTop: 2 }}>Resultados importados automaticamente</AppText>
+            </View>
+            {tiData?.ti_id && primaryProfileId ? (
+              <Pressable
+                disabled={tiSyncing}
+                hitSlop={8}
+                onPress={async () => {
+                  setTiSyncing(true);
+                  try {
+                    await syncTiData(primaryProfileId);
+                    const fresh = await fetchTiData(primaryProfileId);
+                    setTiData(fresh);
+                  } catch { /* ignore */ } finally { setTiSyncing(false); }
+                }}
+              >
+                <Ionicons name={tiSyncing ? 'refresh' : 'refresh-outline'} size={18} color={tiSyncing ? colors.accentNeon : colors.textMuted} />
+              </Pressable>
+            ) : null}
+          </View>
+
+          {tiLoading ? (
+            <View style={{ paddingVertical: 16, alignItems: 'center' }}>
+              <AppText variant="muted">Carregando resultados...</AppText>
+            </View>
+          ) : !tiData?.has_ti_id ? (
+            <EmptyState
+              icon="link-outline"
+              title="ID do Tênis Integrado não vinculado"
+              subtitle="Vincule seu ID do Tênis Integrado no Perfil para importar jogos automaticamente."
+            />
+          ) : tiData.results.length === 0 ? (
+            <EmptyState
+              icon="tennisball-outline"
+              title="Nenhum jogo encontrado"
+              subtitle="Nenhum resultado foi encontrado no Tênis Integrado para este perfil."
+            />
+          ) : (
+            <>
+              {tiData.results.map((r, i) => (
+                <View
+                  key={i}
+                  style={{ backgroundColor: colors.bgCard, borderRadius: 14, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: colors.borderSubtle }}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
+                    {/* Outcome badge */}
+                    <View style={{
+                      width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center',
+                      backgroundColor: r.outcome?.toUpperCase().startsWith('V') || r.outcome?.toUpperCase() === 'W'
+                        ? `${colors.statusOpen}22` : `${colors.danger}22`,
+                    }}>
+                      <AppText variant="caption" style={{
+                        fontWeight: '800', fontSize: 12,
+                        color: r.outcome?.toUpperCase().startsWith('V') || r.outcome?.toUpperCase() === 'W'
+                          ? colors.statusOpen : colors.danger,
+                      }}>
+                        {r.outcome ? r.outcome.slice(0, 1).toUpperCase() : '?'}
+                      </AppText>
+                    </View>
+                    <View style={{ flex: 1, gap: 3 }}>
+                      {r.tournament ? (
+                        <AppText variant="caption" style={{ fontWeight: '600', fontSize: 13 }} numberOfLines={2}>{r.tournament}</AppText>
+                      ) : null}
+                      {r.opponent ? (
+                        <AppText variant="muted" style={{ fontSize: 12 }}>vs {r.opponent}</AppText>
+                      ) : null}
+                      <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
+                        {r.round ? <AppText variant="muted" style={{ fontSize: 10 }}>{r.round}</AppText> : null}
+                        {r.category ? <AppText variant="muted" style={{ fontSize: 10 }}>• {r.category}</AppText> : null}
+                        {r.score ? <AppText variant="muted" style={{ fontSize: 10 }}>• {r.score}</AppText> : null}
+                        {r.date ? <AppText variant="muted" style={{ fontSize: 10 }}>• {r.date}</AppText> : null}
+                      </View>
+                    </View>
+                  </View>
+                </View>
+              ))}
+              {tiData.is_stale ? (
+                <AppText variant="muted" style={{ fontSize: 10, textAlign: 'center', marginTop: 4 }}>
+                  Dados podem estar desatualizados. Toque em ↻ para atualizar.
+                </AppText>
+              ) : null}
+            </>
+          )}
+        </>
       )}
 
       <Modal

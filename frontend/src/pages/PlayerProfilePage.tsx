@@ -2,11 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Settings, ExternalLink, Trophy, MapPin, Calendar, User,
-  Link as LinkIcon, Loader2, ChevronRight, Ticket,
+  Link as LinkIcon, Loader2, ChevronRight, Ticket, RefreshCw,
 } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
-import { PlayerProfile, TournamentRegistration } from '../types';
-import { listProfiles } from '../services/data';
+import { PlayerProfile, TiData, TournamentRegistration } from '../types';
+import { fetchTiData, listProfiles, syncTiData } from '../services/data';
 import { myRegistrations } from '../services/registrations';
 import { mediaUrl } from '../services/api';
 import { LEVEL_LABELS, GENDER_LABELS, ROLE_LABELS, TENNIS_CLASS_LABELS } from '../utils/format';
@@ -48,6 +49,9 @@ export const PlayerProfilePage: React.FC = () => {
   const [profiles, setProfiles] = useState<PlayerProfile[]>([]);
   const [registrations, setRegistrations] = useState<TournamentRegistration[]>([]);
   const [loading, setLoading] = useState(true);
+  const [tiData, setTiData] = useState<TiData | null>(null);
+  const [tiLoading, setTiLoading] = useState(false);
+  const [tiSyncing, setTiSyncing] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -56,8 +60,28 @@ export const PlayerProfilePage: React.FC = () => {
     ]).then(([profs, regs]) => {
       setProfiles(profs);
       setRegistrations(regs);
+      const primary = profs.find((p) => p.is_primary) ?? profs[0];
+      if (primary) {
+        setTiLoading(true);
+        fetchTiData(primary.id).then((d) => setTiData(d)).catch(() => {}).finally(() => setTiLoading(false));
+      }
     }).finally(() => setLoading(false));
   }, []);
+
+  async function handleTiSync() {
+    if (!primary) return;
+    setTiSyncing(true);
+    try {
+      await syncTiData(primary.id);
+      const fresh = await fetchTiData(primary.id);
+      setTiData(fresh);
+      toast.success('Rankings atualizados com sucesso.');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || 'Não foi possível atualizar os dados agora.');
+    } finally {
+      setTiSyncing(false);
+    }
+  }
 
   const primary = profiles.find((p) => p.is_primary) ?? profiles[0] ?? null;
   const avatarLetter = (user?.full_name || user?.email || 'U').slice(0, 1).toUpperCase();
@@ -175,6 +199,63 @@ export const PlayerProfilePage: React.FC = () => {
                       </div>
                     ))}
                   </div>
+                </section>
+              )}
+
+              {/* ── Rankings (Tênis Integrado) ──────────────────────── */}
+              {(tiLoading || tiData?.has_ti_id) && (
+                <section>
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-xs font-bold text-text-muted uppercase tracking-wide">Rankings</h3>
+                    {tiData?.ti_id && (
+                      <button
+                        onClick={handleTiSync}
+                        disabled={tiSyncing}
+                        className="flex items-center gap-1 text-xs text-text-muted hover:text-accent-neon transition-colors disabled:opacity-50"
+                        title="Atualizar rankings"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${tiSyncing ? 'animate-spin' : ''}`} />
+                        {tiSyncing ? 'Atualizando...' : 'Atualizar'}
+                      </button>
+                    )}
+                  </div>
+                  {tiLoading ? (
+                    <div className="card flex items-center justify-center py-6">
+                      <Loader2 className="w-5 h-5 text-accent-neon animate-spin" />
+                    </div>
+                  ) : tiData?.rankings && tiData.rankings.length > 0 ? (
+                    <div className="card divide-y divide-border-subtle">
+                      {tiData.rankings.map((r, i) => (
+                        <div key={i} className="py-3 first:pt-0 last:pb-0 flex items-center gap-3">
+                          {r.position && (
+                            <div className="w-10 h-10 rounded-full bg-accent-neon/15 flex items-center justify-center shrink-0">
+                              <span className="text-accent-neon font-bold text-sm">#{r.position}</span>
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold">{r.category || r.ranking_name || '—'}</p>
+                            <div className="flex items-center gap-2 text-xs text-text-muted mt-0.5 flex-wrap">
+                              {r.federation && <span>{r.federation}</span>}
+                              {r.modality && <span>• {r.modality}</span>}
+                              {r.class_label && <span>• {r.class_label}</span>}
+                            </div>
+                          </div>
+                          {r.points && (
+                            <span className="text-xs font-bold px-2 py-1 rounded-lg bg-accent-blue/15 text-accent-blue border border-accent-blue/20 shrink-0">
+                              {r.points} pts
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                      {tiData.is_stale && (
+                        <p className="text-[10px] text-text-muted pt-2">Dados podem estar desatualizados.</p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="card text-center py-4">
+                      <p className="text-xs text-text-muted">Nenhum ranking encontrado no Tênis Integrado.</p>
+                    </div>
+                  )}
                 </section>
               )}
 

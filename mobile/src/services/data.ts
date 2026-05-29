@@ -1,5 +1,5 @@
 import api from './api';
-import { Alert, CoachAthlete, DependentInvite, Paginated, ParentChild, PlayerCategory, PlayerProfile, PlayerSearchResult, WatchlistItem } from '../types';
+import { Alert, CoachAthlete, DependentInvite, Paginated, ParentChild, PlayerCategory, PlayerProfile, PlayerSearchResult, TiData, WatchlistItem } from '../types';
 
 // ----- Players -----
 export async function listProfiles() {
@@ -164,6 +164,19 @@ export async function updateChildAccount(linkId: number, data: { full_name?: str
 }
 export async function createChildAccount(data: { full_name: string; email: string; password: string; password_confirm: string; phone?: string }): Promise<ParentChild> {
   const res = await api.post<ParentChild>('/api/auth/children/', data);
+  return res.data;
+}
+
+// ----- Tênis Integrado -----
+
+export async function fetchTiData(profileId: number, refresh = false): Promise<TiData> {
+  const url = `/api/players/profiles/${profileId}/ti-data/${refresh ? '?refresh=1' : ''}`;
+  const res = await api.get<TiData>(url);
+  return res.data;
+}
+
+export async function syncTiData(profileId: number): Promise<{ detail: string; results_count: number; rankings_count: number }> {
+  const res = await api.post(`/api/players/profiles/${profileId}/ti-sync/`);
   return res.data;
 }
 

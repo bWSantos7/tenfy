@@ -125,6 +125,15 @@ class PlayerProfile(TimestampedModel):
         help_text='Preferred tournament modality: tennis, beach_tennis, padel, wheelchair. Empty = not set.',
     )
 
+    # ── Tênis Integrado cache ────────────────────────────────────────────────────
+    # Scraped data is cached here to avoid hammering the external site.
+    # Refreshed on-demand (max once per 30 min) or via Celery task.
+    ti_results_cache = models.JSONField(default=list, blank=True)
+    ti_rankings_cache = models.JSONField(default=list, blank=True)
+    ti_results_synced_at = models.DateTimeField(null=True, blank=True)
+    ti_rankings_synced_at = models.DateTimeField(null=True, blank=True)
+    ti_sync_error = models.CharField(max_length=300, blank=True)
+
     class Meta:
         ordering = ['-is_primary', '-created_at']
         constraints = [

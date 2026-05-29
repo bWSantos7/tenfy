@@ -7,10 +7,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { MainStackParamList, MainTabParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { listProfiles } from '../../services/data';
+import { fetchTiData, listProfiles, syncTiData } from '../../services/data';
 import { myRegistrations } from '../../services/registrations';
 import { mediaUrl } from '../../services/api';
-import { PlayerProfile, TournamentRegistration } from '../../types';
+import { PlayerProfile, TiData, TournamentRegistration } from '../../types';
 import { GENDER_LABELS, LEVEL_LABELS, ROLE_LABELS } from '../../utils/format';
 import { AppText, Button, Card, EmptyState, LoadingBlock, Screen, SectionHeader } from '../../components/ui';
 
@@ -54,6 +54,9 @@ export function PlayerProfileScreen(_: Props) {
   const [loading, setLoading] = useState(true);
   const [profiles, setProfiles] = useState<PlayerProfile[]>([]);
   const [registrations, setRegistrations] = useState<TournamentRegistration[]>([]);
+  const [tiData, setTiData] = useState<TiData | null>(null);
+  const [tiLoading, setTiLoading] = useState(false);
+  const [tiSyncing, setTiSyncing] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -68,6 +71,13 @@ export function PlayerProfileScreen(_: Props) {
           if (!active) return;
           setProfiles(profs as PlayerProfile[]);
           setRegistrations(regs);
+
+          // Load TI data for primary profile
+          const primary = (profs as PlayerProfile[]).find((p) => p.is_primary) ?? (profs as PlayerProfile[])[0];
+          if (primary) {
+            setTiLoading(true);
+            fetchTiData(primary.id).then((d) => { if (active) setTiData(d); }).catch(() => {}).finally(() => { if (active) setTiLoading(false); });
+          }
         } finally {
           if (active) setLoading(false);
         }
@@ -203,6 +213,76 @@ export function PlayerProfileScreen(_: Props) {
                       </View>
                     ))}
                   </Card>
+                </>
+              ) : null}
+
+              {/* ── Rankings (Tênis Integrado) ────────────────────── */}
+              {(tiLoading || (tiData && tiData.has_ti_id)) ? (
+                <>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <AppText variant="section">Rankings</AppText>
+                    {tiData?.ti_id ? (
+                      <Pressable
+                        disabled={tiSyncing}
+                        hitSlop={8}
+                        onPress={async () => {
+                          if (!primary) return;
+                          setTiSyncing(true);
+                          try {
+                            await syncTiData(primary.id);
+                            const fresh = await fetchTiData(primary.id);
+                            setTiData(fresh);
+                          } catch { /* ignore */ } finally { setTiSyncing(false); }
+                        }}
+                      >
+                        <Ionicons name={tiSyncing ? 'refresh' : 'refresh-outline'} size={16} color={tiSyncing ? colors.accentNeon : colors.textMuted} />
+                      </Pressable>
+                    ) : null}
+                  </View>
+                  {tiLoading ? (
+                    <Card style={{ marginBottom: 12 }}>
+                      <AppText variant="muted" style={{ textAlign: 'center', paddingVertical: 8 }}>Carregando rankings...</AppText>
+                    </Card>
+                  ) : tiData?.rankings && tiData.rankings.length > 0 ? (
+                    <Card style={{ marginBottom: 12 }}>
+                      {tiData.rankings.map((r, i) => (
+                        <View
+                          key={i}
+                          style={{ paddingVertical: 9, borderBottomWidth: i < tiData.rankings.length - 1 ? 1 : 0, borderBottomColor: colors.borderSubtle, gap: 4 }}
+                        >
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                            {r.position ? (
+                              <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: `${colors.accentNeon}18`, alignItems: 'center', justifyContent: 'center' }}>
+                                <AppText variant="caption" style={{ color: colors.accentNeon, fontWeight: '800', fontSize: 13 }}>#{r.position}</AppText>
+                              </View>
+                            ) : null}
+                            <View style={{ flex: 1 }}>
+                              <AppText variant="caption" style={{ fontWeight: '600', fontSize: 13 }}>{r.category || r.ranking_name || '—'}</AppText>
+                              {r.federation ? <AppText variant="muted" style={{ fontSize: 11 }}>{r.federation}</AppText> : null}
+                            </View>
+                            {r.points ? (
+                              <View style={{ backgroundColor: `${colors.accentBlue}18`, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 }}>
+                                <AppText variant="caption" style={{ color: colors.accentBlue, fontWeight: '700' }}>{r.points} pts</AppText>
+                              </View>
+                            ) : null}
+                          </View>
+                          {(r.modality || r.class_label) ? (
+                            <View style={{ flexDirection: 'row', gap: 6, marginLeft: r.position ? 44 : 0 }}>
+                              {r.modality ? <AppText variant="muted" style={{ fontSize: 10 }}>{r.modality}</AppText> : null}
+                              {r.class_label ? <AppText variant="muted" style={{ fontSize: 10 }}>• {r.class_label}</AppText> : null}
+                            </View>
+                          ) : null}
+                        </View>
+                      ))}
+                      {tiData.is_stale ? (
+                        <AppText variant="muted" style={{ fontSize: 10, marginTop: 6 }}>Dados podem estar desatualizados. Toque em ↻ para atualizar.</AppText>
+                      ) : null}
+                    </Card>
+                  ) : tiData?.has_ti_id ? (
+                    <Card style={{ marginBottom: 12 }}>
+                      <AppText variant="muted" style={{ textAlign: 'center', paddingVertical: 8 }}>Nenhum ranking encontrado para este perfil.</AppText>
+                    </Card>
+                  ) : null}
                 </>
               ) : null}
 

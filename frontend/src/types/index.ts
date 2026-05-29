@@ -1,5 +1,45 @@
 export type Role = 'player' | 'coach' | 'parent' | 'admin';
 
+// ── Tênis Integrado ──────────────────────────────────────────────────────────
+export interface TiResultEntry {
+  tournament?: string;
+  date?: string;
+  category?: string;
+  round?: string;
+  opponent?: string;
+  outcome?: string;
+  score?: string;
+  position?: string;
+  _raw?: Record<string, string>;
+}
+
+export interface TiRankingEntry {
+  category?: string;
+  modality?: string;
+  federation?: string;
+  position?: string;
+  points?: string;
+  class_label?: string;
+  ranking_name?: string;
+  _raw?: Record<string, string>;
+}
+
+export interface TiData {
+  has_ti_id: boolean;
+  ti_id?: string;
+  source?: string;
+  results_url?: string;
+  rankings_url?: string;
+  profile_url?: string;
+  is_stale?: boolean;
+  sync_error?: string | null;
+  results: TiResultEntry[];
+  rankings: TiRankingEntry[];
+  results_synced_at?: string | null;
+  rankings_synced_at?: string | null;
+  detail?: string;
+}
+
 export interface User {
   id: number;
   email: string;

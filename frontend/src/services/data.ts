@@ -1,5 +1,5 @@
 import api from './api';
-import { Alert, CoachAthlete, DependentInvite, Paginated, ParentChild, PlayerCategory, PlayerProfile, PlayerSearchResult, WatchlistItem } from '../types';
+import { Alert, CoachAthlete, DependentInvite, Paginated, ParentChild, PlayerCategory, PlayerProfile, PlayerSearchResult, TiData, WatchlistItem } from '../types';
 
 // ----- Players -----
 export async function listProfiles() {
@@ -127,6 +127,19 @@ export async function createChildWithProfile(
 
 export async function sendChildPasswordReset(linkId: number): Promise<void> {
   await api.post(`/api/auth/children/${linkId}/reset-password/`);
+}
+
+// ----- Tênis Integrado -----
+
+export async function fetchTiData(profileId: number, refresh = false): Promise<TiData> {
+  const url = `/api/players/profiles/${profileId}/ti-data/${refresh ? '?refresh=1' : ''}`;
+  const res = await api.get<TiData>(url);
+  return res.data;
+}
+
+export async function syncTiData(profileId: number): Promise<{ detail: string; results_count: number; rankings_count: number }> {
+  const res = await api.post(`/api/players/profiles/${profileId}/ti-sync/`);
+  return res.data;
 }
 
 // ----- Dependent Invites -----

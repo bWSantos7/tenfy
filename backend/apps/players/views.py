@@ -1,3 +1,7 @@
+import logging
+from datetime import timedelta
+
+from django.utils import timezone
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -8,6 +12,11 @@ from .serializers import (
     PlayerCategorySerializer,
     PlayerProfileCategorySerializer,
 )
+
+logger = logging.getLogger('apps.players')
+
+_TI_CACHE_TTL = timedelta(hours=2)    # serve from cache if younger than this
+_TI_SYNC_COOLDOWN = timedelta(minutes=30)  # min interval between forced re-syncs
 
 
 class PlayerProfileViewSet(viewsets.ModelViewSet):
@@ -136,6 +145,150 @@ class PlayerProfileViewSet(viewsets.ModelViewSet):
             profile=profile, category_id=category_id
         ).delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    # ── Tênis Integrado ──────────────────────────────────────────────────────────
+
+    @action(detail=True, methods=['get'], url_path='ti-data')
+    def ti_data(self, request, pk=None):
+        """
+        Return cached Tênis Integrado results & rankings for a player profile.
+        Triggers a background sync if the cache is stale (> 2 h old).
+        Pass ?refresh=1 to force an inline re-sync (throttled to 30 min).
+        """
+        profile = self.get_object()
+
+        from .parsers import extract_ti_id, TenisScrapeError
+        ti_id, source = extract_ti_id(profile.external_ids or {})
+
+        if not ti_id:
+            return Response({
+                'has_ti_id': False,
+                'detail': 'Nenhum ID do Tênis Integrado vinculado a este perfil.',
+                'results': [],
+                'rankings': [],
+            })
+
+        now = timezone.now()
+        force_refresh = request.query_params.get('refresh') == '1'
+
+        results_stale = (
+            not profile.ti_results_synced_at
+            or (now - profile.ti_results_synced_at) > _TI_CACHE_TTL
+        )
+        rankings_stale = (
+            not profile.ti_rankings_synced_at
+            or (now - profile.ti_rankings_synced_at) > _TI_CACHE_TTL
+        )
+
+        # Inline sync when force_refresh=True (with cooldown) or cache is missing
+        if force_refresh or not profile.ti_results_synced_at or not profile.ti_rankings_synced_at:
+            cooldown_ok = (
+                not profile.ti_results_synced_at
+                or (now - profile.ti_results_synced_at) > _TI_SYNC_COOLDOWN
+            )
+            if force_refresh and not cooldown_ok:
+                return Response({
+                    'has_ti_id': True,
+                    'ti_id': ti_id,
+                    'source': source,
+                    'detail': 'Sincronização disponível em breve. Aguarde 30 minutos entre atualizações.',
+                    'is_stale': results_stale or rankings_stale,
+                    'results': profile.ti_results_cache or [],
+                    'rankings': profile.ti_rankings_cache or [],
+                    'results_synced_at': profile.ti_results_synced_at,
+                    'rankings_synced_at': profile.ti_rankings_synced_at,
+                }, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
+            _sync_ti_data_inline(profile, ti_id)
+        elif results_stale or rankings_stale:
+            # Background sync — don't block the response
+            try:
+                from .tasks import sync_ti_data_task
+                sync_ti_data_task.delay(profile.pk)
+            except Exception:
+                pass
+
+        profile.refresh_from_db(fields=[
+            'ti_results_cache', 'ti_rankings_cache',
+            'ti_results_synced_at', 'ti_rankings_synced_at', 'ti_sync_error',
+        ])
+
+        return Response({
+            'has_ti_id': True,
+            'ti_id': ti_id,
+            'source': source,
+            'results_url': f'https://www.tenisintegrado.com.br/perfil2/jogos/{ti_id}',
+            'rankings_url': f'https://www.tenisintegrado.com.br/perfil2/rankings/{ti_id}',
+            'profile_url': f'https://www.tenisintegrado.com.br/perfil2/index/{ti_id}',
+            'is_stale': results_stale or rankings_stale,
+            'sync_error': profile.ti_sync_error or None,
+            'results': profile.ti_results_cache or [],
+            'rankings': profile.ti_rankings_cache or [],
+            'results_synced_at': profile.ti_results_synced_at,
+            'rankings_synced_at': profile.ti_rankings_synced_at,
+        })
+
+    @action(detail=True, methods=['post'], url_path='ti-sync')
+    def ti_sync(self, request, pk=None):
+        """Force an immediate re-sync of TI data. Throttled to once per 30 min."""
+        profile = self.get_object()
+
+        from .parsers import extract_ti_id
+        ti_id, source = extract_ti_id(profile.external_ids or {})
+
+        if not ti_id:
+            return Response({'detail': 'Nenhum ID do Tênis Integrado vinculado.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        now = timezone.now()
+        if profile.ti_results_synced_at and (now - profile.ti_results_synced_at) < _TI_SYNC_COOLDOWN:
+            wait = int((_TI_SYNC_COOLDOWN - (now - profile.ti_results_synced_at)).total_seconds() / 60) + 1
+            return Response(
+                {'detail': f'Aguarde {wait} minuto(s) antes de sincronizar novamente.'},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+
+        _sync_ti_data_inline(profile, ti_id)
+        profile.refresh_from_db(fields=[
+            'ti_results_cache', 'ti_rankings_cache',
+            'ti_results_synced_at', 'ti_rankings_synced_at', 'ti_sync_error',
+        ])
+        return Response({
+            'detail': 'Dados sincronizados com sucesso.',
+            'results_count': len(profile.ti_results_cache or []),
+            'rankings_count': len(profile.ti_rankings_cache or []),
+            'synced_at': profile.ti_results_synced_at,
+            'sync_error': profile.ti_sync_error or None,
+        })
+
+
+def _sync_ti_data_inline(profile: PlayerProfile, ti_id: str):
+    """Perform a synchronous TI data fetch and write results to the profile cache."""
+    from .parsers import fetch_ti_results, fetch_ti_rankings, TenisScrapeError
+    now = timezone.now()
+    errors = []
+
+    try:
+        results = fetch_ti_results(ti_id)
+        profile.ti_results_cache = results
+        profile.ti_results_synced_at = now
+    except TenisScrapeError as exc:
+        errors.append(f'results: {exc}')
+        logger.warning('TI results fetch failed profile=%s ti_id=%s: %s', profile.pk, ti_id, exc)
+
+    try:
+        rankings = fetch_ti_rankings(ti_id)
+        profile.ti_rankings_cache = rankings
+        profile.ti_rankings_synced_at = now
+    except TenisScrapeError as exc:
+        errors.append(f'rankings: {exc}')
+        logger.warning('TI rankings fetch failed profile=%s ti_id=%s: %s', profile.pk, ti_id, exc)
+
+    profile.ti_sync_error = '; '.join(errors)[:300] if errors else ''
+    profile.save(update_fields=[
+        'ti_results_cache', 'ti_rankings_cache',
+        'ti_results_synced_at', 'ti_rankings_synced_at', 'ti_sync_error',
+        'updated_at',
+    ])
 
 
 class PlayerCategoryViewSet(viewsets.ReadOnlyModelViewSet):

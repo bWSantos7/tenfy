@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Award, Trophy, Loader2, Plus, Check, X, Edit2, User, AlertCircle, PenLine } from 'lucide-react';
+import { Award, Trophy, Loader2, Plus, Check, X, Edit2, User, AlertCircle, PenLine, RefreshCw, LinkIcon } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { WatchlistItem, PlayerProfile, ParentChild } from '../types';
-import { listWatchlist, saveResult, listProfiles, listChildren, listChildWatchlist, listChildProfiles } from '../services/data';
+import { WatchlistItem, PlayerProfile, ParentChild, TiData } from '../types';
+import { fetchTiData, listWatchlist, saveResult, listProfiles, listChildren, listChildWatchlist, listChildProfiles, syncTiData } from '../services/data';
 import { extractApiError } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { fmtDateRange } from '../utils/format';
@@ -45,6 +45,10 @@ export const ResultsPage: React.FC = () => {
   const [editing, setEditing] = useState<number | null>(null);
   const [form, setForm] = useState<ResultForm>(emptyForm());
   const [saving, setSaving] = useState(false);
+  const [tiData, setTiData] = useState<TiData | null>(null);
+  const [tiLoading, setTiLoading] = useState(false);
+  const [tiSyncing, setTiSyncing] = useState(false);
+  const [primaryProfileId, setPrimaryProfileId] = useState<number | null>(null);
 
   async function load() {
     setLoading(true);
@@ -79,6 +83,8 @@ export const ResultsPage: React.FC = () => {
           listWatchlist(),
           listProfiles().catch(() => [] as PlayerProfile[]),
         ]);
+        const primary = profs.find((p) => p.is_primary) ?? profs[0];
+        if (primary) setPrimaryProfileId(primary.id);
         setItems(data.filter((i) => i.user_status === 'registered_declared' || !!i.result));
         setProfileNames(Object.fromEntries(profs.map((p) => [p.id, p.display_name])));
       }
@@ -90,6 +96,27 @@ export const ResultsPage: React.FC = () => {
   }
 
   useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    if (!primaryProfileId || user?.role === 'parent') return;
+    setTiLoading(true);
+    fetchTiData(primaryProfileId).then((d) => setTiData(d)).catch(() => {}).finally(() => setTiLoading(false));
+  }, [primaryProfileId]);
+
+  async function handleTiSync() {
+    if (!primaryProfileId) return;
+    setTiSyncing(true);
+    try {
+      await syncTiData(primaryProfileId);
+      const fresh = await fetchTiData(primaryProfileId);
+      setTiData(fresh);
+      toast.success('Dados atualizados com sucesso.');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || 'Não foi possível atualizar agora.');
+    } finally {
+      setTiSyncing(false);
+    }
+  }
 
   function startEdit(item: WatchlistItem) {
     setEditing(item.id);
@@ -290,8 +317,8 @@ export const ResultsPage: React.FC = () => {
       <div className="flex items-start gap-2.5 bg-text-muted/8 border border-border-subtle rounded-xl px-3 py-2.5">
         <PenLine className="w-4 h-4 text-text-muted mt-0.5 shrink-0" />
         <p className="text-xs text-text-muted leading-relaxed">
-          <span className="font-semibold text-text-secondary">Resultados inseridos manualmente.</span>{' '}
-          Dados abaixo foram declarados por você. Sincronização automática de resultados oficiais está em desenvolvimento.
+          <span className="font-semibold text-text-secondary">Inscrições e resultados manuais.</span>{' '}
+          Os dados da seção principal foram declarados por você. Os jogos do Tênis Integrado são importados automaticamente pelo seu ID vinculado.
         </p>
       </div>
 
@@ -335,6 +362,76 @@ export const ResultsPage: React.FC = () => {
         <div className="space-y-3">
           {renderGrouped()}
         </div>
+      )}
+
+      {/* ── Jogos do Tênis Integrado ─────────────────────────────────────── */}
+      {user?.role !== 'parent' && (
+        <section className="space-y-2">
+          <div className="flex items-center justify-between pt-2">
+            <div>
+              <h2 className="font-bold">Jogos (Tênis Integrado)</h2>
+              <p className="text-xs text-text-muted">Resultados importados automaticamente pelo seu ID</p>
+            </div>
+            {tiData?.ti_id && (
+              <button
+                onClick={handleTiSync}
+                disabled={tiSyncing}
+                className="flex items-center gap-1.5 text-xs text-text-muted hover:text-accent-neon transition-colors disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${tiSyncing ? 'animate-spin' : ''}`} />
+                {tiSyncing ? 'Atualizando...' : 'Atualizar'}
+              </button>
+            )}
+          </div>
+
+          {tiLoading ? (
+            <div className="card flex items-center justify-center py-8">
+              <Loader2 className="w-6 h-6 text-accent-neon animate-spin" />
+            </div>
+          ) : !tiData?.has_ti_id ? (
+            <div className="card flex items-start gap-3 py-4">
+              <LinkIcon className="w-5 h-5 text-text-muted shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium">ID do Tênis Integrado não vinculado</p>
+                <p className="text-xs text-text-muted mt-0.5">
+                  Para importar jogos automaticamente, vincule seu ID no{' '}
+                  <Link to="/perfil" className="text-accent-blue hover:underline">Perfil</Link>.
+                </p>
+              </div>
+            </div>
+          ) : tiData.results.length === 0 ? (
+            <div className="card text-center py-8">
+              <p className="text-sm font-medium mb-1">Nenhum jogo encontrado</p>
+              <p className="text-xs text-text-muted">Nenhum resultado foi encontrado no Tênis Integrado para este perfil.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {tiData.results.map((r, i) => {
+                const isWin = r.outcome?.toUpperCase().startsWith('V') || r.outcome?.toUpperCase() === 'W';
+                return (
+                  <div key={i} className="card flex items-center gap-3">
+                    <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-sm font-bold ${isWin ? 'bg-status-open/15 text-status-open' : 'bg-status-canceled/15 text-status-canceled'}`}>
+                      {r.outcome ? r.outcome.slice(0, 1).toUpperCase() : '?'}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      {r.tournament && <p className="text-sm font-semibold truncate">{r.tournament}</p>}
+                      {r.opponent && <p className="text-xs text-text-muted">vs {r.opponent}</p>}
+                      <div className="flex items-center gap-2 text-[10px] text-text-muted mt-0.5 flex-wrap">
+                        {r.round && <span>{r.round}</span>}
+                        {r.category && <span>• {r.category}</span>}
+                        {r.score && <span>• {r.score}</span>}
+                        {r.date && <span>• {r.date}</span>}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {tiData.is_stale && (
+                <p className="text-[10px] text-text-muted text-center">Dados podem estar desatualizados. Clique em Atualizar.</p>
+              )}
+            </div>
+          )}
+        </section>
       )}
     </div>
   );

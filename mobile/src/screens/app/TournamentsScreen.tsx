@@ -444,11 +444,14 @@ export function TournamentsScreen({ route }: Props) {
     if (modalityFilter) f.modality = modalityFilter;
     if (surfaceFilter) f.surface = surfaceFilter;
     if (nearMe && primaryProfileId) f.near_profile = primaryProfileId;
+    // Locked constraint: filter tournaments by the active profile's competitive level
+    const level = (primaryProfile as any)?.competitive_level;
+    if (level) f.player_level = level;
     return f;
   }, [
     query, statusFilter, federationFilter, categoryFilter,
     stateFilter, cityFilter, fromDate, toDate, modalityFilter, surfaceFilter,
-    nearMe, primaryProfileId,
+    nearMe, primaryProfileId, primaryProfile,
   ]);
 
   const activeFilterCount = useMemo(() => {

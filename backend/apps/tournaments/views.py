@@ -78,13 +78,17 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
                 status_priority=self._build_dynamic_priority(),
             )
         )
-        # Default: only show youth/junior tournaments.
-        # is_youth=True  → classificado como juvenil → mostrar
-        # is_youth=None  → ainda não classificado → mostrar (inclui acervo existente)
-        # is_youth=False → explicitamente adulto  → ocultar
-        # Pass ?youth_only=false to bypass this filter (admin use).
+        # Level-based filter: when player_level is provided (by frontend/mobile from the
+        # active profile's competitive_level), it handles is_youth logic precisely.
+        # Fall back to the generic youth_only filter when player_level is absent.
+        #
+        # is_youth=True  → classified as youth   → shown for 'youth' level
+        # is_youth=None  → not yet classified     → shown by default (legacy data)
+        # is_youth=False → explicitly adult        → hidden by default
+        # Pass ?youth_only=false to bypass (admin use); ignored when player_level is set.
+        player_level = self.request.query_params.get('player_level', '').strip()
         youth_param = self.request.query_params.get('youth_only', 'true').lower()
-        if youth_param != 'false':
+        if not player_level and youth_param != 'false':
             qs = qs.filter(Q(is_youth=True) | Q(is_youth__isnull=True))
 
         # Hide editions explicitly unpublished by admin from the public listing.

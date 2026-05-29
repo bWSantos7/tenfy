@@ -53,14 +53,38 @@ export function HomeScreen(_: Props) {
         : pickBestProfile(profileList);
       setHasProfile(user?.role === 'parent' ? !!primary : profileList.length > 0);
       setProfile(primary);
-      setClosing((closingData as TournamentEditionList[]).slice(0, 6));
+
+      const level = (primary as any)?.competitive_level as string | undefined;
+      const filterByLevel = (items: TournamentEditionList[]): TournamentEditionList[] => {
+        if (!level) return items;
+        if (level === 'youth') {
+          return items.filter((t) => {
+            if (t.is_youth === false) return false;
+            return !(t.circuit || '').toLowerCase().includes('kids');
+          });
+        }
+        if (['beginner', 'amateur', 'federated', 'pro'].includes(level)) {
+          return items.filter((t) => {
+            if (t.is_youth === true) return false;
+            const c = (t.circuit || '').toLowerCase();
+            return !c.includes('juvenil') && !c.includes('kids');
+          });
+        }
+        return items;
+      };
+
+      setClosing(filterByLevel(closingData as TournamentEditionList[]).slice(0, 6));
       const HIDDEN = ['finished', 'canceled'];
-      setRecent(((recentData.results || []) as TournamentEditionList[]).filter((ed) => !HIDDEN.includes(ed.dynamic_status || ed.status)).slice(0, 6));
+      setRecent(filterByLevel(((recentData.results || []) as TournamentEditionList[]).filter((ed) => !HIDDEN.includes(ed.dynamic_status || ed.status))).slice(0, 6));
       setUnreadCount((alerts || []).length);
       if (primary) {
         await syncModalityFromProfile(primary);
         const modality = await getProfileModality(primary.id);
-        const compatData = await compatibleForProfile(primary.id, { page_size: 20, ...(modality ? { modality } : {}) }).catch(() => ({ results: [] as TournamentEditionList[] }));
+        const compatData = await compatibleForProfile(primary.id, {
+          page_size: 20,
+          ...(modality ? { modality } : {}),
+          ...(level ? { player_level: level } : {}),
+        }).catch(() => ({ results: [] as TournamentEditionList[] }));
         if (!active.current) return;
         const ACTIVE_STATUSES = ['open', 'closing_soon', 'announced'];
         const filtered = (compatData.results || [])

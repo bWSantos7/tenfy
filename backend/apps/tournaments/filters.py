@@ -38,6 +38,11 @@ class TournamentEditionFilter(filters.FilterSet):
         field_name='categories__normalized_category__code', lookup_expr='iexact'
     )
 
+    # Level-based tournament type filter derived from PlayerProfile.competitive_level.
+    # Automatically applied by the frontend/mobile based on the active profile.
+    # Values: 'youth' | 'beginner' | 'amateur' | 'federated' | 'pro'
+    player_level = filters.CharFilter(method='filter_player_level')
+
     class Meta:
         model = TournamentEdition
         fields = [
@@ -45,6 +50,7 @@ class TournamentEditionFilter(filters.FilterSet):
             'organization_slug', 'modality', 'circuit', 'surface',
             'status', 'q', 'near_profile',
             'category', 'category_id', 'category_code',
+            'player_level',
         ]
 
     @property
@@ -83,6 +89,39 @@ class TournamentEditionFilter(filters.FilterSet):
         if not value:
             return queryset
         return queryset.filter(tournament__organization__short_name__iexact=value)
+
+    def filter_player_level(self, queryset, name, value):
+        """
+        Coarse tournament-type filter based on PlayerProfile.competitive_level.
+
+        'youth'  → is_youth=True/None, excludes circuits with 'kids' keyword
+                   (keeps Infantojuvenil, FPT Juniors etc.; removes Tennis Kids)
+
+        adult levels (beginner/amateur/federated/pro)
+                 → is_youth=False/None, excludes circuits containing
+                   'juvenil' or 'kids' keywords
+        """
+        if not value:
+            return queryset
+
+        if value == 'youth':
+            return (
+                queryset
+                .filter(Q(is_youth=True) | Q(is_youth__isnull=True))
+                .exclude(tournament__circuit__icontains='kids')
+            )
+
+        if value in ('beginner', 'amateur', 'federated', 'pro'):
+            return (
+                queryset
+                .filter(Q(is_youth=False) | Q(is_youth__isnull=True))
+                .exclude(
+                    Q(tournament__circuit__icontains='juvenil') |
+                    Q(tournament__circuit__icontains='kids')
+                )
+            )
+
+        return queryset
 
     def filter_near_profile(self, queryset, name, value):
         """Filter editions whose venue is within the profile's travel_radius_km."""

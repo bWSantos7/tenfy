@@ -142,8 +142,9 @@ export const TournamentsPage: React.FC = () => {
   const [q, setQ] = useState(saved.current?.q ?? '');
   const [nearMe, setNearMe] = useState(saved.current?.nearMe ?? false);
   const [primaryProfileId, setPrimaryProfileId] = useState<number | null>(null);
-  // Tracks the active profile's sport so clearFilters can restore it as default
+  // Locked constraints from the active profile — not user-editable in the filter UI
   const [profileModality, setProfileModality] = useState<string>('');
+  const [profileLevel, setProfileLevel] = useState<string>('');
   const [organizations, setOrganizations] = useState<OrganizationOption[]>([]);
   const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -159,12 +160,16 @@ export const TournamentsPage: React.FC = () => {
       if (primary) {
         setPrimaryProfileId(primary.id);
         const mod = primary.preferred_modality || '';
+        const level = (primary as any).competitive_level || '';
         setProfileModality(mod);
-        // Profile modality is a hard constraint: always apply it, overriding any
-        // saved session value. The user cannot change it from the filter UI.
-        if (mod) {
-          setFilters((f) => ({ ...f, modality: mod }));
-        }
+        setProfileLevel(level);
+        // Both modality and competitive_level are hard constraints locked to the
+        // active profile — always apply them, overriding any saved session value.
+        setFilters((f) => ({
+          ...f,
+          ...(mod ? { modality: mod } : {}),
+          ...(level ? { player_level: level } : {}),
+        }));
       }
     }).catch(() => {});
     listOrganizations().then(setOrganizations).catch(() => setOrganizations([]));
@@ -183,8 +188,7 @@ export const TournamentsPage: React.FC = () => {
   const hasAnyFilter = useMemo(
     () => !!(
       filters.status || filters.state || filters.q
-      // Profile modality is a locked constraint, not a user-applied filter.
-      // Only flag it as "active" if it differs from the profile's modality.
+      // Modality and player_level are locked constraints, not user-applied filters.
       || (filters.modality && filters.modality !== profileModality)
       || filters.from_date || filters.to_date
       || filters.organization || filters.category
@@ -247,7 +251,12 @@ export const TournamentsPage: React.FC = () => {
 
   function clearFilters() {
     setQ('');
-    setFilters({ status: '', state: '', ...(profileModality ? { modality: profileModality } : {}) });
+    setFilters({
+      status: '',
+      state: '',
+      ...(profileModality ? { modality: profileModality } : {}),
+      ...(profileLevel ? { player_level: profileLevel } : {}),
+    });
     setNearMe(false);
     setPage(1);
     try { sessionStorage.removeItem(FILTER_SESSION_KEY); } catch {}

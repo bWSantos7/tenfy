@@ -99,6 +99,8 @@ export interface TournamentEditionList {
   organization_short: string;
   circuit: string;
   modality: string;
+  /** True = youth/junior tournament; False = adult; null = not yet classified */
+  is_youth: boolean | null;
   season_year: number;
   title: string;
   start_date: string | null;

@@ -39,9 +39,11 @@ export const HomePage: React.FC = () => {
     try {
       syncModalityFromProfile(p);
       const modality = p.preferred_modality || getProfileModality(p.id);
+      const level = (p as any).competitive_level as string | undefined;
       const compatData = await compatibleForProfile(p.id, {
         page_size: 20,
         ...(modality ? { modality } : {}),
+        ...(level ? { player_level: level } : {}),
       }).catch((err: any) => {
         if (err?.response?.data?.code === 'modality_required') {
           setModalityMissing(true);
@@ -60,6 +62,29 @@ export const HomePage: React.FC = () => {
   const filterByModality = useCallback(
     (items: TournamentEditionList[], modality: string | null | undefined) =>
       modality ? items.filter((t) => t.modality === modality) : items,
+    [],
+  );
+
+  // Mirrors the server-side player_level filter for client-side preview lists
+  const filterByLevel = useCallback(
+    (items: TournamentEditionList[], level: string | null | undefined): TournamentEditionList[] => {
+      if (!level) return items;
+      if (level === 'youth') {
+        return items.filter((t) => {
+          if (t.is_youth === false) return false;
+          const circuit = (t.circuit || '').toLowerCase();
+          return !circuit.includes('kids');
+        });
+      }
+      if (['beginner', 'amateur', 'federated', 'pro'].includes(level)) {
+        return items.filter((t) => {
+          if (t.is_youth === true) return false;
+          const circuit = (t.circuit || '').toLowerCase();
+          return !circuit.includes('juvenil') && !circuit.includes('kids');
+        });
+      }
+      return items;
+    },
     [],
   );
 
@@ -107,12 +132,15 @@ export const HomePage: React.FC = () => {
       setProfile(primary);
       setActiveChildName(childName);
 
-      // Apply modality filter now that we know the active profile's preferred modality
+      // Apply modality + level filters now that we know the active profile
       const modality = primary?.preferred_modality;
+      const level = (primary as any)?.competitive_level;
       const allClosing = closingData as TournamentEditionList[];
       const allRecent = ((recentData as any).results || []) as TournamentEditionList[];
-      setClosing(filterByModality(allClosing, modality).filter((t) => ACTIVE_STATUSES.has(t.status ?? '')).slice(0, 6));
-      setRecent(filterByModality(allRecent, modality).slice(0, 6));
+      const applyProfileFilters = (items: TournamentEditionList[]) =>
+        filterByLevel(filterByModality(items, modality), level);
+      setClosing(applyProfileFilters(allClosing).filter((t) => ACTIVE_STATUSES.has(t.status ?? '')).slice(0, 6));
+      setRecent(applyProfileFilters(allRecent).slice(0, 6));
 
       if (primary) {
         await loadCompat(primary);
@@ -124,7 +152,7 @@ export const HomePage: React.FC = () => {
       setLoading(false);
       hasLoadedRef.current = true;
     }
-  }, [user?.id, user?.role, loadCompat, filterByModality]);
+  }, [user?.id, user?.role, loadCompat, filterByModality, filterByLevel]);
 
   async function switchProfile(opt: ProfileOption) {
     if (opt.profile.id === profile?.id) return;

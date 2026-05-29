@@ -308,6 +308,45 @@ def dispatch_deadline_alerts(self):
     return created
 
 
+# Event types that generate system-level noise and should NOT notify athletes/parents
+_SKIP_EVENT_TYPES = {
+    TournamentChangeEvent.EVENT_OTHER,   # surface / title / withdrawal_deadline minor updates
+    TournamentChangeEvent.EVENT_CREATED, # new tournament indexed — not a change alert
+}
+
+# For EVENT_STATUS, only these transitions are meaningful for athletes
+_NOTIFY_STATUSES = {'canceled', 'draws_published', 'closed', 'closing_soon'}
+
+# Human-readable titles for status-based alerts
+_STATUS_TITLES = {
+    'canceled':      '{title} — torneio cancelado',
+    'draws_published': '{title} — chaves publicadas',
+    'closed':        '{title} — inscrições encerradas',
+    'closing_soon':  '{title} — inscrições encerrando em breve',
+}
+
+
+def _should_dispatch(event: TournamentChangeEvent) -> bool:
+    """Return True only for change events that are genuinely relevant to athletes."""
+    # System/minor events: suppress entirely
+    if event.event_type in _SKIP_EVENT_TYPES:
+        return False
+
+    # Status alerts only for meaningful transitions
+    if event.event_type == TournamentChangeEvent.EVENT_STATUS:
+        field = event.field_changes.get('status', {})
+        new_status = field.get('new', '') if isinstance(field, dict) else str(field)
+        return new_status in _NOTIFY_STATUSES
+
+    # Deadline alerts only when entry_close_at (signup deadline) actually changed
+    # Changing entry_open_at alone is low-value noise
+    if event.event_type == TournamentChangeEvent.EVENT_DEADLINE:
+        return 'entry_close_at' in event.field_changes
+
+    # All other classified events (date, price, draws, canceled) are relevant
+    return True
+
+
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def dispatch_change_alert(self, edition_id: int, event_id: int):
     """Fan-out: notify every watcher of an edition when a change event is recorded."""
@@ -319,10 +358,17 @@ def dispatch_change_alert(self, edition_id: int, event_id: int):
     except Exception as exc:
         raise self.retry(exc=exc)
 
+    # Gate: skip events that are not meaningful for athlete/parent notification
+    if not _should_dispatch(event):
+        logger.debug('dispatch_change_alert: skipping event_type=%s edition=%s', event.event_type, edition_id)
+        return 0
+
     created = 0
     watchers = WatchlistItem.objects.filter(edition=edition).select_related('user')
     for item in watchers:
         prefs = UserAlertPreference.get_or_create_defaults(item.user)
+
+        # Determine kind and title based on event type
         if event.event_type == TournamentChangeEvent.EVENT_DRAWS:
             if not item.alert_on_draws or not prefs.draws_enabled:
                 continue
@@ -331,6 +377,13 @@ def dispatch_change_alert(self, edition_id: int, event_id: int):
         elif event.event_type == TournamentChangeEvent.EVENT_CANCELED:
             kind = Alert.KIND_CANCELED
             title = f'{edition.title} — torneio cancelado'
+        elif event.event_type == TournamentChangeEvent.EVENT_STATUS:
+            if not item.alert_on_changes or not prefs.changes_enabled:
+                continue
+            kind = Alert.KIND_CHANGE
+            field = event.field_changes.get('status', {})
+            new_status = field.get('new', '') if isinstance(field, dict) else str(field)
+            title = _STATUS_TITLES.get(new_status, f'{edition.title} — status alterado').format(title=edition.title)
         else:
             if not item.alert_on_changes or not prefs.changes_enabled:
                 continue

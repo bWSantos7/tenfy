@@ -6,8 +6,8 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
-import { PlayerProfile, TiData, TiRankingEntry, TournamentRegistration } from '../types';
-import { fetchTiData, listProfiles, syncTiData } from '../services/data';
+import { ParentChild, PlayerProfile, TiData, TiRankingEntry, TournamentRegistration } from '../types';
+import { fetchTiData, listChildProfiles, listChildren, listProfiles, syncTiData } from '../services/data';
 import { myRegistrations } from '../services/registrations';
 import { mediaUrl } from '../services/api';
 import { resolveAvatar } from '../utils/format';
@@ -48,26 +48,63 @@ export const PlayerProfilePage: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [profiles, setProfiles] = useState<PlayerProfile[]>([]);
+  const [children, setChildren] = useState<ParentChild[]>([]);
+  const [selectedChildId, setSelectedChildId] = useState<number | null>(null);
+  const [childProfiles, setChildProfiles] = useState<PlayerProfile[]>([]);
   const [registrations, setRegistrations] = useState<TournamentRegistration[]>([]);
   const [loading, setLoading] = useState(true);
   const [tiData, setTiData] = useState<TiData | null>(null);
   const [tiLoading, setTiLoading] = useState(false);
   const [tiSyncing, setTiSyncing] = useState(false);
 
+  const isParent = user?.role === 'parent';
+
+  // Initial load: children list (parent) or own profiles (others)
   useEffect(() => {
-    Promise.all([
-      listProfiles().catch(() => [] as PlayerProfile[]),
-      myRegistrations().catch(() => [] as TournamentRegistration[]),
-    ]).then(([profs, regs]) => {
-      setProfiles(profs);
-      setRegistrations(regs);
-      const primary = profs.find((p) => p.is_primary) ?? profs[0];
-      if (primary) {
-        setTiLoading(true);
-        fetchTiData(primary.id).then((d) => setTiData(d)).catch(() => {}).finally(() => setTiLoading(false));
-      }
-    }).finally(() => setLoading(false));
-  }, []);
+    if (isParent) {
+      Promise.all([
+        listChildren().catch(() => [] as ParentChild[]),
+        myRegistrations().catch(() => [] as TournamentRegistration[]),
+      ]).then(([kids, regs]) => {
+        setChildren(kids);
+        setRegistrations(regs);
+        setSelectedChildId(kids[0]?.child ?? null);
+      }).finally(() => setLoading(false));
+    } else {
+      Promise.all([
+        listProfiles().catch(() => [] as PlayerProfile[]),
+        myRegistrations().catch(() => [] as TournamentRegistration[]),
+      ]).then(([profs, regs]) => {
+        setProfiles(profs);
+        setRegistrations(regs);
+        const primary = profs.find((p) => p.is_primary) ?? profs[0];
+        if (primary) {
+          setTiLoading(true);
+          fetchTiData(primary.id).then((d) => setTiData(d)).catch(() => {}).finally(() => setTiLoading(false));
+        }
+      }).finally(() => setLoading(false));
+    }
+  }, [isParent]);
+
+  // When a child is selected, load their profiles and TI data
+  useEffect(() => {
+    if (!isParent || !selectedChildId) return;
+    setTiLoading(true);
+    setTiData(null);
+    setChildProfiles([]);
+    listChildProfiles(selectedChildId)
+      .then((profs) => {
+        setChildProfiles(profs);
+        const primary = profs.find((p) => p.is_primary) ?? profs[0];
+        if (primary) return fetchTiData(primary.id);
+      })
+      .then((d) => { if (d) setTiData(d); })
+      .catch(() => {})
+      .finally(() => setTiLoading(false));
+  }, [isParent, selectedChildId]);
+
+  const activeProfiles = isParent ? childProfiles : profiles;
+  const primary = activeProfiles.find((p) => p.is_primary) ?? activeProfiles[0] ?? null;
 
   async function handleTiSync() {
     if (!primary) return;
@@ -83,8 +120,6 @@ export const PlayerProfilePage: React.FC = () => {
       setTiSyncing(false);
     }
   }
-
-  const primary = profiles.find((p) => p.is_primary) ?? profiles[0] ?? null;
   const avatarLetter = (user?.full_name || user?.email || 'U').slice(0, 1).toUpperCase();
   const roleLabel = ROLE_LABELS[user?.role ?? ''] ?? user?.role ?? '';
 
@@ -139,6 +174,29 @@ export const PlayerProfilePage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* ── Seletor de dependente (pai com 1 ou mais filhos) ── */}
+      {isParent && children.length >= 1 && (
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+          {children.map((c) => {
+            const isActive = c.child === selectedChildId;
+            return (
+              <button
+                key={c.id}
+                onClick={() => setSelectedChildId(c.child)}
+                className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors ${
+                  isActive
+                    ? 'bg-accent-neon text-bg-base border-accent-neon'
+                    : 'bg-bg-card border-border-subtle text-text-secondary hover:text-text-primary hover:border-accent-neon/50'
+                }`}
+              >
+                <User className="w-3 h-3 shrink-0" />
+                <span className="truncate max-w-[120px]">{c.child_detail.full_name || '—'}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {loading ? (
         <div className="py-8 flex justify-center"><Loader2 className="w-6 h-6 text-accent-neon animate-spin" /></div>

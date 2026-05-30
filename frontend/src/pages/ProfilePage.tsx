@@ -62,7 +62,6 @@ export const ProfilePage: React.FC = () => {
 
   // Dependentes
   const [children, setChildren] = useState<ParentChild[]>([]);
-  const [selectedChildId, setSelectedChildId] = useState<number | null>(null);
   const [loadingChildren, setLoadingChildren] = useState(false);
   const [showAddChild, setShowAddChild] = useState(false);
   const [confirmRemoveChild, setConfirmRemoveChild] = useState<number | null>(null);
@@ -90,7 +89,6 @@ export const ProfilePage: React.FC = () => {
       ]);
       setChildren(data);
       setSentInvites(invites.filter((i) => i.status === 'pending'));
-      setSelectedChildId((prev) => prev ?? (data.length > 0 ? data[0].child : null));
     } catch {
       // silently ignore if endpoint not available
     } finally {
@@ -419,29 +417,6 @@ export const ProfilePage: React.FC = () => {
             />
           )}
 
-          {/* ── Seletor de dependente ── */}
-          {!loadingChildren && children.length >= 1 && (
-            <div className="flex gap-2 mb-3 overflow-x-auto pb-1 scrollbar-none">
-              {children.map((c) => {
-                const isActive = c.child === selectedChildId;
-                return (
-                  <button
-                    key={c.id}
-                    onClick={() => setSelectedChildId(c.child)}
-                    className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors ${
-                      isActive
-                        ? 'bg-accent-neon text-bg-base border-accent-neon'
-                        : 'bg-bg-card border-border-subtle text-text-secondary hover:text-text-primary hover:border-accent-neon/50'
-                    }`}
-                  >
-                    <User className="w-3 h-3 shrink-0" />
-                    <span className="truncate max-w-[120px]">{c.child_detail.full_name || '—'}</span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
           {loadingChildren ? (
             <div className="py-6 flex justify-center"><Loader2 className="w-5 h-5 text-accent-neon animate-spin" /></div>
           ) : children.length === 0 && !showAddChild ? (
@@ -452,16 +427,14 @@ export const ProfilePage: React.FC = () => {
             </div>
           ) : (
             <div className="space-y-3">
-              {children
-                .filter((c) => !selectedChildId || c.child === selectedChildId)
-                .map((c) => (
-                  <DependentCard
-                    key={c.id}
-                    link={c}
-                    onRemove={() => setConfirmRemoveChild(c.id)}
-                    onUpdated={(updated: ParentChild) => setChildren((prev: ParentChild[]) => prev.map((x: ParentChild) => x.id === updated.id ? updated : x))}
-                  />
-                ))}
+              {children.map((c) => (
+                <DependentCard
+                  key={c.id}
+                  link={c}
+                  onRemove={() => setConfirmRemoveChild(c.id)}
+                  onUpdated={(updated: ParentChild) => setChildren((prev: ParentChild[]) => prev.map((x: ParentChild) => x.id === updated.id ? updated : x))}
+                />
+              ))}
             </div>
           )}
         </div>

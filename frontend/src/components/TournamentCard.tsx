@@ -11,24 +11,22 @@ const LOCAL_ORG_LOGOS: Record<string, string> = {
   FCT:   '/logo_federacao/FCT.webp',
 };
 
-function resolveOrgLogo(edition: TournamentEditionList): string | null {
-  if (edition.organization_logo_url) return edition.organization_logo_url;
-  const candidates = [
-    edition.organization_short || '',
-    edition.organization_name || '',
-  ];
-  for (const c of candidates) {
+function findLocalLogo(edition: TournamentEditionList): string | null {
+  for (const c of [edition.organization_short || '', edition.organization_name || '']) {
     const upper = c.toUpperCase().trim();
     if (LOCAL_ORG_LOGOS[upper]) return LOCAL_ORG_LOGOS[upper];
-    // try first word (e.g. "FPT SP" → "FPT")
     const first = upper.split(/[\s/(-]/)[0];
     if (LOCAL_ORG_LOGOS[first]) return LOCAL_ORG_LOGOS[first];
-    // try any key that appears inside the string
     for (const key of Object.keys(LOCAL_ORG_LOGOS)) {
       if (upper.includes(key)) return LOCAL_ORG_LOGOS[key];
     }
   }
   return null;
+}
+
+function resolveOrgLogo(edition: TournamentEditionList): string | null {
+  // Prefer local curated logos; only fall back to API URL for unknown orgs
+  return findLocalLogo(edition) ?? edition.organization_logo_url ?? null;
 }
 
 interface Props {
@@ -65,12 +63,18 @@ export const TournamentCard: React.FC<Props> = ({
                 src={orgLogo}
                 alt={edition.organization_short || edition.organization_name}
                 className="w-full h-full object-contain p-0.5"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                  e.currentTarget.nextElementSibling?.removeAttribute('hidden');
+                }}
               />
-            ) : (
-              <span className="text-accent-blue font-bold text-sm">
-                {(edition.organization_short || edition.organization_name || '?').slice(0, 2).toUpperCase()}
-              </span>
-            )}
+            ) : null}
+            <span
+              hidden={!!orgLogo}
+              className="text-accent-blue font-bold text-sm"
+            >
+              {(edition.organization_short || edition.organization_name || '?').slice(0, 2).toUpperCase()}
+            </span>
           </div>
           <span className="text-[10px] font-semibold text-accent-blue uppercase tracking-wider text-center leading-tight">
             {edition.organization_short || edition.organization_name}

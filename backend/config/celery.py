@@ -39,6 +39,16 @@ app.conf.beat_schedule = {
         'task': 'apps.players.tasks.sync_all_ti_profiles_task',
         'schedule': crontab(minute=50, hour='*/2'),  # 00:50, 02:50, 04:50 … UTC
     },
+    'sync-fpt-sp-entries-hourly': {
+        'task': 'apps.registrations.tasks.sync_fpt_sp_entries_task',
+        'schedule': crontab(minute=10),  # X:10 every hour
+        'kwargs': {'limit': 60},
+    },
+    'sync-cbt-fct-entries-hourly': {
+        'task': 'apps.registrations.tasks.sync_cbt_fct_entries_task',
+        'schedule': crontab(minute=20),  # X:20 every hour (after FPT)
+        'kwargs': {'sources': ['cbt', 'fct'], 'limit': 60},
+    },
 }
 
 

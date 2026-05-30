@@ -347,3 +347,117 @@ def sync_fpt_sp_entries_task(self, limit: int = 50):
 
     log.info('sync_fpt_sp done: created=%s updated=%s skipped=%s', created_total, updated_total, skipped_total)
     return {'created': created_total, 'updated': updated_total, 'skipped': skipped_total}
+
+
+@shared_task(bind=True, max_retries=2, default_retry_delay=300)
+def sync_cbt_fct_entries_task(self, sources=None, limit: int = 50):
+    """
+    Sync CBT and FCT tournament inscritos via TenisIntegrado torneio_painel_insc.
+
+    Uses the same fetch_tenisintegrado_entries() mechanism as FPT.
+    Tournament ID is derived from external_id (cbt:12345 / fct:67890)
+    or from official_source_url.
+    """
+    import re as _re
+    import unicodedata as _ud
+    from django.utils import timezone as _tz
+    from apps.registrations.parsers import fetch_tenisintegrado_entries
+    from apps.tournaments.models import TournamentEdition
+
+    log = logging.getLogger('apps.registrations.sync_cbt_fct')
+
+    if sources is None:
+        sources = ['cbt', 'fct']
+
+    _TI_INSC = 'https://www.tenisintegrado.com.br/torneio_painel_insc/index/{tid}'
+    _SOURCE_DB = {
+        'cbt': FederationEntry.SOURCE_CBT,
+        'fct': FederationEntry.SOURCE_FCT,
+    }
+    _VALID_PAY = {FederationEntry.PAYMENT_PAID, FederationEntry.PAYMENT_PENDING, FederationEntry.PAYMENT_UNKNOWN}
+
+    def _slug(t):
+        s = _ud.normalize('NFKD', t).encode('ascii', 'ignore').decode()
+        return _re.sub(r'[^a-z0-9]+', '-', s.lower()).strip('-')[:50]
+
+    def _extract_tid(edition):
+        m = _re.match(r'(?:cbt|fct|fmt):(\d+)', edition.external_id or '')
+        if m:
+            return m.group(1)
+        src = edition.official_source_url or ''
+        m = _re.search(r'/(?:torneio_painel_insc|torneio_painel_info|torneio)/(?:index/)?(\d+)', src)
+        if m:
+            return m.group(1)
+        m = _re.search(r'/(\d{4,})/?$', src)
+        return m.group(1) if m else None
+
+    created_total = updated_total = skipped_total = 0
+    now = _tz.now()
+
+    for src in sources:
+        qs = (
+            TournamentEdition.objects
+            .filter(external_id__startswith=f'{src}:')
+            .exclude(status__in=[TournamentEdition.STATUS_CANCELED, TournamentEdition.STATUS_FINISHED])
+            .select_related('tournament')
+            .order_by('entry_close_at', 'start_date')
+        )[:limit]
+
+        for edition in qs:
+            tid = _extract_tid(edition)
+            if not tid:
+                skipped_total += 1
+                continue
+
+            insc_url = _TI_INSC.format(tid=tid)
+            try:
+                result = fetch_tenisintegrado_entries(insc_url, source=src)
+            except Exception as exc:
+                log.warning('sync_cbt_fct fetch failed edition=%s src=%s: %s', edition.id, src, exc)
+                skipped_total += 1
+                continue
+
+            entries = result.get('entries', [])
+            if not entries or result.get('parser_warning'):
+                skipped_total += 1
+                continue
+
+            db_source = _SOURCE_DB[src]
+            for entry_data in entries:
+                player_name = (entry_data.get('player_name') or '').strip()
+                category_text = (entry_data.get('category_text') or '').strip()
+                if not player_name or not category_text:
+                    continue
+
+                raw_eid = (entry_data.get('player_external_id') or '').strip()
+                external_id = raw_eid or f'{src}:{_slug(player_name)}:{_slug(category_text)}'
+
+                raw_pay = (entry_data.get('payment_status') or FederationEntry.PAYMENT_UNKNOWN).strip()
+                if raw_pay not in _VALID_PAY:
+                    raw_pay = FederationEntry.PAYMENT_UNKNOWN
+
+                try:
+                    _, created = FederationEntry.objects.update_or_create(
+                        edition=edition,
+                        player_external_id=external_id,
+                        defaults={
+                            'player_name': player_name[:200],
+                            'category_text': category_text[:200],
+                            'ranking_position': entry_data.get('ranking_position'),
+                            'payment_status': raw_pay,
+                            'removed_or_replaced': bool(entry_data.get('removed_or_replaced', False)),
+                            'source': db_source,
+                            'source_url': insc_url[:500],
+                            'confidence': FederationEntry.CONFIDENCE_HIGH,
+                            'synced_at': now,
+                        },
+                    )
+                    if created:
+                        created_total += 1
+                    else:
+                        updated_total += 1
+                except Exception as exc:
+                    log.warning('sync_cbt_fct upsert failed edition=%s: %s', edition.id, exc)
+
+    log.info('sync_cbt_fct done: created=%s updated=%s skipped=%s', created_total, updated_total, skipped_total)
+    return {'created': created_total, 'updated': updated_total, 'skipped': skipped_total}

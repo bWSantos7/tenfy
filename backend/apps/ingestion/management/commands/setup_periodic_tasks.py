@@ -42,8 +42,16 @@ TASKS = [
     {
         'name': 'sync-fpt-sp-entries-hourly',
         'task': 'apps.registrations.tasks.sync_fpt_sp_entries_task',
-        'cron': {'minute': '45', 'hour': '*', 'day_of_week': '*', 'day_of_month': '*', 'month_of_year': '*'},
-        'description': 'Sync FPT (SP) tournament inscritos from fpt.tenisintegrado.com.br every hour at :45',
+        'cron': {'minute': '10', 'hour': '*', 'day_of_week': '*', 'day_of_month': '*', 'month_of_year': '*'},
+        'description': 'Sync FPT (SP) tournament inscritos from fpt.tenisintegrado.com.br every hour at :10',
+        'kwargs': {'limit': 60},
+    },
+    {
+        'name': 'sync-cbt-fct-entries-hourly',
+        'task': 'apps.registrations.tasks.sync_cbt_fct_entries_task',
+        'cron': {'minute': '20', 'hour': '*', 'day_of_week': '*', 'day_of_month': '*', 'month_of_year': '*'},
+        'description': 'Sync CBT and FCT tournament inscritos via TenisIntegrado every hour at :20',
+        'kwargs': {'sources': ['cbt', 'fct'], 'limit': 60},
     },
     {
         'name': 'sync-all-ti-profiles-every-2h',
@@ -71,7 +79,7 @@ class Command(BaseCommand):
                     'enabled': True,
                     'description': task_def['description'],
                     'args': json.dumps([]),
-                    'kwargs': json.dumps({}),
+                    'kwargs': json.dumps(task_def.get('kwargs', {})),
                 },
             )
             if created:

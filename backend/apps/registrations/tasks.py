@@ -326,13 +326,13 @@ def sync_fpt_sp_entries_task(self, limit: int = 50):
                 _, created = FederationEntry.objects.update_or_create(
                     edition=edition,
                     player_external_id=external_id,
+                    category_text=category_text[:200],
+                    source=FederationEntry.SOURCE_FPT,
                     defaults={
                         'player_name': player_name[:200],
-                        'category_text': category_text[:200],
                         'ranking_position': entry_data.get('ranking_position'),
                         'payment_status': raw_pay,
                         'removed_or_replaced': bool(entry_data.get('removed_or_replaced', False)),
-                        'source': FederationEntry.SOURCE_FPT,
                         'source_url': (entry_data.get('source_url') or edition.official_source_url)[:500],
                         'confidence': FederationEntry.CONFIDENCE_HIGH,
                         'synced_at': now,
@@ -472,14 +472,14 @@ def sync_cbt_fct_entries_task(self, sources=None, limit: int = 500):
                     _, created = FederationEntry.objects.update_or_create(
                         edition=edition,
                         player_external_id=external_id,
+                        category_text=category_text[:200],
+                        source=db_source,
                         defaults={
                             'player_name': player_name[:200],
-                            'category_text': category_text[:200],
                             'ranking_position': entry_data.get('ranking_position'),
                             'payment_status': raw_pay,
                             'removed_or_replaced': bool(entry_data.get('removed_or_replaced', False)),
                             'replacement_reason': (entry_data.get('replacement_reason') or '')[:500],
-                            'source': db_source,
                             'source_url': insc_url[:500],
                             'confidence': FederationEntry.CONFIDENCE_HIGH,
                             'synced_at': now,

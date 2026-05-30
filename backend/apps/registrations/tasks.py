@@ -350,13 +350,15 @@ def sync_fpt_sp_entries_task(self, limit: int = 50):
 
 
 @shared_task(bind=True, max_retries=2, default_retry_delay=300)
-def sync_cbt_fct_entries_task(self, sources=None, limit: int = 50):
+def sync_cbt_fct_entries_task(self, sources=None, limit: int = 500):
     """
-    Sync CBT and FCT tournament inscritos via TenisIntegrado torneio_painel_insc.
+    Sync CBT and FCT tournament entries via TenisIntegrado torneio_painel_insc.
 
-    Uses the same fetch_tenisintegrado_entries() mechanism as FPT.
-    Tournament ID is derived from external_id (cbt:12345 / fct:67890)
-    or from official_source_url.
+    Same mechanism used for tournament 278 (GA/GA+ Brasileirao):
+      1. fetch_tenisintegrado_entries(torneio_painel_insc/index/{tid})
+      2. upsert FederationEntry records
+      3. mark stale entries as removed_or_replaced
+      4. dispatch match_federation_entries.delay() per edition
     """
     import re as _re
     import unicodedata as _ud
@@ -370,11 +372,9 @@ def sync_cbt_fct_entries_task(self, sources=None, limit: int = 50):
         sources = ['cbt', 'fct']
 
     _TI_INSC = 'https://www.tenisintegrado.com.br/torneio_painel_insc/index/{tid}'
-    _SOURCE_DB = {
-        'cbt': FederationEntry.SOURCE_CBT,
-        'fct': FederationEntry.SOURCE_FCT,
-    }
+    _SOURCE_DB = {'cbt': FederationEntry.SOURCE_CBT, 'fct': FederationEntry.SOURCE_FCT}
     _VALID_PAY = {FederationEntry.PAYMENT_PAID, FederationEntry.PAYMENT_PENDING, FederationEntry.PAYMENT_UNKNOWN}
+    _SKIP_STATUSES = [TournamentEdition.STATUS_CANCELED, TournamentEdition.STATUS_FINISHED]
 
     def _slug(t):
         s = _ud.normalize('NFKD', t).encode('ascii', 'ignore').decode()
@@ -391,38 +391,69 @@ def sync_cbt_fct_entries_task(self, sources=None, limit: int = 50):
         m = _re.search(r'/(\d{4,})/?$', src)
         return m.group(1) if m else None
 
-    created_total = updated_total = skipped_total = 0
-    now = _tz.now()
+    task_start = _tz.now()
+    summary = {
+        'started_at': task_start.isoformat(),
+        'sources': sources,
+        'editions_processed': 0,
+        'editions_skipped': 0,
+        'editions_error': 0,
+        'created_total': 0,
+        'updated_total': 0,
+        'stale_marked': 0,
+        'matching_dispatched': 0,
+        'details': [],
+    }
 
     for src in sources:
-        qs = (
+        qs = list(
             TournamentEdition.objects
             .filter(external_id__startswith=f'{src}:')
-            .exclude(status__in=[TournamentEdition.STATUS_CANCELED, TournamentEdition.STATUS_FINISHED])
+            .exclude(status__in=_SKIP_STATUSES)
             .select_related('tournament')
             .order_by('entry_close_at', 'start_date')
         )[:limit]
 
+        log.info('sync_cbt_fct [%s] editions to process: %d', src.upper(), len(qs))
+
         for edition in qs:
+            ed_log = {'edition_id': edition.id, 'title': edition.title[:60], 'source': src}
+
             tid = _extract_tid(edition)
             if not tid:
-                skipped_total += 1
+                ed_log['result'] = 'no_tid'
+                summary['editions_skipped'] += 1
+                summary['details'].append(ed_log)
+                log.debug('sync_cbt_fct skip edition=%s no TI id', edition.id)
                 continue
 
             insc_url = _TI_INSC.format(tid=tid)
+            ed_log['url'] = insc_url
+
             try:
                 result = fetch_tenisintegrado_entries(insc_url, source=src)
             except Exception as exc:
-                log.warning('sync_cbt_fct fetch failed edition=%s src=%s: %s', edition.id, src, exc)
-                skipped_total += 1
+                ed_log['result'] = 'fetch_error'
+                ed_log['error'] = str(exc)[:200]
+                summary['editions_error'] += 1
+                summary['details'].append(ed_log)
+                log.warning('sync_cbt_fct fetch_error edition=%s: %s', edition.id, exc)
                 continue
 
             entries = result.get('entries', [])
-            if not entries or result.get('parser_warning'):
-                skipped_total += 1
+            if not entries:
+                ed_log['result'] = 'no_entries'
+                ed_log['warning'] = result.get('warning_message', '')[:200]
+                summary['editions_skipped'] += 1
+                summary['details'].append(ed_log)
+                log.debug('sync_cbt_fct no_entries edition=%s warning=%s', edition.id, result.get('warning_message', ''))
                 continue
 
             db_source = _SOURCE_DB[src]
+            now = _tz.now()
+            created_ed = updated_ed = error_ed = 0
+            saved_eids = set()
+
             for entry_data in entries:
                 player_name = (entry_data.get('player_name') or '').strip()
                 category_text = (entry_data.get('category_text') or '').strip()
@@ -431,6 +462,7 @@ def sync_cbt_fct_entries_task(self, sources=None, limit: int = 50):
 
                 raw_eid = (entry_data.get('player_external_id') or '').strip()
                 external_id = raw_eid or f'{src}:{_slug(player_name)}:{_slug(category_text)}'
+                saved_eids.add(external_id)
 
                 raw_pay = (entry_data.get('payment_status') or FederationEntry.PAYMENT_UNKNOWN).strip()
                 if raw_pay not in _VALID_PAY:
@@ -446,6 +478,7 @@ def sync_cbt_fct_entries_task(self, sources=None, limit: int = 50):
                             'ranking_position': entry_data.get('ranking_position'),
                             'payment_status': raw_pay,
                             'removed_or_replaced': bool(entry_data.get('removed_or_replaced', False)),
+                            'replacement_reason': (entry_data.get('replacement_reason') or '')[:500],
                             'source': db_source,
                             'source_url': insc_url[:500],
                             'confidence': FederationEntry.CONFIDENCE_HIGH,
@@ -453,11 +486,54 @@ def sync_cbt_fct_entries_task(self, sources=None, limit: int = 50):
                         },
                     )
                     if created:
-                        created_total += 1
+                        created_ed += 1
                     else:
-                        updated_total += 1
+                        updated_ed += 1
                 except Exception as exc:
-                    log.warning('sync_cbt_fct upsert failed edition=%s: %s', edition.id, exc)
+                    error_ed += 1
+                    log.warning('sync_cbt_fct upsert_error edition=%s eid=%s: %s', edition.id, external_id, exc)
 
-    log.info('sync_cbt_fct done: created=%s updated=%s skipped=%s', created_total, updated_total, skipped_total)
-    return {'created': created_total, 'updated': updated_total, 'skipped': skipped_total}
+            # Mark stale entries (in DB but not in current fetch) as removed_or_replaced
+            stale = (
+                FederationEntry.objects
+                .filter(edition=edition, source=db_source, removed_or_replaced=False)
+                .exclude(player_external_id__in=saved_eids)
+                .update(removed_or_replaced=True, replacement_reason='Não encontrado na última sincronização automática')
+            )
+
+            summary['created_total'] += created_ed
+            summary['updated_total'] += updated_ed
+            summary['stale_marked'] += stale
+            summary['editions_processed'] += 1
+
+            ed_log.update({
+                'result': 'ok',
+                'entries': len(entries),
+                'created': created_ed,
+                'updated': updated_ed,
+                'stale_marked': stale,
+                'errors': error_ed,
+            })
+            summary['details'].append(ed_log)
+            log.info(
+                'sync_cbt_fct edition=%s [%s] entries=%d created=%d updated=%d stale=%d',
+                edition.id, src.upper(), len(entries), created_ed, updated_ed, stale,
+            )
+
+            # Dispatch matching — same as what worked for edition 278
+            if created_ed + updated_ed > 0:
+                try:
+                    match_federation_entries.delay(edition.id)
+                    summary['matching_dispatched'] += 1
+                except Exception as exc:
+                    log.warning('sync_cbt_fct match_dispatch_error edition=%s: %s', edition.id, exc)
+
+    summary['finished_at'] = _tz.now().isoformat()
+    summary['duration_s'] = round((_tz.now() - task_start).total_seconds(), 1)
+    log.info(
+        'sync_cbt_fct DONE | editions=%d skipped=%d errors=%d created=%d updated=%d stale=%d matching=%d | %.1fs',
+        summary['editions_processed'], summary['editions_skipped'], summary['editions_error'],
+        summary['created_total'], summary['updated_total'], summary['stale_marked'],
+        summary['matching_dispatched'], summary['duration_s'],
+    )
+    return summary

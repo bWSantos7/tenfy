@@ -466,20 +466,24 @@ function RankingsDisplay({ rankings, isStale }: { rankings: TiRankingEntry[]; is
                 pos === 3 ? 'text-amber-600 bg-amber-600/15 border-amber-600/30' :
                 'text-accent-neon bg-accent-neon/12 border-accent-neon/25';
 
+              // position_change: "+N" = subiu (verde), "-N" = desceu (vermelho)
+              const change = r.position_change?.replace(/\s/g, '') ?? '';
+              const changeNum = change ? parseInt(change, 10) : 0;
+              const changeUp = changeNum > 0;
+              const changeDown = changeNum < 0;
+
               return (
                 <div key={i} className="flex items-center gap-3 px-4 py-3">
                   {/* Position */}
                   <div className={`w-11 h-11 rounded-xl flex flex-col items-center justify-center border shrink-0 ${pos ? medalColor : 'text-text-muted bg-bg-elevated border-border-subtle'}`}>
                     {pos ? (
-                      <>
-                        <span className="text-sm font-black leading-none">{pos}º</span>
-                      </>
+                      <span className="text-sm font-black leading-none">{pos}º</span>
                     ) : (
                       <span className="text-xs text-text-muted">—</span>
                     )}
                   </div>
 
-                  {/* Name + federation */}
+                  {/* Name + federation + date */}
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold leading-snug line-clamp-2">{r.ranking_name || r.category || '—'}</p>
                     <div className="flex items-center gap-1.5 mt-1 flex-wrap">
@@ -494,13 +498,20 @@ function RankingsDisplay({ rankings, isStale }: { rankings: TiRankingEntry[]; is
                     </div>
                   </div>
 
-                  {/* Points */}
-                  {r.points && (
-                    <div className="text-right shrink-0">
-                      <span className="text-base font-black text-text-primary tabular-nums">{r.points}</span>
-                      <p className="text-[10px] text-text-muted">pontos</p>
-                    </div>
-                  )}
+                  {/* Points + variação */}
+                  <div className="text-right shrink-0 space-y-0.5">
+                    {r.points && (
+                      <>
+                        <span className="text-base font-black text-text-primary tabular-nums block">{r.points}</span>
+                        <p className="text-[10px] text-text-muted">pontos</p>
+                      </>
+                    )}
+                    {change && changeNum !== 0 && (
+                      <span className={`text-[10px] font-bold tabular-nums block ${changeUp ? 'text-green-400' : 'text-red-400'}`}>
+                        {changeUp ? `▲ +${changeNum}` : `▼ ${changeNum}`}
+                      </span>
+                    )}
+                  </div>
                 </div>
               );
             })}

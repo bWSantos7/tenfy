@@ -434,8 +434,20 @@ def fetch_ti_rankings(ti_id: str) -> list[dict]:
         date_str = ''
         for p in parts:
             if re.search(r'\d{2}/\d{2}/\d{4}', p):
-                date_str = p
+                date_str = re.search(r'\d{2}/\d{2}/\d{4}', p).group(0)
                 break
+
+        # Position change — look in dedicated element first, then text parts
+        position_change = ''
+        change_el = rd.find(class_=re.compile(r'varia[çc]', re.I)) or rd.find(class_=re.compile(r'change|diff|delta', re.I))
+        if change_el:
+            position_change = change_el.get_text(strip=True)
+        if not position_change:
+            for p in parts:
+                m = re.search(r'([+-]\s*\d+)\s*(?:posi[çc]|posic|pos\.?)?$', p, re.I)
+                if m and p != position:
+                    position_change = m.group(1).replace(' ', '')
+                    break
 
         rankings.append({
             'ranking_name': name,
@@ -446,6 +458,7 @@ def fetch_ti_rankings(ti_id: str) -> list[dict]:
             'modality': '',
             'class_label': '',
             'date': date_str,
+            'position_change': position_change,
         })
 
     logger.info('TI rankings fetched for id=%s: %d entries', ti_id, len(rankings))

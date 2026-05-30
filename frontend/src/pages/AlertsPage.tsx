@@ -178,8 +178,8 @@ export const AlertsPage: React.FC = () => {
         <div className="card text-center py-10">
           <Bell className="w-10 h-10 text-text-muted mx-auto mb-3" />
           <p className="text-sm text-text-secondary">Nenhum alerta ainda.</p>
-          <p className="text-xs text-text-muted mt-2">
-            Adicione torneios à sua agenda e receberemos avisos de prazos e mudanças.
+          <p className="text-xs text-text-muted mt-1">
+            Adicione torneios à agenda para receber avisos.
           </p>
         </div>
       ) : (
@@ -187,60 +187,71 @@ export const AlertsPage: React.FC = () => {
           {items.map((a) => {
             const isInvite = a.payload?.action === 'dependent_invite';
             const isRespondingThis = respondingInvite === a.id;
+            // Show only the first sentence of the body to keep it clean
+            const shortBody = a.body
+              ? a.body.split(/[\n.!?]/)[0].trim()
+              : null;
             return (
               <div
                 key={a.id}
                 onClick={() => !isInvite && a.status !== 'read' ? markRead(a.id) : undefined}
-                className={`card flex gap-3 transition-colors ${
+                className={`card !py-3 flex items-start gap-3 transition-colors ${
                   isInvite ? 'border-blue-500/30 bg-blue-500/5' : 'cursor-pointer hover:border-accent-neon/30'
-                } ${a.status === 'read' && !isInvite ? 'opacity-60' : ''}`}
+                } ${a.status === 'read' && !isInvite ? 'opacity-50' : ''}`}
               >
+                {/* Icon */}
                 <div className="shrink-0 mt-0.5">
-                  {isInvite ? <Users className="w-5 h-5 text-blue-400" /> : KIND_ICONS[a.kind]}
+                  {isInvite ? <Users className="w-4 h-4 text-blue-400" /> : KIND_ICONS[a.kind]}
                 </div>
+
+                {/* Content */}
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2">
-                    <h3 className="font-semibold text-sm leading-tight">{a.title}</h3>
-                    {a.status !== 'read' && (
-                      <span className="w-2 h-2 rounded-full bg-accent-neon shrink-0 mt-1.5" />
-                    )}
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold leading-snug truncate">{a.title}</p>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {a.status !== 'read' && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-accent-neon" />
+                      )}
+                      <span className="text-[10px] text-text-muted whitespace-nowrap">
+                        {fmtRelative(a.created_at)}
+                      </span>
+                    </div>
                   </div>
-                  {a.body && (
-                    <p className="text-xs text-text-secondary mt-1 whitespace-pre-line line-clamp-3">
-                      {a.body}
-                    </p>
+
+                  {shortBody && (
+                    <p className="text-xs text-text-muted mt-0.5 truncate">{shortBody}</p>
                   )}
-                  <div className="flex items-center gap-3 mt-2 text-[10px] text-text-muted">
-                    <span>{fmtRelative(a.created_at)}</span>
-                    {!isInvite && a.edition && (
-                      <Link
-                        to={`/torneios/${a.edition}`}
-                        onClick={(e) => e.stopPropagation()}
-                        className="text-accent-blue hover:underline flex items-center gap-0.5"
-                      >
-                        <ExternalLink className="w-3 h-3" /> Ver torneio
-                      </Link>
-                    )}
-                    {isInvite && (
-                      <span className="text-blue-400 font-medium">Convite familiar</span>
-                    )}
-                  </div>
-                  {isInvite && (
-                    <div className="flex gap-2 mt-3">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleInviteResponse(a, 'decline'); }}
-                        disabled={isRespondingThis}
-                        className="flex-1 py-1.5 rounded-lg border border-red-400/40 text-red-400 text-xs font-bold hover:bg-red-400/10 disabled:opacity-50 transition-colors"
-                      >
-                        {isRespondingThis ? <Loader2 className="w-3 h-3 animate-spin mx-auto" /> : 'Recusar'}
-                      </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleInviteResponse(a, 'accept'); }}
-                        disabled={isRespondingThis}
-                        className="flex-1 py-1.5 rounded-lg bg-blue-500 text-white text-xs font-bold hover:bg-blue-600 disabled:opacity-50 transition-colors"
-                      >
-                        {isRespondingThis ? <Loader2 className="w-3 h-3 animate-spin mx-auto" /> : 'Aceitar'}
-                      </button>
+
+                  {/* Actions row */}
+                  {((!isInvite && a.edition) || isInvite) && (
+                    <div className="flex items-center gap-2 mt-2">
+                      {!isInvite && a.edition && (
+                        <Link
+                          to={`/torneios/${a.edition}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex items-center gap-1 text-[10px] text-accent-blue hover:underline"
+                        >
+                          <ExternalLink className="w-3 h-3" /> Ver torneio
+                        </Link>
+                      )}
+                      {isInvite && (
+                        <div className="flex gap-2 w-full">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleInviteResponse(a, 'decline'); }}
+                            disabled={isRespondingThis}
+                            className="flex-1 py-1.5 rounded-lg border border-red-400/40 text-red-400 text-xs font-bold hover:bg-red-400/10 disabled:opacity-50 transition-colors"
+                          >
+                            {isRespondingThis ? <Loader2 className="w-3 h-3 animate-spin mx-auto" /> : 'Recusar'}
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleInviteResponse(a, 'accept'); }}
+                            disabled={isRespondingThis}
+                            className="flex-1 py-1.5 rounded-lg bg-blue-500 text-white text-xs font-bold hover:bg-blue-600 disabled:opacity-50 transition-colors"
+                          >
+                            {isRespondingThis ? <Loader2 className="w-3 h-3 animate-spin mx-auto" /> : 'Aceitar'}
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

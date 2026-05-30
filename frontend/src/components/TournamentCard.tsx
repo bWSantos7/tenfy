@@ -4,11 +4,16 @@ import { MapPin, Calendar, Clock, Circle, CheckCircle2, Receipt } from 'lucide-r
 import { TournamentEditionList } from '../types';
 import { STATUS_LABELS, fmtBRL, fmtDateRange, fmtRelative, fmtDateTime, statusBgClass } from '../utils/format';
 
+import logoFPT from '../assets/logos/FPT.jpg';
+import logoCBT from '../assets/logos/CBT.jpg';
+import logoCOSAT from '../assets/logos/COSAT.jpg';
+import logoFCT from '../assets/logos/FCT.webp';
+
 const LOCAL_ORG_LOGOS: Record<string, string> = {
-  FPT:   '/logo_federacao/FPT.jpg',
-  CBT:   '/logo_federacao/CBT.jpg',
-  COSAT: '/logo_federacao/COSAT.jpg',
-  FCT:   '/logo_federacao/FCT.webp',
+  FPT:   logoFPT,
+  CBT:   logoCBT,
+  COSAT: logoCOSAT,
+  FCT:   logoFCT,
 };
 
 function findLocalLogo(edition: TournamentEditionList): string | null {
@@ -25,7 +30,6 @@ function findLocalLogo(edition: TournamentEditionList): string | null {
 }
 
 function resolveOrgLogo(edition: TournamentEditionList): string | null {
-  // Prefer local curated logos; only fall back to API URL for unknown orgs
   return findLocalLogo(edition) ?? edition.organization_logo_url ?? null;
 }
 

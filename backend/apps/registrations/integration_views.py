@@ -257,8 +257,15 @@ def derive_entries_source_url(edition: TournamentEdition):
         entries_url = source_url
         return entries_url, ranking_url, candidates
 
-    # 2. CBT/Tenisintegrado: check raw_payload + extract tournament ID
-    if not entries_url and ('tenisintegrado' in source_url or 'cbt-tenis' in source_url.lower()):
+    # 2. CBT / FCT / Tenisintegrado: derive inscription URL from external_id or source_url.
+    # Run for any edition whose external_id starts with cbt:/fct:/fmt:, OR whose
+    # source_url references the tenisintegrado/cbt-tenis platform.
+    _is_ti_source = (
+        'tenisintegrado' in source_url
+        or 'cbt-tenis' in source_url.lower()
+        or bool(re.match(r'(?:cbt|fct|fmt):', edition.external_id or ''))
+    )
+    if not entries_url and _is_ti_source:
         payload = edition.raw_payload or {}
         redirect = (
             payload.get('redirect_tenisintegrado')
@@ -267,21 +274,30 @@ def derive_entries_source_url(edition: TournamentEdition):
         ).strip()
         if redirect and redirect != source_url:
             candidates.append(redirect)
-        # Extract tournament ID from external_id: cbt:12345
+
+        # Priority 1: external_id  e.g. "cbt:12345" or "fct:67890"
         m_eid = re.match(r'(?:cbt|fct|fmt):(\d+)', edition.external_id or '')
+        # Priority 2: tournament ID embedded in source_url path
         if not m_eid:
-            # Also try extracting from URL: /torneio_painel_info/index/<id>
-            m_eid = re.search(r'/(?:torneio_painel_info|torneio)/(?:index/)?(\d+)', source_url)
+            m_eid = re.search(
+                r'/(?:torneio_painel_insc|torneio_painel_info|torneio)/(?:index/)?(\d+)',
+                source_url,
+            )
+        # Priority 3: numeric ID at the very end of source_url
+        if not m_eid:
+            m_eid = re.search(r'/(\d{4,})/?$', source_url)
+
         if m_eid:
             tid = m_eid.group(1)
+            # Point directly to the inscription panel — avoids the info-page detour
+            insc_url = f'https://www.tenisintegrado.com.br/torneio_painel_insc/index/{tid}'
             ti_candidates = [
-                f'https://www.tenisintegrado.com.br/torneio_painel_info/index/{tid}',
-                f'https://www.tenisintegrado.com.br/torneio/{tid}/inscricoes',
+                insc_url,
                 f'https://www.tenisintegrado.com.br/torneio/{tid}',
             ]
             candidates.extend(ti_candidates)
             if not entries_url:
-                entries_url = ti_candidates[0]
+                entries_url = insc_url
 
     # 4. COSAT: official_source_url is best we have
     if not entries_url and 'tournamentsoftware' in source_url:

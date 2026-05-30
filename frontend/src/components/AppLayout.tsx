@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { Home, Calendar, Star, User, ShieldCheck, Sun, Moon, Award, Users, Bell } from 'lucide-react';
+import { Home, Calendar, Star, User, ShieldCheck, Sun, Moon, Award, Users, Bell, LogOut } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { BetaModal } from './BetaModal';
@@ -16,7 +16,7 @@ const navItems = [
 ];
 
 export const AppLayout: React.FC = () => {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const location = useLocation();
   const { theme, toggle: toggleTheme } = useTheme();
   const [unreadCount, setUnreadCount] = useState(0);
@@ -101,6 +101,14 @@ export const AppLayout: React.FC = () => {
 
             <button onClick={toggleTheme} className="btn-ghost !px-2" title={theme === 'dark' ? 'Modo claro' : 'Modo escuro'}>
               {theme === 'dark' ? <Sun className="w-4 h-4 text-accent-neon" /> : <Moon className="w-4 h-4" />}
+            </button>
+
+            <button
+              onClick={() => logout()}
+              className="btn-ghost !px-2 text-red-400 hover:text-red-500"
+              title="Sair da conta"
+            >
+              <LogOut className="w-4 h-4" />
             </button>
 
           </div>

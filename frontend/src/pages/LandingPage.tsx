@@ -113,8 +113,8 @@ export const LandingPage: React.FC = () => {
           
           {/* Logo */}
           <Link to={isAuthenticated ? '/inicio' : '/'} className="flex items-center group">
-            <img src="/logos/logo1.png"           alt="Tenfy" className="h-10 w-auto object-contain transition-transform duration-300 group-hover:scale-105 dark:hidden"       style={{ maxWidth: 160 }} />
-            <img src="/icons/logo_noturno_tr.png"  alt="Tenfy" className="h-10 w-auto object-contain transition-transform duration-300 group-hover:scale-105 hidden dark:block" style={{ maxWidth: 160, filter: 'brightness(0) invert(1)' }} />
+            <img src="/logos/logo1.png" alt="Tenfy" className="h-11 w-auto object-contain transition-transform duration-300 group-hover:scale-105 dark:hidden" />
+            <img src="/logos/logo5.png" alt="Tenfy" className="h-11 w-auto object-contain transition-transform duration-300 group-hover:scale-105 hidden dark:block" style={{ filter: 'brightness(0) invert(1)' }} />
           </Link>
           
           {/* Desktop Navigation Links */}
@@ -314,8 +314,8 @@ export const LandingPage: React.FC = () => {
                     <span className="text-[10px] uppercase font-bold tracking-widest text-accent-neon">Identidade Visual</span>
                     <span className="w-2.5 h-2.5 rounded-full bg-accent-neon animate-ping" />
                   </div>
-                  <img src="/logos/logo1.png"           alt="Tenfy" className="w-full object-contain dark:hidden" />
-                  <img src="/icons/logo_noturno_tr.png"  alt="Tenfy" className="w-full object-contain hidden dark:block" style={{ filter: 'brightness(0) invert(1)' }} />
+                  <img src="/logos/logo1.png" alt="Tenfy" className="w-full object-contain dark:hidden" />
+                  <img src="/logos/logo5.png" alt="Tenfy" className="w-full object-contain hidden dark:block" style={{ filter: 'brightness(0) invert(1)' }} />
                   <div className="mt-4 flex items-center justify-between text-xs text-text-muted font-medium border-t border-border-subtle/50 pt-3">
                     <span>Branding Original</span>
                     <span>v1.0.0</span>
@@ -981,8 +981,8 @@ export const LandingPage: React.FC = () => {
           {/* Column 1: Brand details */}
           <div className="space-y-4 col-span-1 md:col-span-2">
             <Link to="/" className="inline-block">
-              <img src="/logos/logo1.png"           alt="Tenfy" className="h-9 w-auto object-contain dark:hidden"       style={{ maxWidth: 150 }} />
-              <img src="/icons/logo_noturno_tr.png"  alt="Tenfy" className="h-9 w-auto object-contain hidden dark:block" style={{ maxWidth: 150, filter: 'brightness(0) invert(1)' }} />
+              <img src="/logos/logo1.png" alt="Tenfy" className="h-10 w-auto object-contain dark:hidden" />
+              <img src="/logos/logo5.png" alt="Tenfy" className="h-10 w-auto object-contain hidden dark:block" style={{ filter: 'brightness(0) invert(1)' }} />
             </Link>
             <p className="text-xs text-text-secondary max-w-sm leading-relaxed">
               O Tenfy é o agregador inteligente de torneios oficiais de tênis no Brasil. Criamos tecnologia para conectar atletas, pais e organizadores no ecossistema esportivo.

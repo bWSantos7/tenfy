@@ -4,6 +4,19 @@ import { MapPin, Calendar, Clock, Circle, CheckCircle2, Receipt } from 'lucide-r
 import { TournamentEditionList } from '../types';
 import { STATUS_LABELS, fmtBRL, fmtDateRange, fmtRelative, fmtDateTime, statusBgClass } from '../utils/format';
 
+const LOCAL_ORG_LOGOS: Record<string, string> = {
+  FPT:   '/logo_federacao/FPT.jpg',
+  CBT:   '/logo_federacao/CBT.jpg',
+  COSAT: '/logo_federacao/COSAT.jpg',
+  FCT:   '/logo_federacao/FCT.webp',
+};
+
+function resolveOrgLogo(edition: TournamentEditionList): string | null {
+  if (edition.organization_logo_url) return edition.organization_logo_url;
+  const key = (edition.organization_short || '').toUpperCase().trim();
+  return LOCAL_ORG_LOGOS[key] ?? null;
+}
+
 interface Props {
   edition: TournamentEditionList;
   showEligibility?: boolean;
@@ -19,6 +32,7 @@ export const TournamentCard: React.FC<Props> = ({
   const statusLabel = STATUS_LABELS[status] || status;
   const statusCls = statusBgClass(status);
   const location = [edition.venue_city, edition.venue_state].filter(Boolean).join(' / ');
+  const orgLogo = resolveOrgLogo(edition);
 
   if (variant === 'calendar') {
     return (
@@ -31,11 +45,11 @@ export const TournamentCard: React.FC<Props> = ({
       >
         {/* Logo + org */}
         <div className="flex flex-col items-center gap-1.5">
-          {edition.organization_logo_url ? (
+          {orgLogo ? (
             <img
-              src={edition.organization_logo_url}
+              src={orgLogo}
               alt={edition.organization_short || edition.organization_name}
-              className="w-10 h-10 object-contain"
+              className="w-10 h-10 object-contain rounded-full"
             />
           ) : (
             <div className="w-10 h-10 rounded-full bg-accent-blue/15 flex items-center justify-center">
@@ -115,9 +129,9 @@ export const TournamentCard: React.FC<Props> = ({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 mb-1">
-            {edition.organization_logo_url && (
+            {orgLogo && (
               <img
-                src={edition.organization_logo_url}
+                src={orgLogo}
                 alt={edition.organization_short || edition.organization_name}
                 className="w-4 h-4 object-contain rounded-sm shrink-0"
               />

@@ -120,7 +120,9 @@ export const HomePage: React.FC = () => {
         setHasProfile(profiles.length > 0);
 
         const activeId = getActiveProfileId(user.id);
-        const activeOption = activeId ? options.find((o) => o.profile.id === activeId) : null;
+        const activeOption = activeId
+          ? options.find((o) => o.profile.id === activeId)
+          : options.length === 1 ? options[0] : null; // auto-select se só houver 1
         primary = activeOption?.profile ?? null;
         childName = activeOption?.childName ?? null;
       } else {
@@ -230,8 +232,8 @@ export const HomePage: React.FC = () => {
           </Link>
         </div>
 
-        {/* ── Seletor de dependente (pai com múltiplos perfis) ── */}
-        {user?.role === 'parent' && profileOptions.length > 1 && (
+        {/* ── Seletor de dependente (pai com 1 ou mais perfis) ── */}
+        {user?.role === 'parent' && profileOptions.length >= 1 && (
           <div className="flex gap-2 mt-3 overflow-x-auto pb-1 scrollbar-none">
             {profileOptions.map((opt) => {
               const isActive = opt.profile.id === profile?.id;
@@ -297,8 +299,8 @@ export const HomePage: React.FC = () => {
         </div>
       )}
 
-      {/* ── No profile selected (parent with multiple profiles, no explicit selection yet) ── */}
-      {!profile && user?.role === 'parent' && profileOptions.length > 1 && (
+      {/* ── No profile selected (parent with profiles, no explicit selection yet) ── */}
+      {!profile && user?.role === 'parent' && profileOptions.length >= 1 && (
         <div className="card flex items-start gap-3 border border-accent-neon/30 bg-accent-neon/5">
           <User className="w-5 h-5 text-accent-neon shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">

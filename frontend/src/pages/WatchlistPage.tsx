@@ -77,6 +77,7 @@ export const WatchlistPage: React.FC = () => {
   const { user } = useAuth();
   const [items, setItems] = useState<WatchlistItem[]>([]);
   const [childGroups, setChildGroups] = useState<ChildGroup[]>([]);
+  const [selectedChildId, setSelectedChildId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState<{ total: number; active_registrations: number; upcoming: number; past?: number } | null>(null);
   const [tab, setTab] = useState<'upcoming' | 'past'>('upcoming');
@@ -111,6 +112,7 @@ export const WatchlistPage: React.FC = () => {
         setItems(allItems);
         setSummary(sm);
         setConflicts(detectConflicts(allItems));
+        setSelectedChildId((prev) => prev ?? (childrenGroups[0]?.childId ?? null));
       } else {
         const [data, sm] = await Promise.all([
           listWatchlist(),
@@ -156,29 +158,15 @@ export const WatchlistPage: React.FC = () => {
     }
   }
 
+  const selectedItems = isParent && selectedChildId !== null
+    ? (childGroups.find((g) => g.childId === selectedChildId)?.items ?? [])
+    : items;
+
   const now = TODAY;
-  const upcoming = items.filter((i) => !i.edition_detail.end_date || i.edition_detail.end_date >= now).sort(sortByDate);
-  const past     = items.filter((i) => i.edition_detail.end_date && i.edition_detail.end_date < now).sort(sortByDate);
+  const upcoming = selectedItems.filter((i) => !i.edition_detail.end_date || i.edition_detail.end_date >= now).sort(sortByDate);
+  const past     = selectedItems.filter((i) => i.edition_detail.end_date && i.edition_detail.end_date < now).sort(sortByDate);
   const displayed = tab === 'upcoming' ? upcoming : past;
   const displayedGroups = groupByMonth(displayed);
-
-  function renderGrouped(itemsToRender: WatchlistItem[]) {
-    if (!isParent || childGroups.length === 0) {
-      return itemsToRender.map(renderItem);
-    }
-    const ids = new Set(itemsToRender.map((i) => i.id));
-    return childGroups.flatMap((group) => {
-      const filtered = group.items.filter((i) => ids.has(i.id));
-      if (filtered.length === 0) return [];
-      return [
-        <div key={`header-${group.childId}`} className="flex items-center gap-1.5 px-1 mt-3 mb-1">
-          <User className="w-3.5 h-3.5 text-accent-blue shrink-0" />
-          <span className="text-xs font-bold text-accent-blue">{group.childName}</span>
-        </div>,
-        ...filtered.map(renderItem),
-      ];
-    });
-  }
 
   function renderItem(item: WatchlistItem) {
     const statusInfo = USER_STATUS_LABELS[item.user_status] ?? USER_STATUS_LABELS.none;
@@ -305,12 +293,35 @@ export const WatchlistPage: React.FC = () => {
         </div>
       )}
 
-      {items.length === 0 ? (
+      {/* ── Seletor de dependente (pai com 1 ou mais filhos) ── */}
+      {isParent && childGroups.length >= 1 && (
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+          {childGroups.map((g) => {
+            const isActive = g.childId === selectedChildId;
+            return (
+              <button
+                key={g.childId}
+                onClick={() => setSelectedChildId(g.childId)}
+                className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors ${
+                  isActive
+                    ? 'bg-accent-neon text-bg-base border-accent-neon'
+                    : 'bg-bg-card border-border-subtle text-text-secondary hover:text-text-primary hover:border-accent-neon/50'
+                }`}
+              >
+                <User className="w-3 h-3 shrink-0" />
+                <span className="truncate max-w-[120px]">{g.childName}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {selectedItems.length === 0 ? (
         <div className="card text-center py-10 space-y-3">
           <Star className="w-10 h-10 text-text-muted mx-auto" />
           <p className="font-semibold">Nenhum torneio na agenda</p>
           <p className="text-sm text-text-secondary">
-            {isParent ? 'Você e seus dependentes ainda não têm torneios na agenda.' : 'Você ainda não está acompanhando nenhum torneio.'}
+            {isParent ? 'Este dependente ainda não tem torneios na agenda.' : 'Você ainda não está acompanhando nenhum torneio.'}
           </p>
           {!isParent && (
             <Link to="/torneios" className="btn-primary inline-flex items-center gap-2 !text-sm">
@@ -354,7 +365,7 @@ export const WatchlistPage: React.FC = () => {
                     <span className="text-xs text-text-muted">{group.items.length}</span>
                   </div>
                   <div className="space-y-3">
-                    {renderGrouped(group.items)}
+                    {group.items.map(renderItem)}
                   </div>
                 </div>
               ))}

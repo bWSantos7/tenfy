@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Loader2, RefreshCw, LinkIcon } from 'lucide-react';
+import { Loader2, RefreshCw, LinkIcon, User } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { PlayerProfile, TiData, TiResultEntry } from '../types';
-import { fetchTiData, listProfiles, syncTiData } from '../services/data';
+import { ParentChild, PlayerProfile, TiData, TiResultEntry } from '../types';
+import { fetchTiData, listChildProfiles, listChildren, listProfiles, syncTiData } from '../services/data';
 import { useAuth } from '../contexts/AuthContext';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -39,16 +39,44 @@ export const ResultsPage: React.FC = () => {
   const [tiLoading, setTiLoading] = useState(true);
   const [tiSyncing, setTiSyncing] = useState(false);
   const [primaryProfileId, setPrimaryProfileId] = useState<number | null>(null);
+  const [children, setChildren] = useState<ParentChild[]>([]);
+  const [selectedChildId, setSelectedChildId] = useState<number | null>(null);
 
+  const isParent = user?.role === 'parent';
+
+  // Load profiles (own) or children list (parent)
   useEffect(() => {
-    listProfiles()
-      .then((profs: PlayerProfile[]) => {
+    if (isParent) {
+      listChildren()
+        .then((data) => {
+          setChildren(data);
+          setSelectedChildId((prev) => prev ?? (data[0]?.child ?? null));
+        })
+        .catch(() => setTiLoading(false));
+    } else {
+      listProfiles()
+        .then((profs: PlayerProfile[]) => {
+          const primary = profs.find((p) => p.is_primary) ?? profs[0];
+          if (primary) setPrimaryProfileId(primary.id);
+          else setTiLoading(false);
+        })
+        .catch(() => setTiLoading(false));
+    }
+  }, [isParent]);
+
+  // When a child is selected (parent), load that child's primary profile
+  useEffect(() => {
+    if (!isParent || !selectedChildId) return;
+    setTiLoading(true);
+    setTiData(null);
+    listChildProfiles(selectedChildId)
+      .then((profs) => {
         const primary = profs.find((p) => p.is_primary) ?? profs[0];
         if (primary) setPrimaryProfileId(primary.id);
-        else setTiLoading(false);
+        else { setPrimaryProfileId(null); setTiLoading(false); }
       })
       .catch(() => setTiLoading(false));
-  }, []);
+  }, [isParent, selectedChildId]);
 
   useEffect(() => {
     if (!primaryProfileId) return;
@@ -98,6 +126,29 @@ export const ResultsPage: React.FC = () => {
           </button>
         )}
       </div>
+
+      {/* ── Seletor de dependente (pai com 1 ou mais filhos) ── */}
+      {isParent && children.length >= 1 && (
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+          {children.map((c) => {
+            const isActive = c.child === selectedChildId;
+            return (
+              <button
+                key={c.id}
+                onClick={() => setSelectedChildId(c.child)}
+                className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors ${
+                  isActive
+                    ? 'bg-accent-neon text-bg-base border-accent-neon'
+                    : 'bg-bg-card border-border-subtle text-text-secondary hover:text-text-primary hover:border-accent-neon/50'
+                }`}
+              >
+                <User className="w-3 h-3 shrink-0" />
+                <span className="truncate max-w-[120px]">{c.child_detail.full_name || '—'}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Stats */}
       {tiData?.has_ti_id && total > 0 && (

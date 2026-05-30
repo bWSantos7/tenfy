@@ -113,8 +113,8 @@ export const LandingPage: React.FC = () => {
           
           {/* Logo */}
           <Link to={isAuthenticated ? '/inicio' : '/'} className="flex items-center group">
-            <img src="/logos/logo_clara.png" alt="Tenfy" className="h-11 w-auto object-contain transition-transform duration-300 group-hover:scale-105 dark:hidden" />
-            <img src="/logos/logo_escura.png" alt="Tenfy" className="h-11 w-auto object-contain transition-transform duration-300 group-hover:scale-105 hidden dark:block" />
+            <img src="/logos/logo_clara.png" alt="Tenfy" className="h-9 max-w-[40px] object-contain transition-transform duration-300 group-hover:scale-105 dark:hidden" />
+            <img src="/logos/logo_escura.png" alt="Tenfy" className="h-9 max-w-[40px] object-contain transition-transform duration-300 group-hover:scale-105 hidden dark:block" />
           </Link>
           
           {/* Desktop Navigation Links */}

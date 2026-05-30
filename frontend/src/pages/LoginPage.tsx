@@ -111,6 +111,15 @@ export const LoginPage: React.FC = () => {
                 </div>
               ))}
             </div>
+
+            {/* Logo grande — preenche o espaço central */}
+            <div className="mt-10 flex items-center justify-center">
+              <img
+                src="/logos/logo_escura2.png"
+                alt="Tenfy"
+                className="w-full max-w-[340px] xl:max-w-[400px] h-auto object-contain drop-shadow-2xl"
+              />
+            </div>
           </div>
 
           {/* Card flutuante inferior */}

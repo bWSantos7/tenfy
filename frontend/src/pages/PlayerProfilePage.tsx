@@ -466,12 +466,6 @@ function RankingsDisplay({ rankings, isStale }: { rankings: TiRankingEntry[]; is
                 pos === 3 ? 'text-amber-600 bg-amber-600/15 border-amber-600/30' :
                 'text-accent-neon bg-accent-neon/12 border-accent-neon/25';
 
-              // position_change: "+N" = subiu (verde), "-N" = desceu (vermelho)
-              const change = r.position_change?.replace(/\s/g, '') ?? '';
-              const changeNum = change ? parseInt(change, 10) : 0;
-              const changeUp = changeNum > 0;
-              const changeDown = changeNum < 0;
-
               return (
                 <div key={i} className="flex items-center gap-3 px-4 py-3">
                   {/* Position */}
@@ -498,20 +492,13 @@ function RankingsDisplay({ rankings, isStale }: { rankings: TiRankingEntry[]; is
                     </div>
                   </div>
 
-                  {/* Points + variação */}
-                  <div className="text-right shrink-0 space-y-0.5">
-                    {r.points && (
-                      <>
-                        <span className="text-base font-black text-text-primary tabular-nums block">{r.points}</span>
-                        <p className="text-[10px] text-text-muted">pontos</p>
-                      </>
-                    )}
-                    {change && changeNum !== 0 && (
-                      <span className={`text-[10px] font-bold tabular-nums block ${changeUp ? 'text-green-400' : 'text-red-400'}`}>
-                        {changeUp ? `▲ +${changeNum}` : `▼ ${changeNum}`}
-                      </span>
-                    )}
-                  </div>
+                  {/* Points */}
+                  {r.points && (
+                    <div className="text-right shrink-0">
+                      <span className="text-base font-black text-text-primary tabular-nums">{r.points}</span>
+                      <p className="text-[10px] text-text-muted">pontos</p>
+                    </div>
+                  )}
                 </div>
               );
             })}

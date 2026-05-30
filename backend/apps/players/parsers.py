@@ -399,7 +399,7 @@ def fetch_ti_rankings(ti_id: str) -> list[dict]:
                 })
 
     # 2. Historical federation rankings from div.ranking blocks
-    for rd_idx, rd in enumerate(soup.find_all('div', class_='ranking')):
+    for rd in soup.find_all('div', class_='ranking'):
         header = rd.find(class_='innerpanel-header')
         if not header:
             continue
@@ -413,15 +413,6 @@ def fetch_ti_rankings(ti_id: str) -> list[dict]:
             continue
 
         parts = [t.strip() for t in header.get_text(separator='|').split('|') if t.strip()]
-
-        # Log full block HTML for first 3 blocks to help debug position_change extraction
-        if rd_idx < 3:
-            logger.debug('TI ranking block #%d HTML: %s', rd_idx, rd.prettify()[:2000])
-            logger.debug('TI ranking block #%d all_text parts: %s', rd_idx,
-                         [t.strip() for t in rd.get_text(separator='|').split('|') if t.strip()])
-            logger.debug('TI ranking block #%d child tags: %s', rd_idx,
-                         [(el.name, el.get('class'), el.get_text(strip=True)[:80])
-                          for el in rd.find_all(True) if el.get_text(strip=True)])
 
         # Federation/organizer: part after "Criado por"
         organizer = ''
@@ -446,34 +437,6 @@ def fetch_ti_rankings(ti_id: str) -> list[dict]:
                 date_str = re.search(r'\d{2}/\d{2}/\d{4}', p).group(0)
                 break
 
-        # Position change — scan ALL elements in the block (not just innerpanel-header)
-        position_change = ''
-        all_block_text = [t.strip() for t in rd.get_text(separator='|').split('|') if t.strip()]
-        # 1. Dedicated element by class
-        for el in rd.find_all(True):
-            cls = ' '.join(el.get('class') or [])
-            if re.search(r'varia[çc]|change|diff|delta|sobe|desce|arrow|trend', cls, re.I):
-                position_change = el.get_text(strip=True)
-                if position_change:
-                    break
-        # 2. Any element whose full text is just a signed integer (e.g. "-8", "+5")
-        if not position_change:
-            for el in rd.find_all(True):
-                txt = el.get_text(strip=True)
-                if re.fullmatch(r'[+-]\d+', txt):
-                    position_change = txt
-                    break
-        # 3. Signed number anywhere in block text not already used as position
-        if not position_change:
-            for p in all_block_text:
-                m = re.search(r'(?<!\d)([+-]\d+)(?!\d)', p)
-                if m and m.group(1) != position:
-                    position_change = m.group(1)
-                    break
-
-        logger.debug('TI ranking block #%d "%s": position=%s points=%s date=%s position_change=%s',
-                     rd_idx, name, position, points, date_str, position_change)
-
         rankings.append({
             'ranking_name': name,
             'category': name,
@@ -483,7 +446,6 @@ def fetch_ti_rankings(ti_id: str) -> list[dict]:
             'modality': '',
             'class_label': '',
             'date': date_str,
-            'position_change': position_change,
         })
 
     logger.info('TI rankings fetched for id=%s: %d entries', ti_id, len(rankings))

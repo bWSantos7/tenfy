@@ -23,7 +23,6 @@ export interface TiRankingEntry {
   class_label?: string;
   ranking_name?: string;
   date?: string;
-  position_change?: string;
   _raw?: Record<string, string>;
 }
 

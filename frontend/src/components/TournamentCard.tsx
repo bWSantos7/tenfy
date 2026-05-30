@@ -2,19 +2,108 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { MapPin, Calendar, Clock, Circle, CheckCircle2, Receipt } from 'lucide-react';
 import { TournamentEditionList } from '../types';
-import { STATUS_LABELS, fmtBRL, fmtDateRange, fmtRelative, statusBgClass } from '../utils/format';
+import { STATUS_LABELS, fmtBRL, fmtDateRange, fmtRelative, fmtDateTime, statusBgClass } from '../utils/format';
 
 interface Props {
   edition: TournamentEditionList;
   showEligibility?: boolean;
+  variant?: 'list' | 'calendar';
 }
 
-export const TournamentCard: React.FC<Props> = ({ edition, showEligibility = false }) => {
+export const TournamentCard: React.FC<Props> = ({
+  edition,
+  showEligibility = false,
+  variant = 'list',
+}) => {
   const status = edition.dynamic_status || edition.status;
   const statusLabel = STATUS_LABELS[status] || status;
   const statusCls = statusBgClass(status);
-  const location = [edition.venue_city, edition.venue_state].filter(Boolean).join('/');
+  const location = [edition.venue_city, edition.venue_state].filter(Boolean).join(' / ');
 
+  if (variant === 'calendar') {
+    return (
+      <Link
+        to={`/torneios/${edition.id}`}
+        className="card hover:border-accent-neon/50 transition-colors flex flex-col gap-3 h-full active:scale-[0.99]"
+        data-testid="tournament-card"
+        data-modality={edition.modality || ''}
+        data-venue-state={edition.venue_state || ''}
+      >
+        {/* Logo + org */}
+        <div className="flex flex-col items-center gap-1.5">
+          {edition.organization_logo_url ? (
+            <img
+              src={edition.organization_logo_url}
+              alt={edition.organization_short || edition.organization_name}
+              className="w-10 h-10 object-contain"
+            />
+          ) : (
+            <div className="w-10 h-10 rounded-full bg-accent-blue/15 flex items-center justify-center">
+              <span className="text-accent-blue font-bold text-sm">
+                {(edition.organization_short || edition.organization_name || '?').slice(0, 2).toUpperCase()}
+              </span>
+            </div>
+          )}
+          <span className="text-[10px] font-semibold text-accent-blue uppercase tracking-wider text-center leading-tight">
+            {edition.organization_short || edition.organization_name}
+          </span>
+        </div>
+
+        {/* Title */}
+        <h3 className="font-bold text-sm text-text-primary leading-snug line-clamp-3 text-center flex-1">
+          {edition.title}
+        </h3>
+
+        {/* Info rows */}
+        <div className="space-y-2 text-xs text-text-secondary">
+          {edition.entry_close_at && (
+            <div>
+              <p className="text-[10px] font-semibold text-text-muted uppercase tracking-wide mb-0.5">
+                Período Inscrições
+              </p>
+              <p>Até {fmtDateTime(edition.entry_close_at)}</p>
+            </div>
+          )}
+          <div>
+            <p className="text-[10px] font-semibold text-text-muted uppercase tracking-wide mb-0.5">
+              Período Torneio
+            </p>
+            <p>{fmtDateRange(edition.start_date, edition.end_date)}</p>
+          </div>
+          {location && (
+            <span className="flex items-center gap-1 text-text-secondary">
+              <MapPin className="w-3.5 h-3.5 shrink-0" />
+              {location}
+            </span>
+          )}
+          {edition.base_price_brl !== null && edition.base_price_brl !== undefined && (
+            <span className="flex items-center gap-1">
+              <Receipt className="w-3.5 h-3.5 shrink-0" />
+              Inscrição {fmtBRL(edition.base_price_brl)}
+            </span>
+          )}
+        </div>
+
+        {/* Status + eligibility */}
+        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border-subtle">
+          <span className={`badge border ${statusCls}`}>{statusLabel}</span>
+          {edition.entry_close_at && (status === 'closing_soon') && (
+            <span className="text-[10px] text-status-closing font-medium">
+              Prazo {fmtRelative(edition.entry_close_at)}
+            </span>
+          )}
+          {showEligibility && edition.eligibility && edition.eligibility.compatible_count > 0 && (
+            <span className="flex items-center gap-1 text-accent-neon text-[10px] font-medium ml-auto">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              {edition.eligibility.compatible_count} compatíveis
+            </span>
+          )}
+        </div>
+      </Link>
+    );
+  }
+
+  // variant === 'list' (default)
   return (
     <Link
       to={`/torneios/${edition.id}`}

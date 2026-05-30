@@ -47,6 +47,26 @@ const STATUS_SORT_PRIORITY: Record<string, number> = {
   unknown: 5,
 };
 
+function groupByMonth(items: TournamentEditionList[]) {
+  const map = new Map<string, TournamentEditionList[]>();
+  for (const item of items) {
+    const key = item.start_date ? item.start_date.slice(0, 7) : 'sem-data';
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(item);
+  }
+  return Array.from(map.entries())
+    .map(([key, its]) => {
+      const [year, mon] = key.split('-');
+      const label = key === 'sem-data' ? 'Sem data definida' : `${MONTHS_PT[Number(mon) - 1]} ${year}`;
+      return { key, label, items: its };
+    })
+    .sort((a, b) => {
+      if (a.key === 'sem-data') return 1;
+      if (b.key === 'sem-data') return -1;
+      return a.key.localeCompare(b.key);
+    });
+}
+
 // Groups for section headers — uses dynamic_status when available
 function getStatusGroup(status: string): string {
   if (status === 'open' || status === 'closing_soon') return 'open';
@@ -467,72 +487,61 @@ export const TournamentsPage: React.FC = () => {
               Nenhum torneio encontrado com estes filtros.
             </div>
           ) : (
-            <div className="space-y-3" data-testid="tournament-list">
+            <div data-testid="tournament-list">
               {compareMode && (
-                <div className="flex items-center gap-2 px-1 py-1.5 text-xs text-text-muted">
+                <div className="flex items-center gap-2 px-1 py-1.5 mb-2 text-xs text-text-muted">
                   <GitCompareArrows className="w-3.5 h-3.5 text-accent-neon" />
                   Selecione 2 a 4 torneios para comparar · {selectedCompare.size} selecionado{selectedCompare.size !== 1 ? 's' : ''}
                 </div>
               )}
-              {items.map((ed, i) => {
-                const dynStatus = ed.dynamic_status ?? ed.status ?? 'unknown';
-                const group = getStatusGroup(dynStatus);
-                const prevGroup = i > 0
-                  ? getStatusGroup(items[i - 1].dynamic_status ?? items[i - 1].status ?? 'unknown')
-                  : null;
-                const showHeader = !filters.status && group !== prevGroup;
-                const isSelected = selectedCompare.has(ed.id);
-                return (
-                  <React.Fragment key={ed.id}>
-                    {showHeader && (
-                      <div className={`text-[11px] font-bold text-text-muted uppercase tracking-wider px-1 ${i > 0 ? 'pt-3 pb-0.5' : 'pb-0.5'}`}>
-                        {GROUP_LABELS[group] ?? group}
-                      </div>
-                    )}
-                    {compareMode ? (
-                      <div
-                        className={`relative rounded-xl cursor-pointer transition-all ${
-                          isSelected
-                            ? 'ring-2 ring-accent-neon ring-offset-1 ring-offset-bg-base'
-                            : selectedCompare.size >= 4 && !isSelected
-                              ? 'opacity-50 cursor-not-allowed'
-                              : ''
-                        }`}
-                        onClick={() => toggleCompareSelect(ed.id)}
-                      >
-                        <div className="absolute top-2 right-2 z-10">
-                          {isSelected
-                            ? <CheckSquare className="w-5 h-5 text-accent-neon drop-shadow" />
-                            : <Square className="w-5 h-5 text-text-muted/60" />}
+              {groupByMonth(items).map(({ key, label, items: monthItems }) => (
+                <div key={key} className="mb-6">
+                  <div className="flex items-center gap-3 mb-3">
+                    <h2 className="text-sm font-bold text-text-primary">{label}</h2>
+                    <div className="flex-1 h-px bg-border-subtle" />
+                    <span className="text-xs text-text-muted">{monthItems.length}</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {monthItems.map((ed) => {
+                      const isSelected = selectedCompare.has(ed.id);
+                      return compareMode ? (
+                        <div
+                          key={ed.id}
+                          className={`relative rounded-xl cursor-pointer transition-all ${
+                            isSelected
+                              ? 'ring-2 ring-accent-neon ring-offset-1 ring-offset-bg-base'
+                              : selectedCompare.size >= 4 && !isSelected
+                                ? 'opacity-50 cursor-not-allowed'
+                                : ''
+                          }`}
+                          onClick={() => toggleCompareSelect(ed.id)}
+                        >
+                          <div className="absolute top-2 right-2 z-10">
+                            {isSelected
+                              ? <CheckSquare className="w-5 h-5 text-accent-neon drop-shadow" />
+                              : <Square className="w-5 h-5 text-text-muted/60" />}
+                          </div>
+                          <TournamentCard edition={ed} variant="calendar" showEligibility={!!primaryProfileId} />
                         </div>
-                        <TournamentCard edition={ed} />
-                      </div>
-                    ) : (
-                      <TournamentCard edition={ed} />
-                    )}
-                  </React.Fragment>
-                );
-              })}
+                      ) : (
+                        <TournamentCard key={ed.id} edition={ed} variant="calendar" showEligibility={!!primaryProfileId} />
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
               {totalPages > 1 && (
                 <div className="flex items-center justify-center gap-2 pt-4">
-                  <button
-                    className="btn-secondary !py-2 !px-3 text-sm"
-                    disabled={page <= 1}
-                    onClick={() => setPage((p) => p - 1)}
-                  >
-                    Anterior
-                  </button>
+                  <button className="btn-secondary !py-2 !px-3 text-sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Anterior</button>
                   <span className="text-xs text-text-muted">Página {page} de {totalPages}</span>
-                  <button
-                    className="btn-secondary !py-2 !px-3 text-sm"
-                    disabled={page >= totalPages}
-                    onClick={() => setPage((p) => p + 1)}
-                  >
-                    Próxima
-                  </button>
+                  <button className="btn-secondary !py-2 !px-3 text-sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>Próxima</button>
                 </div>
               )}
             </div>
+          )}
+        </>
+      )}
+
           )}
         </>
       )}

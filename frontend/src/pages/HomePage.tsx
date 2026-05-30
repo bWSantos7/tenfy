@@ -380,9 +380,9 @@ const Section: React.FC<{
     ) : items.length === 0 ? (
       <div className="card text-center text-sm text-text-muted py-8">{emptyText}</div>
     ) : (
-      <div className="space-y-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {items.map((ed) => (
-          <TournamentCard key={ed.id} edition={ed} showEligibility={accent} />
+          <TournamentCard key={ed.id} edition={ed} showEligibility={accent} variant="calendar" />
         ))}
       </div>
     )}

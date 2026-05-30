@@ -6,8 +6,8 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
-import { ParentChild, PlayerProfile, TiData, TiRankingEntry, TournamentRegistration } from '../types';
-import { fetchTiData, listChildProfiles, listChildren, listProfiles, syncTiData } from '../services/data';
+import { ParentChild, PlayerProfile, TiData, TiRankingEntry, TournamentRegistration, WatchlistItem } from '../types';
+import { fetchTiData, listChildProfiles, listChildWatchlist, listChildren, listProfiles, syncTiData } from '../services/data';
 import { myRegistrations } from '../services/registrations';
 import { mediaUrl } from '../services/api';
 import { resolveAvatar } from '../utils/format';
@@ -51,6 +51,7 @@ export const PlayerProfilePage: React.FC = () => {
   const [children, setChildren] = useState<ParentChild[]>([]);
   const [selectedChildId, setSelectedChildId] = useState<number | null>(null);
   const [childProfiles, setChildProfiles] = useState<PlayerProfile[]>([]);
+  const [childActiveRegs, setChildActiveRegs] = useState<WatchlistItem[]>([]);
   const [registrations, setRegistrations] = useState<TournamentRegistration[]>([]);
   const [loading, setLoading] = useState(true);
   const [tiData, setTiData] = useState<TiData | null>(null);
@@ -86,21 +87,27 @@ export const PlayerProfilePage: React.FC = () => {
     }
   }, [isParent]);
 
-  // When a child is selected, load their profiles and TI data
+  // When a child is selected, load their profiles, TI data and active registrations
   useEffect(() => {
     if (!isParent || !selectedChildId) return;
     setTiLoading(true);
     setTiData(null);
     setChildProfiles([]);
-    listChildProfiles(selectedChildId)
-      .then((profs) => {
-        setChildProfiles(profs);
-        const primary = profs.find((p) => p.is_primary) ?? profs[0];
-        if (primary) return fetchTiData(primary.id);
-      })
-      .then((d) => { if (d) setTiData(d); })
-      .catch(() => {})
-      .finally(() => setTiLoading(false));
+    setChildActiveRegs([]);
+    Promise.all([
+      listChildProfiles(selectedChildId),
+      listChildWatchlist(selectedChildId).catch(() => [] as WatchlistItem[]),
+    ]).then(([profs, wl]) => {
+      setChildProfiles(profs);
+      setChildActiveRegs(
+        wl.filter((i) => i.is_registered || i.user_status === 'registered_declared' || i.user_status === 'completed')
+      );
+      const primary = profs.find((p) => p.is_primary) ?? profs[0];
+      if (primary) return fetchTiData(primary.id);
+    })
+    .then((d) => { if (d) setTiData(d); })
+    .catch(() => {})
+    .finally(() => setTiLoading(false));
   }, [isParent, selectedChildId]);
 
   const activeProfiles = isParent ? childProfiles : profiles;
@@ -357,7 +364,32 @@ export const PlayerProfilePage: React.FC = () => {
                 Ver todas <ChevronRight className="w-3 h-3" />
               </Link>
             </div>
-            {activeRegs.length === 0 ? (
+            {isParent ? (
+              childActiveRegs.length === 0 ? (
+                <div className="card text-center py-6 space-y-2">
+                  <Ticket className="w-8 h-8 text-text-muted mx-auto" />
+                  <p className="text-xs text-text-muted">Nenhuma inscrição ativa encontrada.</p>
+                </div>
+              ) : (
+                <div className="card divide-y divide-border-subtle">
+                  {childActiveRegs.slice(0, 5).map((item) => (
+                    <div key={item.id} className="py-3 first:pt-0 last:pb-0 space-y-1">
+                      <p className="text-sm font-semibold leading-tight line-clamp-2">{item.edition_detail.tournament_name}</p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${item.is_registered ? 'text-green-400 bg-green-400/10' : 'text-yellow-400 bg-yellow-400/10'}`}>
+                          {item.is_registered ? 'Inscrição Confirmada' : 'Declarado manualmente'}
+                        </span>
+                      </div>
+                      {item.edition_detail.start_date && (
+                        <p className="text-xs text-text-muted">
+                          {new Date(item.edition_detail.start_date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )
+            ) : activeRegs.length === 0 ? (
               <div className="card text-center py-6 space-y-2">
                 <Ticket className="w-8 h-8 text-text-muted mx-auto" />
                 <p className="text-xs text-text-muted">Nenhuma inscrição ativa encontrada.</p>

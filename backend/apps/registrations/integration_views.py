@@ -115,7 +115,9 @@ _URL_DOMAIN_TO_SOURCE = [
 _ENTRY_LINK_PATTERNS = [
     '/inscrit', '/inscricao', '/inscrição', '/entry', '/entries',
     '/players', '/draw', '/chaves', '/acceptance', '/participant',
-    '/torneio_painel', '/inscritos',
+    '/torneio_painel_insc', '/inscritos',
+    # NOTE: '/torneio_painel' (without _insc) intentionally excluded —
+    # torneio_painel_info is the tournament INFO page, not the inscription list.
 ]
 _RANKING_LINK_PATTERNS = ['/ranking', '/classificacao', '/classification']
 

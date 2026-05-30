@@ -13,8 +13,22 @@ const LOCAL_ORG_LOGOS: Record<string, string> = {
 
 function resolveOrgLogo(edition: TournamentEditionList): string | null {
   if (edition.organization_logo_url) return edition.organization_logo_url;
-  const key = (edition.organization_short || '').toUpperCase().trim();
-  return LOCAL_ORG_LOGOS[key] ?? null;
+  const candidates = [
+    edition.organization_short || '',
+    edition.organization_name || '',
+  ];
+  for (const c of candidates) {
+    const upper = c.toUpperCase().trim();
+    if (LOCAL_ORG_LOGOS[upper]) return LOCAL_ORG_LOGOS[upper];
+    // try first word (e.g. "FPT SP" → "FPT")
+    const first = upper.split(/[\s/(-]/)[0];
+    if (LOCAL_ORG_LOGOS[first]) return LOCAL_ORG_LOGOS[first];
+    // try any key that appears inside the string
+    for (const key of Object.keys(LOCAL_ORG_LOGOS)) {
+      if (upper.includes(key)) return LOCAL_ORG_LOGOS[key];
+    }
+  }
+  return null;
 }
 
 interface Props {
@@ -45,19 +59,19 @@ export const TournamentCard: React.FC<Props> = ({
       >
         {/* Logo + org */}
         <div className="flex flex-col items-center gap-1.5">
-          {orgLogo ? (
-            <img
-              src={orgLogo}
-              alt={edition.organization_short || edition.organization_name}
-              className="w-10 h-10 object-contain"
-            />
-          ) : (
-            <div className="w-10 h-10 rounded-full bg-accent-blue/15 flex items-center justify-center">
+          <div className="w-12 h-12 rounded-full overflow-hidden bg-white flex items-center justify-center shrink-0 border border-border-subtle">
+            {orgLogo ? (
+              <img
+                src={orgLogo}
+                alt={edition.organization_short || edition.organization_name}
+                className="w-full h-full object-contain p-0.5"
+              />
+            ) : (
               <span className="text-accent-blue font-bold text-sm">
                 {(edition.organization_short || edition.organization_name || '?').slice(0, 2).toUpperCase()}
               </span>
-            </div>
-          )}
+            )}
+          </div>
           <span className="text-[10px] font-semibold text-accent-blue uppercase tracking-wider text-center leading-tight">
             {edition.organization_short || edition.organization_name}
           </span>

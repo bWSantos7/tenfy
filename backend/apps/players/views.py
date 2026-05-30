@@ -279,16 +279,6 @@ def _sync_ti_data_inline(profile: PlayerProfile, ti_id: str):
 
     try:
         rankings = fetch_ti_rankings(ti_id)
-        # Calculate position change by comparing with previous cache
-        prev = {r.get('ranking_name', ''): r.get('position', '') for r in (profile.ti_rankings_cache or [])}
-        for r in rankings:
-            old_pos = prev.get(r.get('ranking_name', ''), '')
-            new_pos = r.get('position', '')
-            if old_pos and new_pos and str(old_pos).isdigit() and str(new_pos).isdigit():
-                diff = int(old_pos) - int(new_pos)  # positive = improved (lower position number)
-                r['position_change'] = f'+{diff}' if diff > 0 else (str(diff) if diff < 0 else '')
-            else:
-                r.setdefault('position_change', '')
         profile.ti_rankings_cache = rankings
         profile.ti_rankings_synced_at = now
     except TenisScrapeError as exc:

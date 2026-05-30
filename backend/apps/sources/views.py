@@ -37,11 +37,11 @@ class OrganizationViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = Organization.objects.filter(is_active=True).order_by('short_name', 'name')
-        # Non-admins only see orgs that have at least one tournament.
+        # Non-admins only see orgs that have at least one tournament edition.
         if self.action == 'list' and not (
             self.request.user.is_staff or self.request.user.is_superuser
         ):
-            qs = qs.filter(tournaments__isnull=False).distinct()
+            qs = qs.filter(tournaments__editions__isnull=False).distinct()
         return qs
 
 

@@ -42,10 +42,10 @@ export const AppLayout: React.FC = () => {
       <header className="sticky top-0 z-30 bg-bg-card/90 backdrop-blur-lg border-b border-border-subtle shadow-sm">
         <div className="mx-auto max-w-6xl px-4 h-14 flex items-center gap-2">
 
-          {/* Logo — logo1 (claro) e logo5 navy mono invertida→branca (escuro); mesma dimensão = mesmo tamanho */}
+          {/* Logo — clara (light) e escura (dark) */}
           <NavLink to="/inicio" className="flex items-center shrink-0 mr-3">
-            <img src="/logos/logo1.png" alt="Tenfy" className="h-11 w-auto object-contain dark:hidden" />
-            <img src="/logos/logo5.png" alt="Tenfy" className="h-11 w-auto object-contain hidden dark:block" style={{ filter: 'brightness(0) invert(1)' }} />
+            <img src="/logos/logo_clara.png" alt="Tenfy" className="h-11 w-auto object-contain dark:hidden" />
+            <img src="/logos/logo_escura.png" alt="Tenfy" className="h-11 w-auto object-contain hidden dark:block" />
           </NavLink>
 
           {/* ── Nav items — só visível em desktop (md+) ── */}

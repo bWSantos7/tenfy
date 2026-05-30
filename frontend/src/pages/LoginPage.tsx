@@ -65,13 +65,17 @@ export const LoginPage: React.FC = () => {
 
         <div className="relative flex flex-col h-full p-10 xl:p-14">
 
-          {/* Logo no topo — branca sobre fundo navy */}
+          {/* Logo grande no topo — clara no light, escura no dark */}
           <Link to="/" className="shrink-0 inline-block mb-auto">
             <img
-              src="/logos/logo5.png"
+              src="/logos/logo_clara.png"
               alt="Tenfy"
-              className="h-12 w-auto object-contain"
-              style={{ filter: 'brightness(0) invert(1)' }}
+              className="h-16 xl:h-20 w-auto object-contain dark:hidden"
+            />
+            <img
+              src="/logos/logo_escura.png"
+              alt="Tenfy"
+              className="h-16 xl:h-20 w-auto object-contain hidden dark:block"
             />
           </Link>
 
@@ -142,8 +146,8 @@ export const LoginPage: React.FC = () => {
 
           {/* Logo — apenas mobile/tablet */}
           <div className="flex justify-center mb-10 lg:hidden">
-            <img src="/logos/logo2.png" alt="Tenfy" className="h-32 w-auto object-contain dark:hidden" />
-            <img src="/logos/logo5.png" alt="Tenfy" className="h-16 w-auto object-contain hidden dark:block" style={{ filter: 'brightness(0) invert(1)' }} />
+            <img src="/logos/logo_clara.png" alt="Tenfy" className="h-20 w-auto object-contain dark:hidden" />
+            <img src="/logos/logo_escura.png" alt="Tenfy" className="h-20 w-auto object-contain hidden dark:block" />
           </div>
 
           {/* Cabeçalho do formulário */}

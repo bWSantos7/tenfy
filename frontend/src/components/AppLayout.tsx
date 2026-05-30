@@ -50,8 +50,8 @@ export const AppLayout: React.FC = () => {
 
           {/* Logo */}
           <NavLink to="/inicio" className="flex items-center shrink-0 mr-3">
-            <img src="/logos/logo1.png"     alt="Tenfy" className="h-8 w-auto object-contain dark:hidden" style={{ maxHeight: 32, maxWidth: 140 }} />
-            <img src="/logos/logo_white.png" alt="Tenfy" className="h-8 w-auto object-contain hidden dark:block" style={{ maxHeight: 32, maxWidth: 140 }} />
+            <img src="/logos/logo1.png"            alt="Tenfy" className="h-9 w-auto object-contain dark:hidden"       style={{ maxWidth: 148 }} />
+            <img src="/icons/logo_noturno_tr.png"  alt="Tenfy" className="h-9 w-auto object-contain hidden dark:block" style={{ maxWidth: 148, filter: 'brightness(0) invert(1)' }} />
           </NavLink>
 
           {/* ── Nav items — só visível em desktop (md+) ── */}

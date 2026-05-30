@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Star, Loader2, Trash2, ExternalLink, CheckCircle, Clock, Trophy, User, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { WatchlistItem, ParentChild } from '../types';
-import { listWatchlist, deleteWatch, updateWatch, watchlistSummary, listChildren, listChildWatchlist } from '../services/data';
+import { listWatchlist, deleteWatch, updateWatch, listChildren, listChildWatchlist } from '../services/data';
 import { TournamentCard } from '../components/TournamentCard';
 import { extractApiError } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -79,10 +79,8 @@ export const WatchlistPage: React.FC = () => {
   const [childGroups, setChildGroups] = useState<ChildGroup[]>([]);
   const [selectedChildId, setSelectedChildId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
-  const [summary, setSummary] = useState<{ total: number; active_registrations: number; upcoming: number; past?: number } | null>(null);
   const [tab, setTab] = useState<'upcoming' | 'past'>('upcoming');
   const [confirmRemove, setConfirmRemove] = useState<number | null>(null);
-  const [conflicts, setConflicts] = useState<Set<number>>(new Set());
 
   const isParent = user?.role === 'parent';
 
@@ -90,11 +88,7 @@ export const WatchlistPage: React.FC = () => {
     setLoading(true);
     try {
       if (isParent) {
-        const [ownItems, children, sm] = await Promise.all([
-          listWatchlist().catch(() => [] as WatchlistItem[]),
-          listChildren().catch(() => [] as ParentChild[]),
-          watchlistSummary().catch(() => null),
-        ]);
+        const children = await listChildren().catch(() => [] as ParentChild[]);
         const childWatchlists = await Promise.all(
           children.map((link) => listChildWatchlist(link.child).catch(() => [] as WatchlistItem[])),
         );
@@ -103,25 +97,13 @@ export const WatchlistPage: React.FC = () => {
           childId: link.child,
           items: childWatchlists[i],
         }));
-        const groups: ChildGroup[] = [
-          ...(ownItems.length > 0 ? [{ childName: 'Meu perfil', childId: -1, items: ownItems }] : []),
-          ...childrenGroups,
-        ];
-        const allItems = groups.flatMap((g) => g.items);
-        setChildGroups(groups);
-        setItems(allItems);
-        setSummary(sm);
-        setConflicts(detectConflicts(allItems));
+        setChildGroups(childrenGroups);
+        setItems(childrenGroups.flatMap((g) => g.items));
         setSelectedChildId((prev) => prev ?? (childrenGroups[0]?.childId ?? null));
       } else {
-        const [data, sm] = await Promise.all([
-          listWatchlist(),
-          watchlistSummary().catch(() => null),
-        ]);
+        const data = await listWatchlist();
         setChildGroups([]);
         setItems(data);
-        setSummary(sm);
-        setConflicts(detectConflicts(data));
       }
     } catch (err) {
       toast.error(extractApiError(err));
@@ -165,6 +147,8 @@ export const WatchlistPage: React.FC = () => {
   const now = TODAY;
   const upcoming = selectedItems.filter((i) => !i.edition_detail.end_date || i.edition_detail.end_date >= now).sort(sortByDate);
   const past     = selectedItems.filter((i) => i.edition_detail.end_date && i.edition_detail.end_date < now).sort(sortByDate);
+  const activeRegistrations = selectedItems.filter((i) => i.is_registered || i.result !== null).length;
+  const selectedConflicts = detectConflicts(selectedItems);
   const displayed = tab === 'upcoming' ? upcoming : past;
   const displayedGroups = groupByMonth(displayed);
 
@@ -178,7 +162,7 @@ export const WatchlistPage: React.FC = () => {
 
     return (
       <div key={item.id} className="relative">
-        {conflicts.has(item.id) && (
+        {selectedConflicts.has(item.id) && (
           <div className="flex items-center gap-1.5 px-1 mb-1 mt-2">
             <AlertTriangle className="w-3 h-3 text-status-closing" />
             <span className="text-[10px] text-status-closing font-medium">Conflito de datas</span>
@@ -262,33 +246,33 @@ export const WatchlistPage: React.FC = () => {
       </div>
 
       {/* Summary cards */}
-      {summary && summary.total > 0 && (
+      {selectedItems.length > 0 && (
         <div className="grid grid-cols-4 gap-2">
           <div className="card !p-3 text-center">
-            <div className="text-xl font-bold text-accent-neon">{summary.total}</div>
+            <div className="text-xl font-bold text-accent-neon">{selectedItems.length}</div>
             <div className="text-[10px] text-text-muted">Total</div>
           </div>
           <div className="card !p-3 text-center">
-            <div className="text-xl font-bold text-accent-blue">{summary.upcoming}</div>
+            <div className="text-xl font-bold text-accent-blue">{upcoming.length}</div>
             <div className="text-[10px] text-text-muted">Próximos</div>
           </div>
           <div className="card !p-3 text-center">
-            <div className="text-xl font-bold text-text-muted">{summary.past ?? past.length}</div>
+            <div className="text-xl font-bold text-text-muted">{past.length}</div>
             <div className="text-[10px] text-text-muted">Passados</div>
           </div>
           <div className="card !p-3 text-center">
-            <div className="text-xl font-bold text-status-open">{summary.active_registrations}</div>
+            <div className="text-xl font-bold text-status-open">{activeRegistrations}</div>
             <div className="text-[10px] text-text-muted">Inscrições</div>
           </div>
         </div>
       )}
 
       {/* Conflitos */}
-      {conflicts.size > 0 && (
+      {selectedConflicts.size > 0 && (
         <div className="flex items-center gap-2 bg-status-closing/10 border border-status-closing/30 rounded-xl px-3 py-2.5">
           <AlertTriangle className="w-4 h-4 text-status-closing shrink-0" />
           <span className="text-xs text-status-closing">
-            {conflicts.size} torneio{conflicts.size > 1 ? 's' : ''} com datas sobrepostas na sua agenda.
+            {selectedConflicts.size} torneio{selectedConflicts.size > 1 ? 's' : ''} com datas sobrepostas na agenda.
           </span>
         </div>
       )}

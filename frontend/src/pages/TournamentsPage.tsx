@@ -542,10 +542,6 @@ export const TournamentsPage: React.FC = () => {
         </>
       )}
 
-          )}
-        </>
-      )}
-
       {/* ─── CALENDAR VIEW ─────────────────────────────────────────────────── */}
       {viewMode === 'calendar' && (
         <div className="space-y-3">

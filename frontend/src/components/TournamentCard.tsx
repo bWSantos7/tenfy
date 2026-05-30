@@ -49,7 +49,7 @@ export const TournamentCard: React.FC<Props> = ({
             <img
               src={orgLogo}
               alt={edition.organization_short || edition.organization_name}
-              className="w-10 h-10 object-contain rounded-full"
+              className="w-10 h-10 object-contain"
             />
           ) : (
             <div className="w-10 h-10 rounded-full bg-accent-blue/15 flex items-center justify-center">

@@ -10,6 +10,7 @@ import { PlayerProfile, TiData, TiRankingEntry, TournamentRegistration } from '.
 import { fetchTiData, listProfiles, syncTiData } from '../services/data';
 import { myRegistrations } from '../services/registrations';
 import { mediaUrl } from '../services/api';
+import { resolveAvatar } from '../utils/format';
 import { LEVEL_LABELS, GENDER_LABELS, ROLE_LABELS, TENNIS_CLASS_LABELS } from '../utils/format';
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -119,8 +120,8 @@ export const PlayerProfilePage: React.FC = () => {
       {/* ── User card ───────────────────────────────────────────────── */}
       <div className="card flex items-center gap-4">
         <div className="w-16 h-16 rounded-full bg-accent-neon/20 flex items-center justify-center text-xl font-bold overflow-hidden border-2 border-accent-neon/40 shrink-0">
-          {user?.avatar
-            ? <img src={mediaUrl(user.avatar)} alt="avatar" className="w-full h-full object-cover" />
+          {resolveAvatar(user, mediaUrl)
+            ? <img src={resolveAvatar(user, mediaUrl)!} alt="avatar" className="w-full h-full object-cover" />
             : <span className="text-accent-neon text-2xl font-bold">{avatarLetter}</span>}
         </div>
         <div className="flex-1 min-w-0">

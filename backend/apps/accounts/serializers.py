@@ -12,6 +12,7 @@ CURRENT_CONSENT_VERSION = '1.0.0'
 class UserSerializer(serializers.ModelSerializer):
     managed_by_parent = serializers.SerializerMethodField()
     parent_info = serializers.SerializerMethodField()
+    ti_avatar_url = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -20,12 +21,29 @@ class UserSerializer(serializers.ModelSerializer):
             'email_verified',
             'consent_version', 'consented_at', 'marketing_consent',
             'is_staff', 'created_at',
-            'managed_by_parent', 'parent_info',
+            'managed_by_parent', 'parent_info', 'ti_avatar_url',
         )
         read_only_fields = (
             'id', 'is_staff', 'consent_version', 'consented_at', 'created_at',
-            'email_verified', 'managed_by_parent', 'parent_info',
+            'email_verified', 'managed_by_parent', 'parent_info', 'ti_avatar_url',
         )
+
+    def get_ti_avatar_url(self, obj) -> str | None:
+        """Return the public TI avatar URL derived from the primary player profile's TI ID."""
+        try:
+            from apps.players.models import PlayerProfile
+            from apps.players.parsers import extract_ti_id
+            profile = PlayerProfile.objects.filter(user=obj, is_primary=True).only('external_ids').first()
+            if not profile:
+                profile = PlayerProfile.objects.filter(user=obj).only('external_ids').first()
+            if not profile:
+                return None
+            ti_id, _ = extract_ti_id(profile.external_ids or {})
+            if not ti_id:
+                return None
+            return f'https://tenis-integrado-prod.s3.amazonaws.com/sync-prod/id{ti_id}/fotos/avatar.jpg'
+        except Exception:
+            return None
 
     def get_managed_by_parent(self, obj) -> bool:
         from .models import ParentChild

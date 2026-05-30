@@ -233,8 +233,8 @@ export function ProfileScreen(_: Props) {
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
           <Pressable onPress={handleAvatarChange} style={{ position: 'relative' }}>
             <View style={{ width: 72, height: 72, borderRadius: 36, backgroundColor: `${colors.accentNeon}22`, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: `${colors.accentNeon}44` }}>
-              {user?.avatar
-                ? <Image source={{ uri: mediaUrl(user.avatar) }} style={{ width: '100%', height: '100%' }} />
+              {(user?.avatar ? mediaUrl(user.avatar) : user?.ti_avatar_url)
+                ? <Image source={{ uri: user?.avatar ? mediaUrl(user.avatar) : user?.ti_avatar_url! }} style={{ width: '100%', height: '100%' }} />
                 : <AppText variant="body" style={{ color: colors.accentNeon, fontWeight: '700', fontSize: 26 }}>{avatarLetter}</AppText>}
             </View>
             <View style={{ position: 'absolute', bottom: 0, right: 0, width: 24, height: 24, borderRadius: 12, backgroundColor: colors.accentNeon, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.bgBase }}>

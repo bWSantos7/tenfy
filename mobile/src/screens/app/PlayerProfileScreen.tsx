@@ -124,8 +124,8 @@ export function PlayerProfileScreen(_: Props) {
       <Card style={{ marginBottom: 12 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
           <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: `${colors.accentNeon}22`, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: `${colors.accentNeon}44` }}>
-            {user?.avatar
-              ? <Image source={{ uri: mediaUrl(user.avatar) }} style={{ width: '100%', height: '100%' }} />
+            {(user?.avatar ? mediaUrl(user.avatar) : user?.ti_avatar_url)
+              ? <Image source={{ uri: user?.avatar ? mediaUrl(user.avatar) : user?.ti_avatar_url! }} style={{ width: '100%', height: '100%' }} />
               : <AppText variant="body" style={{ color: colors.accentNeon, fontWeight: '800', fontSize: 24 }}>{avatarLetter}</AppText>
             }
           </View>

@@ -147,8 +147,8 @@ export function HomeScreen(_: Props) {
     <Screen onRefresh={onRefresh} refreshing={refreshing}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
-          {user?.avatar
-            ? <Image source={{ uri: user.avatar }} style={{ width: 40, height: 40, borderRadius: 20, borderWidth: 1, borderColor: colors.borderSubtle }} />
+          {(user?.avatar || user?.ti_avatar_url)
+            ? <Image source={{ uri: user?.avatar ?? user?.ti_avatar_url! }} style={{ width: 40, height: 40, borderRadius: 20, borderWidth: 1, borderColor: colors.borderSubtle }} />
             : <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: `${colors.accentNeon}20`, borderWidth: 1, borderColor: `${colors.accentNeon}40`, alignItems: 'center', justifyContent: 'center' }}>
                 <Ionicons name="person" size={20} color={colors.accentNeon} />
               </View>

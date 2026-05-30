@@ -48,6 +48,7 @@ export interface User {
   full_name: string;
   phone: string;
   avatar: string | null;
+  ti_avatar_url?: string | null;
   role: Role;
   email_verified: boolean;
   consent_version: string;

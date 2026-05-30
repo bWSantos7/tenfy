@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Home, Calendar, Star, User, LogOut, ShieldCheck, Sun, Moon, Award, CreditCard, Users, Bell } from 'lucide-react';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { Home, Calendar, Star, User, ShieldCheck, Sun, Moon, Award, Users, Bell } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { BetaModal } from './BetaModal';
@@ -16,8 +16,7 @@ const navItems = [
 ];
 
 export const AppLayout: React.FC = () => {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
+  const { user } = useAuth();
   const location = useLocation();
   const { theme, toggle: toggleTheme } = useTheme();
   const [unreadCount, setUnreadCount] = useState(0);
@@ -34,11 +33,6 @@ export const AppLayout: React.FC = () => {
     window.addEventListener('alerts-unread-changed', handler);
     return () => window.removeEventListener('alerts-unread-changed', handler);
   }, []);
-
-  const handleLogout = async () => {
-    await logout();
-    navigate('/login', { replace: true });
-  };
 
   return (
     <div className="min-h-screen bg-bg-base flex flex-col">
@@ -98,11 +92,6 @@ export const AppLayout: React.FC = () => {
               )}
             </NavLink>
 
-            <NavLink to="/assinatura" className="btn-ghost flex items-center gap-1 text-xs hidden sm:flex" title="Minha assinatura">
-              <CreditCard className="w-4 h-4" />
-              <span className="hidden lg:inline">Assinatura</span>
-            </NavLink>
-
             {user?.is_staff && (
               <NavLink to="/admin-panel" className="btn-ghost flex items-center gap-1 text-xs" title="Painel admin">
                 <ShieldCheck className="w-4 h-4" />
@@ -114,10 +103,6 @@ export const AppLayout: React.FC = () => {
               {theme === 'dark' ? <Sun className="w-4 h-4 text-accent-neon" /> : <Moon className="w-4 h-4" />}
             </button>
 
-            <button onClick={handleLogout} className="btn-ghost flex items-center gap-1 text-xs" title="Sair">
-              <LogOut className="w-4 h-4" />
-              <span className="hidden sm:inline">Sair</span>
-            </button>
           </div>
         </div>
       </header>

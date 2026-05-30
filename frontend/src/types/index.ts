@@ -55,6 +55,8 @@ export interface User {
   marketing_consent: boolean;
   is_staff: boolean;
   created_at: string;
+  // Foto do Tênis Integrado (fallback quando user.avatar é nulo)
+  ti_avatar_url?: string | null;
   // Campos de conta gerenciada (parent/filho)
   managed_by_parent?: boolean;
   parent_info?: { full_name: string; email: string } | null;

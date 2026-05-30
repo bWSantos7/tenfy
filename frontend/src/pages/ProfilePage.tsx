@@ -14,6 +14,7 @@ import { DependentInvite, ParentChild, PlayerProfile, PlayerSearchResult } from 
 import { listProfiles, setPrimary, deleteProfile, updateProfile, requestDataExport, listChildren, removeChild, createChildWithProfile, listChildProfiles, createChildProfile, sendChildPasswordReset, updateChildAccount, searchPlayersForInvite, sendDependentInvite, listSentInvites, cancelDependentInvite, respondDependentInvite } from '../services/data';
 import { deleteAccount, linkExistingChild, uploadAvatar } from '../services/auth';
 import { extractApiError, mediaUrl } from '../services/api';
+import { resolveAvatar } from '../utils/format';
 import { createChildAccount } from '../services/data';
 import { LEVEL_LABELS, GENDER_LABELS, TENNIS_CLASS_LABELS, ROLE_LABELS } from '../utils/format';
 import { getProfileModality, setProfileModality, MODALITY_OPTIONS } from '../utils/profileModality';
@@ -165,8 +166,8 @@ export const ProfilePage: React.FC = () => {
           {/* Avatar com câmera */}
           <div className="relative shrink-0">
             <div className="w-16 h-16 rounded-full bg-accent-neon/20 flex items-center justify-center text-xl font-bold overflow-hidden border-2 border-accent-neon/40">
-              {user?.avatar
-                ? <img src={mediaUrl(user.avatar)} alt="avatar" className="w-full h-full object-cover" />
+              {resolveAvatar(user, mediaUrl)
+                ? <img src={resolveAvatar(user, mediaUrl)!} alt="avatar" className="w-full h-full object-cover" />
                 : <span className="text-accent-neon text-2xl font-bold">{avatarLetter}</span>}
             </div>
             <button

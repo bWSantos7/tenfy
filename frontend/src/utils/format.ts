@@ -240,3 +240,12 @@ export function formatChangeEventDetails(event: TournamentChangeEvent): string[]
     return `${label} atualizado.`;
   });
 }
+
+/** Returns the best available avatar URL for a user.
+ *  Priority: own uploaded avatar → TI public avatar → null (caller renders letter). */
+export function resolveAvatar(user: { avatar?: string | null; ti_avatar_url?: string | null } | null | undefined, mediaUrlFn: (p: string) => string): string | null {
+  if (!user) return null;
+  if (user.avatar) return mediaUrlFn(user.avatar);
+  if (user.ti_avatar_url) return user.ti_avatar_url;
+  return null;
+}

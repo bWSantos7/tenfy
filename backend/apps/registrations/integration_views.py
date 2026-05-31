@@ -671,7 +671,7 @@ def deduplicate_editions(request):
         from apps.watchlist.models import WatchlistItem
 
         editions = list(
-            TournamentEdition.objects.select_related('tournament__organization').order_by('id')
+            TournamentEdition.objects.select_related('tournament__organization', 'venue').order_by('id')
         )
 
         groups = []
@@ -708,8 +708,8 @@ def deduplicate_editions(request):
                 if (str(a.start_date) == str(b.start_date)
                         and str(a.end_date) == str(b.end_date)
                         and a.tournament.organization_id == b.tournament.organization_id
-                        and (a.venue_city or '').lower() == (b.venue_city or '').lower()
-                        and (a.venue_state or '') == (b.venue_state or '')
+                        and (getattr(a.venue, 'city', '') or '').lower() == (getattr(b.venue, 'city', '') or '').lower()
+                        and (getattr(a.venue, 'state', '') or '') == (getattr(b.venue, 'state', '') or '')
                         and _sim(a.title, b.title) >= min_sim):
                     grp.append(b)
                     checked.add(b.id)

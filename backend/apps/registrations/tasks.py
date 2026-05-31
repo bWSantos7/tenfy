@@ -172,14 +172,39 @@ def match_federation_entries(self, edition_id: int) -> dict:
     logs = _do_match(entries, profiles, edition, counter)
     MatchingLog.objects.bulk_create(logs)
 
+    # Withdraw registrations for removed/cancelled entries
+    withdrawn_count = 0
+    removed_entries = [e for e in entries if e.removed_or_replaced]
+    if removed_entries:
+        from apps.watchlist.models import WatchlistItem
+        for entry in removed_entries:
+            for profile in profiles:
+                ext_ids = profile.external_ids or {}
+                if str(ext_ids.get(entry.source, '')) == str(entry.player_external_id):
+                    # Withdraw TournamentRegistration
+                    updated = TournamentRegistration.objects.filter(
+                        edition=edition, profile=profile, is_withdrawn=False,
+                    ).update(is_withdrawn=True)
+                    if updated:
+                        # Update WatchlistItem to withdrawn
+                        WatchlistItem.objects.filter(
+                            user_id=profile.user_id, edition=edition,
+                        ).exclude(user_status='withdrawn').update(user_status='withdrawn')
+                        withdrawn_count += 1
+                        logger.info(
+                            'match_federation_entries: withdrew profile=%s edition=%s entry=%s',
+                            profile.id, edition_id, entry.player_external_id,
+                        )
+
     logger.info(
-        'match_federation_entries edition=%s: %d entries, %d registrations created',
-        edition_id, len(entries), counter[0],
+        'match_federation_entries edition=%s: %d entries, %d registrations created, %d withdrawn',
+        edition_id, len(entries), counter[0], withdrawn_count,
     )
     return {
         'edition_id': edition_id,
         'entries_processed': len(entries),
         'registrations_created': counter[0],
+        'registrations_withdrawn': withdrawn_count,
         'logs_created': len(logs),
     }
 

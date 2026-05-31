@@ -731,20 +731,26 @@ def deduplicate_editions(request):
                 'remove': [{'id': r.id, 'title': r.title, 'external_id': r.external_id} for r in remove_list],
             }
             if not dry_run:
-                try:
-                    with transaction.atomic():
-                        for dup in remove_list:
-                            # Migrate watchlist items (user-created, must preserve)
-                            for wi in WatchlistItem.objects.filter(edition=dup):
+                dup_errors = []
+                for dup in remove_list:
+                    try:
+                        # 1. Migrate watchlist items (user-created — preserve)
+                        for wi in WatchlistItem.objects.filter(edition=dup):
+                            try:
                                 if not WatchlistItem.objects.filter(user_id=wi.user_id, edition=keep).exists():
                                     wi.edition = keep
                                     wi.save(update_fields=['edition'])
                                 else:
                                     wi.delete()
-                            # FederationEntries: delete from dup (keep already has same entries)
-                            FederationEntry.objects.filter(edition=dup).delete()
-                            # TournamentRegistrations: migrate or delete if already exists
-                            for tr in TournamentRegistration.objects.filter(edition=dup):
+                            except Exception:
+                                wi.delete()
+
+                        # 2. FederationEntries — simply delete from dup (keep already has them)
+                        FederationEntry.objects.filter(edition=dup).delete()
+
+                        # 3. TournamentRegistrations — migrate or delete if conflict
+                        for tr in TournamentRegistration.objects.filter(edition=dup):
+                            try:
                                 if not TournamentRegistration.objects.filter(
                                     profile_id=tr.profile_id, edition=keep
                                 ).exists():
@@ -752,13 +758,21 @@ def deduplicate_editions(request):
                                     tr.save(update_fields=['edition'])
                                 else:
                                     tr.delete()
-                            dup.delete()
-                            removed_total += 1
+                            except Exception:
+                                tr.delete()
+
+                        # 4. Delete duplicate edition
+                        dup.delete()
+                        removed_total += 1
+                    except Exception as exc:
+                        dup_errors.append(f'[{dup.id}] {exc}')
+
+                if dup_errors:
+                    entry['status'] = 'partial'
+                    entry['error'] = '; '.join(dup_errors)
+                    errors.extend(dup_errors)
+                else:
                     entry['status'] = 'removed'
-                except Exception as exc:
-                    entry['status'] = 'error'
-                    entry['error'] = str(exc)
-                    errors.append(str(exc))
             else:
                 entry['status'] = 'dry_run'
             report.append(entry)

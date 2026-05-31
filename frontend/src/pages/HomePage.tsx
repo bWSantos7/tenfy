@@ -11,7 +11,8 @@ import { getActiveProfileId, setActiveProfileId as persistActiveProfileId } from
 import { consumeProfileDirty } from '../utils/profileRefresh';
 import { getProfileModality, syncModalityFromProfile } from '../utils/profileModality';
 
-const ACTIVE_STATUSES = new Set(['open', 'closing_soon', 'announced', 'in_progress']);
+// Apenas torneios com inscrições abertas ou encerrando em breve aparecem na Home
+const ACTIVE_STATUSES = new Set(['open', 'closing_soon']);
 
 interface ProfileOption {
   profile: PlayerProfile;
@@ -42,6 +43,7 @@ export const HomePage: React.FC = () => {
       const level = (p as any).competitive_level as string | undefined;
       const compatData = await compatibleForProfile(p.id, {
         page_size: 20,
+        status: 'open,closing_soon',
         ...(modality ? { modality } : {}),
         ...(level ? { player_level: level } : {}),
       }).catch((err: any) => {
@@ -142,7 +144,8 @@ export const HomePage: React.FC = () => {
       const applyProfileFilters = (items: TournamentEditionList[]) =>
         filterByLevel(filterByModality(items, modality), level);
       setClosing(applyProfileFilters(allClosing).filter((t) => ACTIVE_STATUSES.has(t.status ?? '')).slice(0, 6));
-      setRecent(applyProfileFilters(allRecent).slice(0, 6));
+      // Somente torneios com inscrições abertas/encerrando aparecem como "recentes"
+      setRecent(applyProfileFilters(allRecent).filter((t) => ACTIVE_STATUSES.has(t.status ?? '')).slice(0, 6));
 
       if (primary) {
         await loadCompat(primary);

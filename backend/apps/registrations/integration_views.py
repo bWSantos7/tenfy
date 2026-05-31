@@ -734,9 +734,24 @@ def deduplicate_editions(request):
                 try:
                     with transaction.atomic():
                         for dup in remove_list:
-                            WatchlistItem.objects.filter(edition=dup).update(edition=keep)
-                            FederationEntry.objects.filter(edition=dup).update(edition=keep)
-                            TournamentRegistration.objects.filter(edition=dup).update(edition=keep)
+                            # Migrate watchlist items (user-created, must preserve)
+                            for wi in WatchlistItem.objects.filter(edition=dup):
+                                if not WatchlistItem.objects.filter(user_id=wi.user_id, edition=keep).exists():
+                                    wi.edition = keep
+                                    wi.save(update_fields=['edition'])
+                                else:
+                                    wi.delete()
+                            # FederationEntries: delete from dup (keep already has same entries)
+                            FederationEntry.objects.filter(edition=dup).delete()
+                            # TournamentRegistrations: migrate or delete if already exists
+                            for tr in TournamentRegistration.objects.filter(edition=dup):
+                                if not TournamentRegistration.objects.filter(
+                                    profile_id=tr.profile_id, edition=keep
+                                ).exists():
+                                    tr.edition = keep
+                                    tr.save(update_fields=['edition'])
+                                else:
+                                    tr.delete()
                             dup.delete()
                             removed_total += 1
                     entry['status'] = 'removed'

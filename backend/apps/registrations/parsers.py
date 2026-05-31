@@ -571,8 +571,13 @@ def fetch_tenisintegrado_entries(tournament_url: str, source: str = 'cbt') -> di
             'confidence': 'low', 'source': source,
         }
 
-    # Step 2: POST each category
-    all_entries: list = []
+    # Step 1b: parse cancelled players from the GET response
+    # The "Jogadores não confirmados / Cancelado" section only appears on the
+    # main GET page (without category filter), not on the per-category POST responses.
+    # We use 'geral' as a placeholder category since cancelled rows have no category.
+    all_entries: list = _parse_tenisintegrado_table(r0.text, 'Cancelado', source, insc_url)
+    # Keep only entries that are actually marked as removed (the cancelled section)
+    all_entries = [e for e in all_entries if e.get('removed_or_replaced')]
     warnings: list = []
 
     for cat_id, cat_text in categories.items():

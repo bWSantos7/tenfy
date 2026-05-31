@@ -360,14 +360,24 @@ export const TournamentDetailPage: React.FC = () => {
 
           {!registrantsLoading && registrants && registrants.categories.length > 0 && (
             <>
-              {registrants.categories.map((cat) => (
-                <RegistrantsCategoryCard
-                  key={cat.category_text}
-                  cat={cat}
-                  expanded={expandedCats.has(cat.category_text)}
-                  onToggle={() => toggleCat(cat.category_text)}
-                />
-              ))}
+              {groupCategories(registrants.categories).map(({ baseName, cats }) =>
+                cats.length === 1 ? (
+                  <RegistrantsCategoryCard
+                    key={cats[0].category_text}
+                    cat={cats[0]}
+                    expanded={expandedCats.has(cats[0].category_text)}
+                    onToggle={() => toggleCat(cats[0].category_text)}
+                  />
+                ) : (
+                  <GroupedCategoryCard
+                    key={baseName}
+                    baseName={baseName}
+                    cats={cats}
+                    expandedCats={expandedCats}
+                    onToggle={toggleCat}
+                  />
+                )
+              )}
 
               {/* Note about ranking replacement */}
               <div className="card flex items-start gap-3 bg-accent-blue/5 border border-accent-blue/20">
@@ -644,6 +654,97 @@ function TimelineItem({
 }
 
 // ── Registrants: category card ────────────────────────────────────────────────
+
+// ── Category grouping ────────────────────────────────────────────────────────
+
+const VARIANT_RE = /\s*\((GA|G1\+?|G2\+?|G3\+?|[A-Z]\d*\+?)\)\s*$/i;
+
+function groupCategories(categories: RegistrantCategory[]) {
+  const groups = new Map<string, RegistrantCategory[]>();
+  for (const cat of categories) {
+    const base = cat.category_text.replace(VARIANT_RE, '').trim();
+    if (!groups.has(base)) groups.set(base, []);
+    groups.get(base)!.push(cat);
+  }
+  return Array.from(groups.entries()).map(([baseName, cats]) => ({ baseName, cats }));
+}
+
+function variantLabel(text: string): string {
+  const m = text.match(VARIANT_RE);
+  return m ? m[1] : text;
+}
+
+// ── Grouped category: multiple variants (GA, G1+) side by side ───────────────
+
+function GroupedCategoryCard({
+  baseName, cats, expandedCats, onToggle,
+}: {
+  baseName: string;
+  cats: RegistrantCategory[];
+  expandedCats: Set<string>;
+  onToggle: (key: string) => void;
+}) {
+  const activeCat = cats.find((c) => expandedCats.has(c.category_text)) ?? null;
+
+  return (
+    <div className="card p-0 overflow-hidden">
+      {/* Base name header */}
+      <div className="px-4 pt-4 pb-2">
+        <p className="font-semibold text-sm">{baseName}</p>
+      </div>
+
+      {/* Variant chips side by side */}
+      <div className="flex gap-2 px-4 pb-3 overflow-x-auto scrollbar-none">
+        {cats.map((cat) => {
+          const isActive = expandedCats.has(cat.category_text);
+          const label = variantLabel(cat.category_text);
+          const total = cat.summary.total;
+          const inDraw = cat.summary.in_draw;
+          return (
+            <button
+              key={cat.category_text}
+              onClick={() => onToggle(cat.category_text)}
+              className={`shrink-0 flex flex-col items-center gap-0.5 px-4 py-2.5 rounded-xl border transition-colors text-xs font-semibold ${
+                isActive
+                  ? 'bg-accent-neon text-bg-base border-accent-neon'
+                  : 'bg-bg-elevated border-border-subtle text-text-secondary hover:border-accent-neon/50'
+              }`}
+            >
+              <span className="text-sm font-bold">{label}</span>
+              <span className={`font-normal ${isActive ? 'text-bg-base/70' : 'text-text-muted'}`}>
+                {inDraw} na chave · {total} inscritos
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Expanded variant entries */}
+      {activeCat && (
+        <>
+          {/* Summary pills for active variant */}
+          <div className="flex flex-wrap gap-1.5 px-4 pb-3">
+            {[
+              { label: `${activeCat.summary.total} inscritos`, cls: 'text-text-muted border-text-muted/30 bg-text-muted/10' },
+              { label: `${activeCat.summary.in_draw} na chave`, cls: 'text-accent-neon border-accent-neon/30 bg-accent-neon/10' },
+              { label: `${activeCat.summary.paid} pagos`, cls: 'text-accent-blue border-accent-blue/30 bg-accent-blue/10' },
+              { label: `${activeCat.summary.pending} pendentes`, cls: 'text-status-closing border-status-closing/30 bg-status-closing/10' },
+            ].map((p) => (
+              <span key={p.label} className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${p.cls}`}>
+                {p.label}
+              </span>
+            ))}
+          </div>
+          <div className="border-t border-border-subtle">
+            {activeCat.entries.map((entry) => (
+              <EntryRow key={entry.id} entry={entry} maxP={activeCat.summary.total_slots ?? activeCat.max_participants} />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 function RegistrantsCategoryCard({
   cat, expanded, onToggle,

@@ -319,6 +319,7 @@ def sync_fpt_sp_entries_task(self, limit: int = 50):
         return _re.sub(r'[^a-z0-9]+', '-', s.lower()).strip('-')[:50]
 
     created_total = updated_total = skipped_total = 0
+    processed_edition_ids = []
     now = _tz.now()
 
     for edition in qs:
@@ -369,6 +370,15 @@ def sync_fpt_sp_entries_task(self, limit: int = 50):
                     updated_total += 1
             except Exception as exc:
                 log.warning('sync_fpt_sp upsert failed: %s', exc)
+
+        processed_edition_ids.append(edition.id)
+
+    # Dispatch match+withdrawal for all processed editions
+    for eid in processed_edition_ids:
+        try:
+            match_federation_entries.delay(eid)
+        except Exception:
+            pass
 
     log.info('sync_fpt_sp done: created=%s updated=%s skipped=%s', created_total, updated_total, skipped_total)
     return {'created': created_total, 'updated': updated_total, 'skipped': skipped_total}

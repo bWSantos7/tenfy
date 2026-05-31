@@ -349,6 +349,49 @@ def sync_fpt_sp_entries_task(self, limit: int = 50):
     return {'created': created_total, 'updated': updated_total, 'skipped': skipped_total}
 
 
+def _sync_withdrawals(edition, db_source, source_key: str, log) -> int:
+    """
+    For all FederationEntries with removed_or_replaced=True for this edition+source,
+    find linked TournamentRegistrations and mark them as withdrawn.
+    Also updates WatchlistItem.user_status to 'withdrawn'.
+    Returns count of registrations withdrawn.
+    """
+    from apps.watchlist.models import WatchlistItem
+
+    removed_entries = FederationEntry.objects.filter(
+        edition=edition,
+        source=db_source,
+        removed_or_replaced=True,
+    ).values_list('player_external_id', flat=True)
+
+    withdrawn_count = 0
+    for ext_id in removed_entries:
+        # Find TournamentRegistrations for profiles linked via external_id
+        regs = TournamentRegistration.objects.filter(
+            edition=edition,
+            is_withdrawn=False,
+            profile__external_ids__has_key=source_key,
+        ).select_related('profile')
+
+        for reg in regs:
+            profile_ext = (reg.profile.external_ids or {}).get(source_key, '')
+            if str(profile_ext) == str(ext_id):
+                reg.is_withdrawn = True
+                reg.save(update_fields=['is_withdrawn', 'updated_at'])
+                # Update WatchlistItem status
+                WatchlistItem.objects.filter(
+                    user=reg.profile.user,
+                    edition=edition,
+                ).exclude(user_status='withdrawn').update(user_status='withdrawn')
+                withdrawn_count += 1
+                log.info(
+                    'sync_withdrawals: retirado profile=%s edition=%s ext_id=%s',
+                    reg.profile_id, edition.id, ext_id,
+                )
+
+    return withdrawn_count
+
+
 @shared_task(bind=True, max_retries=2, default_retry_delay=300)
 def sync_cbt_fct_entries_task(self, sources=None, limit: int = 500):
     """
@@ -500,6 +543,9 @@ def sync_cbt_fct_entries_task(self, sources=None, limit: int = 500):
                 .exclude(player_external_id__in=saved_eids)
                 .update(removed_or_replaced=True, replacement_reason='Não encontrado na última sincronização automática')
             )
+
+            # Withdraw TournamentRegistrations for cancelled/removed entries
+            _sync_withdrawals(edition, db_source, src, log)
 
             summary['created_total'] += created_ed
             summary['updated_total'] += updated_ed

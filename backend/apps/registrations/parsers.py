@@ -405,6 +405,40 @@ def _parse_tenisintegrado_table(html: str, category_text: str,
 
     for row_html in rows:
         cells = re.findall(r'<td[^>]*>(.*?)</td>', row_html, re.DOTALL | re.IGNORECASE)
+
+        # Seção de cancelados/não confirmados: 3 colunas (nome+info, posição, status badge)
+        if len(cells) == 3:
+            badge_text = re.sub(r'<[^>]+>', '', cells[2]).strip().lower()
+            if _classify_removed(badge_text):
+                player_cell = cells[0]
+                id_m = re.search(r'perfil2/index/(\d+)', player_cell, re.IGNORECASE)
+                player_external_id = f'tenisintegrado:{id_m.group(1)}' if id_m else ''
+                player_name = ''
+                for name_m in re.finditer(
+                    r'<a[^>]+perfil2/index/\d+[^>]*>(.*?)</a>',
+                    player_cell, re.IGNORECASE | re.DOTALL,
+                ):
+                    text = re.sub(r'<[^>]+>', '', name_m.group(1)).strip()
+                    if text and len(text) >= 2:
+                        player_name = text
+                        break
+                if not player_name:
+                    continue
+                ext_id = player_external_id or f'{source}:{_slugify_simple(player_name)}:{_slugify_simple(category_text)}'
+                entries.append({
+                    'player_name': player_name,
+                    'category_text': category_text,
+                    'player_external_id': ext_id,
+                    'ranking_position': _safe_int(re.sub(r'<[^>]+>', '', cells[1]).strip()),
+                    'ranking_source': source.upper(),
+                    'payment_status': 'unknown',
+                    'removed_or_replaced': True,
+                    'replacement_reason': f'Status na fonte: {badge_text[:80]}',
+                    'source_url': insc_url,
+                    'confidence': 'high',
+                })
+            continue
+
         if len(cells) < 4:
             continue
 

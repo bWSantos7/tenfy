@@ -643,13 +643,16 @@ def deduplicate_editions(request):
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    import unicodedata as _ud
-    import re as _re
-    from difflib import SequenceMatcher
-    from collections import defaultdict
-    from django.db import transaction
-    from apps.tournaments.models import TournamentEdition
-    from apps.watchlist.models import WatchlistItem
+    try:
+        import unicodedata as _ud
+        import re as _re
+        from difflib import SequenceMatcher
+        from collections import defaultdict
+        from django.db import transaction
+        from apps.tournaments.models import TournamentEdition
+        from apps.watchlist.models import WatchlistItem
+    except Exception as exc:
+        return Response({'error': f'import error: {exc}'}, status=500)
 
     dry_run = request.data.get('dry_run', True)
     min_sim = float(request.data.get('min_similarity', 0.80))
@@ -661,9 +664,12 @@ def deduplicate_editions(request):
     def _sim(a, b):
         return SequenceMatcher(None, _norm(a), _norm(b)).ratio()
 
-    editions = list(
-        TournamentEdition.objects.select_related('tournament__organization').order_by('id')
-    )
+    try:
+        editions = list(
+            TournamentEdition.objects.select_related('tournament__organization').order_by('id')
+        )
+    except Exception as exc:
+        return Response({'error': f'db error: {exc}'}, status=500)
 
     groups = []
     by_eid = defaultdict(list)

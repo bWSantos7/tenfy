@@ -472,14 +472,15 @@ def _parse_tenisintegrado_table(html: str, category_text: str,
         pos_cell = re.sub(r'<[^>]+>', '', cells[2]).strip()
         ranking_position = _safe_int(pos_cell) if pos_cell else None
 
-        # Payment status + removed detection from "Sit. Financeira" cell
+        # Payment status + removed detection — check all cells for cancellation
         fin_text = re.sub(r'<[^>]+>', '', cells[3]).strip().lower()
         payment_status = _classify_payment(fin_text)
-        # "Cancelado" / "Aguardando pagamento" sem confirmação = removido/não confirmado
-        removed = _classify_removed(fin_text)
+        # Check every cell for removal keywords (TI may put "Cancelado" in any column)
+        all_cells_text = ' '.join(re.sub(r'<[^>]+>', '', c).strip().lower() for c in cells)
+        removed = _classify_removed(fin_text) or _classify_removed(all_cells_text)
         replacement_reason = ''
         if removed:
-            replacement_reason = f'Sit. Financeira: {fin_text[:100]}'
+            replacement_reason = f'Status: {all_cells_text[:120]}'
 
         # Dedup: if tenisintegrado ID available, use it; otherwise deterministic slug
         if player_external_id:

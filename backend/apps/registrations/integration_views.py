@@ -665,95 +665,98 @@ def deduplicate_editions(request):
         return SequenceMatcher(None, _norm(a), _norm(b)).ratio()
 
     try:
+        from collections import defaultdict
+        from django.db import transaction
+        from apps.registrations.models import FederationEntry, TournamentRegistration
+        from apps.watchlist.models import WatchlistItem
+
         editions = list(
             TournamentEdition.objects.select_related('tournament__organization').order_by('id')
         )
-    except Exception as exc:
-        return Response({'error': f'db error: {exc}'}, status=500)
 
-    groups = []
-    by_eid = defaultdict(list)
-    for ed in editions:
-        if ed.external_id:
-            by_eid[ed.external_id].append(ed)
-    for eid, grp in by_eid.items():
-        if len(grp) > 1:
-            groups.append({'reason': 'external_id', 'key': eid, 'editions': grp})
+        groups = []
+        by_eid = defaultdict(list)
+        for ed in editions:
+            if ed.external_id:
+                by_eid[ed.external_id].append(ed)
+        for eid, grp in by_eid.items():
+            if len(grp) > 1:
+                groups.append({'reason': 'external_id', 'key': eid, 'editions': grp})
 
-    already = {ed.id for g in groups for ed in g['editions']}
+        already = {ed.id for g in groups for ed in g['editions']}
 
-    by_td = defaultdict(list)
-    for ed in editions:
-        if ed.id in already:
-            continue
-        k = (ed.tournament_id, str(ed.start_date), str(ed.end_date))
-        by_td[k].append(ed)
-    for k, grp in by_td.items():
-        if len(grp) > 1:
-            groups.append({'reason': 'tournament+dates', 'key': str(k), 'editions': grp})
-            already.update(ed.id for ed in grp)
-
-    remaining = [ed for ed in editions if ed.id not in already]
-    checked = set()
-    for i, a in enumerate(remaining):
-        if a.id in checked:
-            continue
-        grp = [a]
-        for b in remaining[i+1:]:
-            if b.id in checked:
+        by_td = defaultdict(list)
+        for ed in editions:
+            if ed.id in already:
                 continue
-            if (str(a.start_date) == str(b.start_date)
-                    and str(a.end_date) == str(b.end_date)
-                    and a.tournament.organization_id == b.tournament.organization_id
-                    and (a.venue_city or '').lower() == (b.venue_city or '').lower()
-                    and (a.venue_state or '') == (b.venue_state or '')
-                    and _sim(a.title, b.title) >= min_sim):
-                grp.append(b)
-                checked.add(b.id)
-        if len(grp) > 1:
-            groups.append({'reason': 'title_similarity', 'key': a.title[:60], 'editions': grp})
-        checked.add(a.id)
+            k = (ed.tournament_id, str(ed.start_date), str(ed.end_date))
+            by_td[k].append(ed)
+        for k, grp in by_td.items():
+            if len(grp) > 1:
+                groups.append({'reason': 'tournament+dates', 'key': str(k), 'editions': grp})
+                already.update(ed.id for ed in grp)
 
-    report = []
-    removed_total = 0
-    errors = []
+        remaining = [ed for ed in editions if ed.id not in already]
+        checked = set()
+        for i, a in enumerate(remaining):
+            if a.id in checked:
+                continue
+            grp = [a]
+            for b in remaining[i+1:]:
+                if b.id in checked:
+                    continue
+                if (str(a.start_date) == str(b.start_date)
+                        and str(a.end_date) == str(b.end_date)
+                        and a.tournament.organization_id == b.tournament.organization_id
+                        and (a.venue_city or '').lower() == (b.venue_city or '').lower()
+                        and (a.venue_state or '') == (b.venue_state or '')
+                        and _sim(a.title, b.title) >= min_sim):
+                    grp.append(b)
+                    checked.add(b.id)
+            if len(grp) > 1:
+                groups.append({'reason': 'title_similarity', 'key': a.title[:60], 'editions': grp})
+            checked.add(a.id)
 
-    for g in groups:
-        keep = g['editions'][0]
-        remove_list = g['editions'][1:]
-        entry = {
-            'reason': g['reason'],
-            'key': g['key'],
-            'keep': {'id': keep.id, 'title': keep.title, 'external_id': keep.external_id},
-            'remove': [{'id': r.id, 'title': r.title, 'external_id': r.external_id} for r in remove_list],
-        }
-        if not dry_run:
-            try:
-                with transaction.atomic():
-                    for dup in remove_list:
-                        WatchlistItem.objects.filter(edition=dup).update(edition=keep)
-                        try:
-                            from apps.registrations.models import FederationEntry, TournamentRegistration
+        report = []
+        removed_total = 0
+        errors = []
+
+        for g in groups:
+            keep = g['editions'][0]
+            remove_list = g['editions'][1:]
+            entry = {
+                'reason': g['reason'],
+                'key': g['key'],
+                'keep': {'id': keep.id, 'title': keep.title, 'external_id': keep.external_id},
+                'remove': [{'id': r.id, 'title': r.title, 'external_id': r.external_id} for r in remove_list],
+            }
+            if not dry_run:
+                try:
+                    with transaction.atomic():
+                        for dup in remove_list:
+                            WatchlistItem.objects.filter(edition=dup).update(edition=keep)
                             FederationEntry.objects.filter(edition=dup).update(edition=keep)
                             TournamentRegistration.objects.filter(edition=dup).update(edition=keep)
-                        except Exception:
-                            pass
-                        dup.delete()
-                        removed_total += 1
-                entry['status'] = 'removed'
-            except Exception as exc:
-                entry['status'] = 'error'
-                entry['error'] = str(exc)
-                errors.append(str(exc))
-        else:
-            entry['status'] = 'dry_run'
-        report.append(entry)
+                            dup.delete()
+                            removed_total += 1
+                    entry['status'] = 'removed'
+                except Exception as exc:
+                    entry['status'] = 'error'
+                    entry['error'] = str(exc)
+                    errors.append(str(exc))
+            else:
+                entry['status'] = 'dry_run'
+            report.append(entry)
 
-    return Response({
-        'dry_run': dry_run,
-        'groups_found': len(groups),
-        'editions_to_remove': sum(len(g['editions']) - 1 for g in groups),
-        'removed': removed_total,
-        'errors': errors,
-        'report': report,
-    })
+        return Response({
+            'dry_run': dry_run,
+            'groups_found': len(groups),
+            'editions_to_remove': sum(len(g['editions']) - 1 for g in groups),
+            'removed': removed_total,
+            'errors': errors,
+            'report': report,
+        })
+
+    except Exception as exc:
+        import traceback
+        return Response({'error': str(exc), 'traceback': traceback.format_exc()})

@@ -626,6 +626,38 @@ def fetch_tenisintegrado_entries(tournament_url: str, source: str = 'cbt') -> di
         cat_entries = _parse_tenisintegrado_table(r1.text, cat_text, source, insc_url)
         all_entries.extend(cat_entries)
 
+        # Also scan for "Cancelado" near player IDs in this category response
+        seen_ids = {e['player_external_id'] for e in cat_entries}
+        for cancel_m in re.finditer(r'cancelado', r1.text, re.IGNORECASE):
+            window_start = max(0, cancel_m.start() - 2000)
+            window = r1.text[window_start:cancel_m.end() + 200]
+            id_m = re.search(r'perfil2/index/(\d+)', window, re.IGNORECASE)
+            if not id_m:
+                continue
+            ext_id = f'tenisintegrado:{id_m.group(1)}'
+            if ext_id in seen_ids:
+                continue  # already captured with correct status
+            name_m = re.search(
+                r'<a[^>]+perfil2/index/\d+[^>]*>(.*?)</a>',
+                window, re.IGNORECASE | re.DOTALL,
+            )
+            player_name = re.sub(r'<[^>]+>', '', name_m.group(1)).strip() if name_m else ''
+            if not player_name or len(player_name) < 2:
+                continue
+            seen_ids.add(ext_id)
+            all_entries.append({
+                'player_name': player_name,
+                'category_text': cat_text,
+                'player_external_id': ext_id,
+                'ranking_position': None,
+                'ranking_source': source.upper(),
+                'payment_status': 'unknown',
+                'removed_or_replaced': True,
+                'replacement_reason': f'Cancelado na categoria {cat_text}',
+                'source_url': insc_url,
+                'confidence': 'high',
+            })
+
     if not all_entries:
         return {
             'entries': [], 'parser_warning': True,

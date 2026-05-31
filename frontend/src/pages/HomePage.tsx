@@ -43,7 +43,6 @@ export const HomePage: React.FC = () => {
       const level = (p as any).competitive_level as string | undefined;
       const compatData = await compatibleForProfile(p.id, {
         page_size: 20,
-        status: 'open,closing_soon',
         ...(modality ? { modality } : {}),
         ...(level ? { player_level: level } : {}),
       }).catch((err: any) => {

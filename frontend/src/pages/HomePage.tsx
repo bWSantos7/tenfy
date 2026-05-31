@@ -52,7 +52,7 @@ export const HomePage: React.FC = () => {
         return { results: [] as TournamentEditionList[] };
       });
       const filtered = (compatData.results || [])
-        .filter((t) => ACTIVE_STATUSES.has(t.status ?? ''))
+        .filter((t) => ACTIVE_STATUSES.has((t.dynamic_status || t.status) ?? ''))
         .slice(0, 8);
       setCompat(filtered);
     } finally {
@@ -142,9 +142,9 @@ export const HomePage: React.FC = () => {
       const allRecent = ((recentData as any).results || []) as TournamentEditionList[];
       const applyProfileFilters = (items: TournamentEditionList[]) =>
         filterByLevel(filterByModality(items, modality), level);
-      setClosing(applyProfileFilters(allClosing).filter((t) => ACTIVE_STATUSES.has(t.status ?? '')).slice(0, 6));
+      setClosing(applyProfileFilters(allClosing).filter((t) => ACTIVE_STATUSES.has((t.dynamic_status || t.status) ?? '')).slice(0, 6));
       // Somente torneios com inscrições abertas/encerrando aparecem como "recentes"
-      setRecent(applyProfileFilters(allRecent).filter((t) => ACTIVE_STATUSES.has(t.status ?? '')).slice(0, 6));
+      setRecent(applyProfileFilters(allRecent).filter((t) => ACTIVE_STATUSES.has((t.dynamic_status || t.status) ?? '')).slice(0, 6));
 
       if (primary) {
         await loadCompat(primary);
@@ -173,7 +173,7 @@ export const HomePage: React.FC = () => {
       .catch(() => [] as TournamentEditionList[])
       .then((data) => {
         const arr = data as TournamentEditionList[];
-        setClosing(arr.filter((t) => ACTIVE_STATUSES.has(t.status ?? '')).slice(0, 6));
+        setClosing(arr.filter((t) => ACTIVE_STATUSES.has((t.dynamic_status || t.status) ?? '')).slice(0, 6));
       });
     await loadCompat(opt.profile);
   }

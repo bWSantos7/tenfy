@@ -571,13 +571,41 @@ def fetch_tenisintegrado_entries(tournament_url: str, source: str = 'cbt') -> di
             'confidence': 'low', 'source': source,
         }
 
-    # Step 1b: parse cancelled players from the GET response
-    # The "Jogadores não confirmados / Cancelado" section only appears on the
-    # main GET page (without category filter), not on the per-category POST responses.
-    # We use 'geral' as a placeholder category since cancelled rows have no category.
-    all_entries: list = _parse_tenisintegrado_table(r0.text, 'Cancelado', source, insc_url)
-    # Keep only entries that are actually marked as removed (the cancelled section)
-    all_entries = [e for e in all_entries if e.get('removed_or_replaced')]
+    # Step 1b: extract cancelled players from the GET response using flexible regex.
+    # The "Cancelado" section may use any HTML structure (divs, lists, or non-standard tables).
+    # Strategy: find player profile links near "Cancelado" text within a 2000-char window.
+    all_entries: list = []
+    html0 = r0.text
+    for cancel_m in re.finditer(r'cancelado', html0, re.IGNORECASE):
+        window_start = max(0, cancel_m.start() - 2000)
+        window = html0[window_start:cancel_m.end() + 200]
+        # Look for TI profile link within window
+        id_m = re.search(r'perfil2/index/(\d+)', window, re.IGNORECASE)
+        if not id_m:
+            continue
+        ext_id = f'tenisintegrado:{id_m.group(1)}'
+        # Find name near the profile link
+        name_m = re.search(
+            r'<a[^>]+perfil2/index/\d+[^>]*>(.*?)</a>',
+            window, re.IGNORECASE | re.DOTALL,
+        )
+        player_name = re.sub(r'<[^>]+>', '', name_m.group(1)).strip() if name_m else ''
+        if not player_name or len(player_name) < 2:
+            continue
+        all_entries.append({
+            'player_name': player_name,
+            'category_text': 'Cancelado',
+            'player_external_id': ext_id,
+            'ranking_position': None,
+            'ranking_source': source.upper(),
+            'payment_status': 'unknown',
+            'removed_or_replaced': True,
+            'replacement_reason': 'Cancelado na página de inscrições',
+            'source_url': insc_url,
+            'confidence': 'high',
+        })
+        logger.debug('TI cancelled player found: %s ext_id=%s', player_name, ext_id)
+
     warnings: list = []
 
     for cat_id, cat_text in categories.items():

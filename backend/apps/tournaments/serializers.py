@@ -10,7 +10,7 @@ from apps.sources.serializers import OrganizationSerializer
 class VenueSerializer(serializers.ModelSerializer):
     class Meta:
         model = Venue
-        fields = ('id', 'name', 'city', 'state', 'address', 'latitude', 'longitude')
+        fields = ('id', 'name', 'city', 'state', 'address', 'country', 'country_code', 'latitude', 'longitude')
 
 
 class TournamentLinkSerializer(serializers.ModelSerializer):
@@ -60,6 +60,8 @@ class TournamentEditionListSerializer(serializers.ModelSerializer):
     venue_name = serializers.CharField(source='venue.name', read_only=True, default=None)
     venue_city = serializers.CharField(source='venue.city', read_only=True, default=None)
     venue_state = serializers.CharField(source='venue.state', read_only=True, default=None)
+    venue_country = serializers.CharField(source='venue.country', read_only=True, default=None)
+    venue_country_code = serializers.CharField(source='venue.country_code', read_only=True, default=None)
     dynamic_status = serializers.SerializerMethodField()
     categories_count = serializers.IntegerField(read_only=True)
 
@@ -73,7 +75,7 @@ class TournamentEditionListSerializer(serializers.ModelSerializer):
             'start_date', 'end_date', 'entry_open_at', 'entry_close_at',
             'withdrawal_deadline_at', 'has_online_entry',
             'status', 'dynamic_status', 'surface',
-            'venue_name', 'venue_city', 'venue_state',
+            'venue_name', 'venue_city', 'venue_state', 'venue_country', 'venue_country_code',
             'base_price_brl',
             'official_source_url', 'source_name', 'fetched_at',
             'data_confidence', 'categories_count',
@@ -120,6 +122,7 @@ class TournamentEditionDetailSerializer(serializers.ModelSerializer):
             'validation_errors',
             'organization_logo_url',
             'categories', 'links', 'change_events',
+            'acceptance_list',
             'created_at', 'updated_at',
         )
 

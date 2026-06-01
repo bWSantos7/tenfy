@@ -149,13 +149,28 @@ class TournamentPersister:
 
         venue = None
         v = data.get('venue') or {}
-        if v.get('city') or v.get('state') or v.get('name'):
-            venue, _ = Venue.objects.get_or_create(
+        if v.get('city') or v.get('state') or v.get('name') or v.get('country'):
+            venue, created_v = Venue.objects.get_or_create(
                 name=_trunc(v.get('name') or '—', 200, 'Venue.name'),
                 city=_trunc(v.get('city', ''), 120, 'Venue.city'),
                 state=(v.get('state') or '').upper()[:2],
-                defaults={'address': (v.get('address') or '')[:300]},
+                defaults={
+                    'address': (v.get('address') or '')[:300],
+                    'country': _trunc(v.get('country') or '', 120, 'Venue.country'),
+                    'country_code': (v.get('country_code') or '')[:3].upper(),
+                },
             )
+            # Update country fields if venue already existed without them
+            if not created_v and (v.get('country') or v.get('country_code')):
+                venue_updates = {}
+                if v.get('country') and not venue.country:
+                    venue_updates['country'] = _trunc(v.get('country'), 120, 'Venue.country')
+                if v.get('country_code') and not venue.country_code:
+                    venue_updates['country_code'] = v.get('country_code', '')[:3].upper()
+                if venue_updates:
+                    for k, val in venue_updates.items():
+                        setattr(venue, k, val)
+                    venue.save(update_fields=list(venue_updates.keys()) + ['updated_at'])
 
         hash_payload = {
             k: data.get(k) for k in [
@@ -239,6 +254,8 @@ class TournamentPersister:
             v_state,
         )
 
+        acceptance_list = data.get('acceptance_list') or []
+
         if not ed:
             ed = TournamentEdition.objects.create(
                 tournament=tournament,
@@ -265,6 +282,7 @@ class TournamentPersister:
                 is_youth=is_youth,
                 dedup_fingerprint=fingerprint,
                 validation_errors=ingest_validation_errors,
+                acceptance_list=acceptance_list,
             )
             created = True
             TournamentChangeEvent.objects.create(
@@ -328,6 +346,9 @@ class TournamentPersister:
                 ed.fetched_at = timezone.now()
                 ed.raw_content_hash = content_hash
                 ed.raw_payload = data
+                # Update acceptance list if new data provided
+                if acceptance_list:
+                    ed.acceptance_list = acceptance_list
                 # Always update is_youth from classifier unless manual override.
                 # This ensures a corrected classifier fixes existing editions on re-sync.
                 if not ed.is_manual_override:

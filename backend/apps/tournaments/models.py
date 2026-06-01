@@ -8,6 +8,8 @@ class Venue(TimestampedModel):
     name = models.CharField(max_length=200)
     city = models.CharField(max_length=120, blank=True)
     state = models.CharField(max_length=2, blank=True)
+    country = models.CharField(max_length=120, blank=True)
+    country_code = models.CharField(max_length=3, blank=True, help_text='ISO 3166-1 alpha-3 (e.g. BRA, FRA)')
     address = models.CharField(max_length=300, blank=True)
     latitude = models.FloatField(null=True, blank=True)
     longitude = models.FloatField(null=True, blank=True)
@@ -186,6 +188,15 @@ class TournamentEdition(TimestampedModel):
     last_synced_at = models.DateTimeField(
         null=True, blank=True,
         help_text='Última vez que os inscritos foram sincronizados com a fonte externa.',
+    )
+
+    # Acceptance list structured data (from ITF/federation source)
+    acceptance_list = models.JSONField(
+        default=list, blank=True,
+        help_text=(
+            'Lista de inscritos por seção: '
+            '[{"section": "main_draw", "players": [{"name", "country", "country_code", "ranking", "wtn", "priority", "information"}]}]'
+        ),
     )
     sync_priority = models.PositiveSmallIntegerField(
         default=5,

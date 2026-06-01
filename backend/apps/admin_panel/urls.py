@@ -1,7 +1,7 @@
 from django.urls import path
 from .views import (
     dashboard, review_queue, stats,
-    user_list, user_detail,
+    user_list, user_detail, user_set_password,
     edition_patch, edition_create, admin_editions_list,
     data_sources_list, data_source_patch, connector_status,
     ingestion_runs_list, execution_logs,
@@ -13,6 +13,7 @@ urlpatterns = [
     path('stats/', stats, name='admin-stats'),
     path('users/', user_list, name='admin-user-list'),
     path('users/<int:pk>/', user_detail, name='admin-user-detail'),
+    path('users/<int:pk>/set-password/', user_set_password, name='admin-user-set-password'),
     path('editions/', edition_create, name='admin-edition-create'),
     path('editions-list/', admin_editions_list, name='admin-editions-list'),
     path('editions/<int:pk>/', edition_patch, name='admin-edition-patch'),

@@ -52,6 +52,22 @@ def user_list(request):
     return Response(AdminUserSerializer(qs, many=True).data)
 
 
+@api_view(['POST'])
+@permission_classes([IsAdmin])
+def user_set_password(request, pk):
+    """Admin: define nova senha para qualquer usuário."""
+    try:
+        user = User.objects.get(pk=pk)
+    except User.DoesNotExist:
+        return Response({'detail': 'Usuário não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+    password = request.data.get('password', '').strip()
+    if len(password) < 6:
+        return Response({'detail': 'Senha deve ter pelo menos 6 caracteres.'}, status=status.HTTP_400_BAD_REQUEST)
+    user.set_password(password)
+    user.save(update_fields=['password'])
+    return Response({'detail': f'Senha do usuário {user.email} atualizada com sucesso.'})
+
+
 @api_view(['PATCH', 'DELETE'])
 @permission_classes([IsAdmin])
 def user_detail(request, pk):

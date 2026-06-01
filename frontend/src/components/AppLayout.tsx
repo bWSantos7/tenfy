@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { Home, Calendar, Star, User, ShieldCheck, Sun, Moon, Award, Users, Bell, LogOut } from 'lucide-react';
+import { Home, Calendar, Star, User, ShieldCheck, Sun, Moon, Award, Users, Bell, LogOut, UserCheck, Loader2 } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { BetaModal } from './BetaModal';
-import { unreadAlerts } from '../services/data';
+import { unreadAlerts, listReceivedInvites, respondDependentInvite } from '../services/data';
+import { DependentInvite } from '../types';
 
 // Nav principal — aparece no bottom bar (mobile) e no header (desktop)
 const navItems = [
@@ -20,6 +22,8 @@ export const AppLayout: React.FC = () => {
   const location = useLocation();
   const { theme, toggle: toggleTheme } = useTheme();
   const [unreadCount, setUnreadCount] = useState(0);
+  const [pendingInvites, setPendingInvites] = useState<DependentInvite[]>([]);
+  const [respondingInvite, setRespondingInvite] = useState<number | null>(null);
 
   const refreshUnread = () =>
     unreadAlerts().then((a) => setUnreadCount(Array.isArray(a) ? a.length : 0)).catch(() => {});
@@ -34,9 +38,77 @@ export const AppLayout: React.FC = () => {
     return () => window.removeEventListener('alerts-unread-changed', handler);
   }, []);
 
+  // Check pending invites on login (for non-parent users who may have received an invite)
+  useEffect(() => {
+    if (!user || user.role === 'parent') return;
+    listReceivedInvites()
+      .then((invites) => setPendingInvites(invites.filter((i) => i.status === 'pending' && !i.is_expired)))
+      .catch(() => {});
+  }, [user?.id]);
+
+  async function handleInviteResponse(invite: DependentInvite, action: 'accept' | 'decline') {
+    setRespondingInvite(invite.id);
+    try {
+      await respondDependentInvite(invite.id, action);
+      setPendingInvites((prev) => prev.filter((i) => i.id !== invite.id));
+      toast.success(action === 'accept' ? 'Vínculo aceito! Você agora é dependente do responsável.' : 'Convite recusado.');
+    } catch {
+      toast.error('Não foi possível processar o convite. Tente novamente.');
+    } finally {
+      setRespondingInvite(null);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-bg-base flex flex-col">
       <BetaModal user={user} />
+
+      {/* ── Modal de convite de vínculo pendente ──────────────────────────── */}
+      {pendingInvites.length > 0 && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4">
+          <div className="bg-bg-card border border-accent-blue/30 rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-accent-blue/15 flex items-center justify-center shrink-0">
+                <Users className="w-5 h-5 text-accent-blue" />
+              </div>
+              <div>
+                <h2 className="font-bold text-base">Solicitação de vínculo</h2>
+                <p className="text-xs text-text-muted mt-0.5">
+                  <span className="font-semibold text-text-primary">
+                    {pendingInvites[0].parent_detail.full_name}
+                  </span>{' '}
+                  quer te vincular como dependente na plataforma Tenfy.
+                </p>
+              </div>
+            </div>
+            <p className="text-xs text-text-secondary">
+              Ao aceitar, o responsável poderá visualizar e gerenciar seu perfil esportivo.
+              Você pode recusar a qualquer momento.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => handleInviteResponse(pendingInvites[0], 'decline')}
+                disabled={respondingInvite === pendingInvites[0].id}
+                className="flex-1 py-2 rounded-xl border border-red-400/40 text-red-400 text-sm font-bold hover:bg-red-400/10 disabled:opacity-50 transition-colors"
+              >
+                {respondingInvite === pendingInvites[0].id ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Recusar'}
+              </button>
+              <button
+                onClick={() => handleInviteResponse(pendingInvites[0], 'accept')}
+                disabled={respondingInvite === pendingInvites[0].id}
+                className="flex-1 py-2 rounded-xl bg-accent-blue text-white text-sm font-bold hover:opacity-90 disabled:opacity-50 transition-colors"
+              >
+                {respondingInvite === pendingInvites[0].id ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Aceitar'}
+              </button>
+            </div>
+            {pendingInvites.length > 1 && (
+              <p className="text-[11px] text-text-muted text-center">
+                +{pendingInvites.length - 1} outro{pendingInvites.length > 2 ? 's' : ''} convite{pendingInvites.length > 2 ? 's' : ''} pendente{pendingInvites.length > 2 ? 's' : ''}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ─── Header ─────────────────────────────────────────────────────────── */}
       <header className="sticky top-0 z-30 bg-bg-card/90 backdrop-blur-lg border-b border-border-subtle shadow-sm">

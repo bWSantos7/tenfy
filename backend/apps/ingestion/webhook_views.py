@@ -90,10 +90,17 @@ def import_tournaments_webhook(request):
     try:
         data_source = DataSource.objects.select_related('organization').get(connector_key=source_key)
     except DataSource.DoesNotExist:
-        return Response(
-            {'detail': f'DataSource "{source_key}" não encontrado. Execute seed_sources primeiro.'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+        # Tenta criar via seed_sources antes de rejeitar
+        try:
+            from django.core.management import call_command
+            call_command('seed_sources', verbosity=0)
+            data_source = DataSource.objects.select_related('organization').get(connector_key=source_key)
+            logger.info('webhook: DataSource "%s" criado via seed_sources', source_key)
+        except Exception:
+            return Response(
+                {'detail': f'DataSource "{source_key}" não encontrado. Execute seed_sources primeiro.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
     if dry_run:
         return _dry_run_response(tournaments, source_key)

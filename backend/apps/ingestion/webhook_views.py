@@ -53,6 +53,65 @@ logger = logging.getLogger('apps.ingestion.webhook')
 
 _REQUIRED_FIELDS = {'external_id', 'title', 'canonical_name', 'canonical_slug', 'season_year'}
 
+# Configurações mínimas para criar DataSources automaticamente se não existirem
+_DATASOURCE_DEFAULTS = {
+    'itf_junior': {
+        'org_name': 'International Tennis Federation',
+        'org_short': 'ITF',
+        'org_type': 'confederation',
+        'source_name': 'ITF Junior Circuit',
+        'source_type': 'json',
+        'base_url': 'https://www.itftennis.com',
+        'priority': 'P1',
+    },
+    'utr_public': {
+        'org_name': 'Universal Tennis Rating',
+        'org_short': 'UTR',
+        'org_type': 'platform',
+        'source_name': 'UTR Sports Brazil',
+        'source_type': 'json',
+        'base_url': 'https://api.utrsports.net',
+        'priority': 'P2',
+    },
+}
+
+
+def _get_or_create_datasource(source_key: str):
+    """Cria DataSource e Organization se não existirem, sem depender de seed_sources."""
+    from apps.sources.models import Organization
+    defaults = _DATASOURCE_DEFAULTS.get(source_key)
+    if not defaults:
+        logger.warning('webhook: sem defaults para source_key=%s', source_key)
+        return None
+    try:
+        org, _ = Organization.objects.get_or_create(
+            name=defaults['org_name'],
+            defaults={
+                'short_name': defaults['org_short'],
+                'type': defaults['org_type'],
+            },
+        )
+        import re, unicodedata
+        slug = re.sub(r'[^a-z0-9]+', '-', unicodedata.normalize('NFKD', source_key).encode('ascii', 'ignore').decode().lower()).strip('-')
+        ds, created = DataSource.objects.get_or_create(
+            connector_key=source_key,
+            defaults={
+                'organization': org,
+                'slug': slug,
+                'source_name': defaults['source_name'],
+                'source_type': defaults['source_type'],
+                'base_url': defaults['base_url'],
+                'priority': defaults['priority'],
+                'enabled': True,
+            },
+        )
+        if created:
+            logger.info('webhook: DataSource "%s" criado automaticamente', source_key)
+        return ds
+    except Exception as exc:
+        logger.error('webhook: falha ao criar DataSource "%s": %s', source_key, exc)
+        return None
+
 
 def _check_auth(request) -> bool:
     if request.user and request.user.is_authenticated and request.user.is_staff:
@@ -90,15 +149,10 @@ def import_tournaments_webhook(request):
     try:
         data_source = DataSource.objects.select_related('organization').get(connector_key=source_key)
     except DataSource.DoesNotExist:
-        # Tenta criar via seed_sources antes de rejeitar
-        try:
-            from django.core.management import call_command
-            call_command('seed_sources', verbosity=0)
-            data_source = DataSource.objects.select_related('organization').get(connector_key=source_key)
-            logger.info('webhook: DataSource "%s" criado via seed_sources', source_key)
-        except Exception:
+        data_source = _get_or_create_datasource(source_key)
+        if data_source is None:
             return Response(
-                {'detail': f'DataSource "{source_key}" não encontrado. Execute seed_sources primeiro.'},
+                {'detail': f'DataSource "{source_key}" não encontrado e não foi possível criar automaticamente.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 

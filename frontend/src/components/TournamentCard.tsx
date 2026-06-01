@@ -8,12 +8,14 @@ import logoFPT from '../assets/logos/FPT.jpg';
 import logoCBT from '../assets/logos/CBT.jpg';
 import logoCOSAT from '../assets/logos/COSAT.jpg';
 import logoFCT from '../assets/logos/FCT.webp';
+import logoITF from '../assets/logos/ITF.jpg';
 
 const LOCAL_ORG_LOGOS: Record<string, string> = {
   FPT:   logoFPT,
   CBT:   logoCBT,
   COSAT: logoCOSAT,
   FCT:   logoFCT,
+  ITF:   logoITF,
 };
 
 function findLocalLogo(edition: TournamentEditionList): string | null {

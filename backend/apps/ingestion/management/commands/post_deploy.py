@@ -28,7 +28,15 @@ class Command(BaseCommand):
         except Exception as exc:
             self.stdout.write(self.style.WARNING(f'⚠ Migrations: {exc}'))
 
-        # 2. Periodic tasks
+        # 2. Seed data sources (idempotent — cria/atualiza Organization e DataSource)
+        self.stdout.write('▶ Sincronizando fontes de dados (seed_sources)...')
+        try:
+            call_command('seed_sources', verbosity=1)
+            self.stdout.write(self.style.SUCCESS('✓ Sources OK'))
+        except Exception as exc:
+            self.stdout.write(self.style.WARNING(f'⚠ Sources: {exc}'))
+
+        # 3. Periodic tasks
         self.stdout.write('▶ Registrando periodic tasks...')
         try:
             call_command('setup_periodic_tasks', verbosity=0)

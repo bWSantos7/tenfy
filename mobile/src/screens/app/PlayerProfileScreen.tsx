@@ -424,7 +424,7 @@ export function PlayerProfileScreen(_: Props) {
                           </View>
                         ) : null}
                         {!c.singles_utr && !c.doubles_utr ? (
-                          <AppText variant="muted" style={{ fontSize: 12 }}>Rating não disponível na busca</AppText>
+                          <AppText variant="muted" style={{ fontSize: 12, fontStyle: 'italic' }}>Rating extraído automaticamente após confirmar.</AppText>
                         ) : null}
                       </View>
                       <AppText variant="muted" style={{ fontSize: 10, marginBottom: 8 }}>ID: {c.utr_player_id}</AppText>

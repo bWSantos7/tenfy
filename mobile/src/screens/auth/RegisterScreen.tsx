@@ -728,20 +728,22 @@ export function RegisterScreen({ navigation }: Props) {
                       {c.country ? <AppText variant="muted" style={{ fontSize: 11 }}>{c.country}</AppText> : null}
                       {c.location ? <AppText variant="muted" style={{ fontSize: 11 }}>· {c.location}</AppText> : null}
                     </View>
-                    <View style={{ flexDirection: 'row', gap: 20, marginBottom: 12 }}>
-                      <View style={{ alignItems: 'center' }}>
-                        <AppText style={{ fontSize: 22, fontWeight: '900', color: c.singles_utr ? colors.textPrimary : colors.textMuted }}>
-                          {c.singles_utr || '—'}
-                        </AppText>
-                        <AppText variant="muted" style={{ fontSize: 10 }}>UTR Simples</AppText>
+                    {(c.singles_utr || c.doubles_utr) ? (
+                      <View style={{ flexDirection: 'row', gap: 20, marginBottom: 12 }}>
+                        <View style={{ alignItems: 'center' }}>
+                          <AppText style={{ fontSize: 22, fontWeight: '900', color: colors.textPrimary }}>{c.singles_utr}</AppText>
+                          <AppText variant="muted" style={{ fontSize: 10 }}>UTR Simples</AppText>
+                        </View>
+                        <View style={{ alignItems: 'center' }}>
+                          <AppText style={{ fontSize: 22, fontWeight: '900', color: colors.textPrimary }}>{c.doubles_utr}</AppText>
+                          <AppText variant="muted" style={{ fontSize: 10 }}>UTR Duplas</AppText>
+                        </View>
                       </View>
-                      <View style={{ alignItems: 'center' }}>
-                        <AppText style={{ fontSize: 22, fontWeight: '900', color: c.doubles_utr ? colors.textPrimary : colors.textMuted }}>
-                          {c.doubles_utr || '—'}
-                        </AppText>
-                        <AppText variant="muted" style={{ fontSize: 10 }}>UTR Duplas</AppText>
-                      </View>
-                    </View>
+                    ) : (
+                      <AppText variant="muted" style={{ fontSize: 11, fontStyle: 'italic', marginBottom: 12 }}>
+                        Rating extraído automaticamente após confirmar.
+                      </AppText>
+                    )}
                     <Button
                       title={utrLinking ? 'Salvando...' : 'Este sou eu'}
                       variant="secondary"

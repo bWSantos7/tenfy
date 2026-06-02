@@ -510,16 +510,22 @@ export const PlayerProfilePage: React.FC = () => {
                               {[c.country, c.location].filter(Boolean).join(' · ')}
                             </p>
                           </div>
-                          <div className="flex gap-6">
-                            <div className="text-center">
-                              <p className="text-2xl font-black">{c.singles_utr || '—'}</p>
-                              <p className="text-[10px] text-text-muted">UTR Simples</p>
+                          {(c.singles_utr || c.doubles_utr) ? (
+                            <div className="flex gap-6">
+                              <div className="text-center">
+                                <p className="text-2xl font-black">{c.singles_utr || '—'}</p>
+                                <p className="text-[10px] text-text-muted">UTR Simples</p>
+                              </div>
+                              <div className="text-center">
+                                <p className="text-2xl font-black">{c.doubles_utr || '—'}</p>
+                                <p className="text-[10px] text-text-muted">UTR Duplas</p>
+                              </div>
                             </div>
-                            <div className="text-center">
-                              <p className="text-2xl font-black">{c.doubles_utr || '—'}</p>
-                              <p className="text-[10px] text-text-muted">UTR Duplas</p>
-                            </div>
-                          </div>
+                          ) : (
+                            <p className="text-xs text-text-muted italic">
+                              Rating será extraído automaticamente após confirmar o perfil.
+                            </p>
+                          )}
                           <p className="text-[10px] text-text-muted">ID: {c.utr_player_id}</p>
                           <button
                             onClick={() => handleUtrLink(c)}

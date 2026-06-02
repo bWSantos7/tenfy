@@ -8,24 +8,38 @@ By default reuses the same MongoDB instance used by the COSAT scraper
 ITF_MONGO_DB if the scraper uses a separate instance.
 
 Document schema (scraper Mongoose model → MongoDB collection 'itftournaments'):
-  slug_externo*    — stable external ID (e.g. "itf-12345-tournament-name")
-  nome*            — tournament name
-  categoria        — circuit label (e.g. "ITF Junior")
-  circuito         — circuit label (same field, alternate key)
-  data_inicio      — start date (ISO or DD/MM/YYYY)
-  data_fim         — end date
-  prazo_inscricao  — entry deadline
-  cidade           — host city
-  codigo_pais      — host country ISO code (e.g. "ARG")
-  superficie       — surface (PT or EN)
-  status           — tournament status string
-  url_oficial      — canonical ITF URL
-  inscritos        — acceptance list:
+  slug_externo*       — stable external ID (e.g. "j-j60-jpn-2026-002")
+  nome*               — tournament name (e.g. "J60 Miki City")
+  categoria           — grade (e.g. "J60")
+  circuito            — circuit label (e.g. "ITF Junior")
+  pais                — host country name (e.g. "Japan")
+  codigo_pais         — host country ISO-3 code (e.g. "JPN")
+  cidade              — host city (e.g. "Miki")
+  data_inicio         — start date (YYYY-MM-DD)
+  data_fim            — end date (YYYY-MM-DD)
+  prazo_inscricao     — entry deadline text (e.g. "Tue 12th May 2026 by 14:00GMT")
+  prazo_desistencia   — withdrawal deadline text
+  superficie          — surface in PT (e.g. "Piso Duro")
+  indoor_outdoor      — "Indoor" / "Outdoor"
+  status              — status string in PT/EN
+  draw_size           — {masculino: {singles_main_draw, ...}, feminino: {...}}
+  url_oficial         — canonical ITF URL
+  url_fact_sheet      — fact sheet URL
+  url_acceptance_list — acceptance list URL
+  inscritos           — acceptance list:
     {
-      "masculino": {"draw_principal": [...], "qualifying": [...], "alternates": []},
-      "feminino":  {"draw_principal": [...], "qualifying": [...], "alternates": []}
+      "masculino": [
+        {"secao": "draw_principal", "secao_label": "Draw Principal (Masculino)",
+         "jogadores": [{"posicao": 1, "nome": "...", "pais": "Japan",
+                        "codigo_pais": "JPN", "ranking": 167, "wtn": 19.06,
+                        "wtn_aceites": null, "prioridade": 1, "informacao": ""}]},
+        {"secao": "qualifying", ...},
+        {"secao": "alternates", ...},
+        {"secao": "desistencias", ...}
+      ],
+      "feminino": [...]
     }
-    Each player entry: {"nome": "...", "codigo_pais": "ARG", "ranking": 45}
+  lastUpdated         — last scrape timestamp
 
 Design:
   - Read-only — never writes to MongoDB.
@@ -52,9 +66,10 @@ def _sanitize_exc(exc: Exception) -> str:
 # ── Surface / status / section maps ──────────────────────────────────────────
 
 _SURFACE_MAP = {
-    'clay': 'clay', 'saibro': 'clay', 'terra batida': 'clay',
+    'clay': 'clay', 'saibro': 'clay', 'terra batida': 'clay', 'piso batido': 'clay',
     'hard': 'hard', 'dura': 'hard', 'rápida': 'hard', 'rapida': 'hard',
     'hard (o)': 'hard', 'hard (i)': 'hard',
+    'piso duro': 'hard', 'quadra dura': 'hard', 'piso rígido': 'hard', 'piso rigido': 'hard',
     'grass': 'grass', 'grama': 'grass',
     'carpet': 'carpet', 'carpete': 'carpet', 'carpet (i)': 'carpet',
     'sand': 'sand', 'areia': 'sand',
@@ -250,14 +265,15 @@ class ItfMongoConnector:
 def _parse_date(value) -> Optional[datetime]:
     if not value:
         return None
-    s = str(value).strip()
-    if not s or s.lower() in ('null', 'none', 'n/a', '-'):
-        return None
 
     if isinstance(value, datetime):
         return value
 
-    # ISO with timezone
+    s = str(value).strip()
+    if not s or s.lower() in ('null', 'none', 'n/a', '-'):
+        return None
+
+    # ISO with timezone: "2026-06-03T00:00:00Z"
     if 'T' in s:
         try:
             return datetime.fromisoformat(s.replace('Z', '+00:00'))
@@ -280,6 +296,17 @@ def _parse_date(value) -> Optional[datetime]:
         except ValueError:
             pass
 
+    # "Tue 12th May 2026 by 14:00GMT" / "Mon 19th May 2026 by 14:00GMT"
+    m = re.search(r'(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]+)\s+(\d{4})', s)
+    if m:
+        for fmt in ('%d %B %Y', '%d %b %Y'):
+            try:
+                return datetime.strptime(
+                    f'{m.group(1)} {m.group(2)} {m.group(3)}', fmt
+                )
+            except ValueError:
+                pass
+
     return None
 
 
@@ -291,17 +318,25 @@ def _categories_from_inscritos(inscritos: dict) -> list:
     circuit tier, not the age category. For each gender × section combination
     present in inscritos we generate a category like "Masculino - Chave Principal - Sub-18".
     This allows the eligibility engine to match the category as CBT/FPT age ≤18.
+
+    inscritos structure (Mongoose schema):
+      {"masculino": [{"secao": "draw_principal", "secao_label": "...", "jogadores": [...]}, ...],
+       "feminino":  [...]}
     """
     result = []
     seen = set()
     for gender_key, sections in (inscritos or {}).items():
         gender_code, gender_label = _GENDER_MAP.get(gender_key.lower(), ('', gender_key.capitalize()))
-        if not isinstance(sections, dict):
+        if not isinstance(sections, list):
             continue
-        for section_key, players in sections.items():
-            if not isinstance(players, list) or not players:
+        for section_obj in sections:
+            if not isinstance(section_obj, dict):
                 continue
-            _, section_label = _SECTION_MAP.get(section_key.lower(), (section_key, section_key.capitalize()))
+            section_key = (section_obj.get('secao') or '').lower().strip()
+            jogadores = section_obj.get('jogadores') or []
+            if not isinstance(jogadores, list) or not jogadores:
+                continue
+            _, section_label = _SECTION_MAP.get(section_key, (section_key, section_key.capitalize()))
             source_text = f'{gender_label} - {section_label} - Sub-18'
             if source_text not in seen:
                 seen.add(source_text)
@@ -316,18 +351,7 @@ def _categories_from_inscritos(inscritos: dict) -> list:
 def _normalize_tournament(doc: dict) -> Optional[dict]:
     """
     Convert a MongoDB itftournaments document to the standard connector dict.
-    Returns None when mandatory fields (slug_externo/key, nome) are absent.
-
-    Field name mapping (scraper Mongoose model → this connector):
-      key / slug_externo → external identifier (e.g. "J-J100-GTM-2026-001")
-      nome / name        → tournament name
-      cidade / city      → host city
-      codigo_pais / country_code → ISO country code
-      url_oficial / url  → official URL
-      data_inicio / startDate → start date
-      data_fim / endDate      → end date
-      prazo_inscricao / entryDeadline / deadline → entry deadline
-      inscritos / entries / acceptanceList       → acceptance list
+    Returns None when mandatory fields (slug_externo, nome) are absent.
     """
     # Accept both 'slug_externo' (legacy) and 'key' (current scraper Mongoose schema)
     slug_externo = (
@@ -410,27 +434,18 @@ def _normalize_tournament(doc: dict) -> Optional[dict]:
     from .base import BaseConnector
     canonical_slug = BaseConnector.slugify(f'itf-{slug_externo}')
 
-    inscritos = (
-        doc.get('inscritos')
-        or doc.get('entries')
-        or doc.get('acceptanceList')
-        or doc.get('acceptance_list')
-        or doc.get('players')
-        or doc.get('draws')
-        or doc.get('acc')
-        or doc.get('draw')
-        or {}
-    )
+    inscritos = doc.get('inscritos') or {}
 
-    # Temporary: log document keys when inscritos is empty so we can find the right field name
-    if not inscritos:
-        all_keys = [k for k in doc.keys() if k != '_id']
-        nested_keys = {k: list(v.keys()) if isinstance(v, dict) else type(v).__name__
-                       for k, v in doc.items() if k not in ('_id',)}
-        logger.info(
-            'ITF doc schema (no inscritos found) slug=%s — keys: %s — nested: %s',
-            slug_externo, all_keys, nested_keys,
-        )
+    url_acceptance_list = (doc.get('url_acceptance_list') or '').strip()
+    url_fact_sheet = (doc.get('url_fact_sheet') or '').strip()
+
+    links = []
+    if url_oficial:
+        links.append({'link_type': 'other', 'url': url_oficial, 'label': 'ITF Tournament'})
+    if url_acceptance_list:
+        links.append({'link_type': 'acceptance_list', 'url': url_acceptance_list, 'label': 'Acceptance List'})
+    if url_fact_sheet:
+        links.append({'link_type': 'fact_sheet', 'url': url_fact_sheet, 'label': 'Fact Sheet'})
 
     return {
         'external_id': f'itf:{slug_externo}',
@@ -456,10 +471,7 @@ def _normalize_tournament(doc: dict) -> Optional[dict]:
         'base_price_brl': None,
         'official_source_url': url_oficial,
         'categories': categories,
-        'links': (
-            [{'link_type': 'other', 'url': url_oficial, 'label': 'ITF Tournament'}]
-            if url_oficial else []
-        ),
+        'links': links,
         '_raw': {
             'slug_externo': slug_externo,
             'circuito': circuit,
@@ -476,16 +488,24 @@ def normalize_acceptance_list(inscritos: dict) -> list:
     """
     Convert the scraper's 'inscritos' dict to the TournamentEdition.acceptance_list format.
 
-    Input:
+    Input (Mongoose schema — each gender maps to a list of section objects):
         {
-          "masculino": {"draw_principal": [{"nome": "...", "codigo_pais": "ARG", "ranking": 45}]},
-          "feminino": {"qualifying": [...]}
+          "masculino": [
+            {"secao": "draw_principal", "secao_label": "Draw Principal (Masculino)",
+             "jogadores": [{"nome": "...", "pais": "Japan", "codigo_pais": "JPN",
+                            "ranking": 167, "wtn": 19.06, "prioridade": 1, "informacao": ""}]},
+            {"secao": "qualifying", ...},
+            {"secao": "alternates", ...},
+            {"secao": "desistencias", ...}
+          ],
+          "feminino": [...]
         }
 
     Output (TournamentEdition.acceptance_list format):
         [
           {"section": "main_draw", "gender": "M", "section_label": "Masculino - Chave Principal",
-           "players": [{"name": "...", "country_code": "ARG", "ranking": 45}]},
+           "players": [{"name": "...", "country": "Japan", "country_code": "JPN",
+                        "ranking": 167, "wtn": 19.06, "priority": 1, "information": ""}]},
           ...
         ]
     """
@@ -495,12 +515,16 @@ def normalize_acceptance_list(inscritos: dict) -> list:
 
     for gender_key, sections in inscritos.items():
         gender_code, gender_label = _GENDER_MAP.get(gender_key.lower(), ('', gender_key))
-        if not isinstance(sections, dict):
+        if not isinstance(sections, list):
             continue
 
-        for section_key, players in sections.items():
+        for section_obj in sections:
+            if not isinstance(section_obj, dict):
+                continue
+            section_key = (section_obj.get('secao') or '').lower().strip()
+            players = section_obj.get('jogadores') or []
             std_section, section_label = _SECTION_MAP.get(
-                section_key.lower(), (section_key, section_key)
+                section_key, (section_key, section_key.capitalize())
             )
             if not isinstance(players, list):
                 continue
@@ -516,10 +540,12 @@ def normalize_acceptance_list(inscritos: dict) -> list:
                     'name': name,
                     'country': (p.get('pais') or p.get('country') or '').strip(),
                     'country_code': (p.get('codigo_pais') or p.get('country_code') or '').strip().upper(),
-                    'ranking': p.get('ranking') or p.get('rank'),
+                    'ranking': p.get('ranking') if p.get('ranking') is not None else p.get('rank'),
                     'wtn': p.get('wtn'),
-                    'priority': p.get('priority') or p.get('prioridade'),
-                    'information': p.get('information') or p.get('informacao') or '',
+                    'priority': p.get('prioridade') if p.get('prioridade') is not None else p.get('priority'),
+                    'information': (p.get('informacao') or p.get('information') or '').strip(),
+                    'position': p.get('posicao') or p.get('position'),
+                    'wtn_aceites': p.get('wtn_aceites'),
                 })
 
             if normalized_players:
@@ -541,18 +567,30 @@ def iter_player_entries(inscritos: dict, slug_externo: str) -> Iterator[dict]:
       player_name, player_external_id, category_text, gender,
       ranking_position, payment_status, removed_or_replaced,
       player_country_code, player_country_name, source, confidence.
+
+    inscritos structure: {"masculino": [section_obj, ...], "feminino": [...]}
+    section_obj: {"secao": "draw_principal", "secao_label": "...", "jogadores": [...]}
+    player: {"posicao": 1, "nome": "...", "pais": "...", "codigo_pais": "...",
+             "ranking": 167, "wtn": 19.06, "prioridade": 1, "informacao": ""}
     """
+    import unicodedata as _ud
+    import re as _re
+
     if not inscritos or not isinstance(inscritos, dict):
         return
 
     for gender_key, sections in inscritos.items():
         gender_code, gender_label = _GENDER_MAP.get(gender_key.lower(), ('', gender_key))
-        if not isinstance(sections, dict):
+        if not isinstance(sections, list):
             continue
 
-        for section_key, players in sections.items():
+        for section_obj in sections:
+            if not isinstance(section_obj, dict):
+                continue
+            section_key = (section_obj.get('secao') or '').lower().strip()
+            players = section_obj.get('jogadores') or []
             std_section, section_label = _SECTION_MAP.get(
-                section_key.lower(), (section_key, section_key)
+                section_key, (section_key, section_key.capitalize())
             )
             is_withdrawn = std_section == 'withdrawn'
 
@@ -574,13 +612,14 @@ def iter_player_entries(inscritos: dict, slug_externo: str) -> Iterator[dict]:
                 except (TypeError, ValueError):
                     ranking = None
 
-                # Stable external ID: source:section:slug(name):country:position
-                import unicodedata as _ud
-                import re as _re
+                # Use posicao (1-based) as stable position; fall back to enumerate index
+                position = p.get('posicao') or (idx + 1)
+
+                # Stable external ID: itf:section:slug(name):country:position
                 slug_name = _re.sub(r'[^a-z0-9]+', '-',
                     _ud.normalize('NFKD', name.lower()).encode('ascii', 'ignore').decode()
                 ).strip('-')[:40]
-                ext_id = f'itf:{std_section}:{slug_name}:{country_code.lower()}:{idx}'
+                ext_id = f'itf:{std_section}:{slug_name}:{country_code.lower()}:{position}'
 
                 category_text = f'{gender_label} - {section_label}'
 
@@ -598,5 +637,5 @@ def iter_player_entries(inscritos: dict, slug_externo: str) -> Iterator[dict]:
                     'source': 'itf',
                     'confidence': 'high',
                     'source_url': '',
-                    '_raw': {k: v for k, v in p.items()},
+                    '_raw': dict(p),
                 }

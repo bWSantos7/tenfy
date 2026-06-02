@@ -54,6 +54,12 @@ TASKS = [
         'kwargs': {'sources': ['cbt', 'fct'], 'limit': 60},
     },
     {
+        'name': 'sync-itf-every-12h',
+        'task': 'apps.ingestion.tasks.sync_itf_from_mongo_task',
+        'cron': {'minute': '0', 'hour': '*/12', 'day_of_week': '*', 'day_of_month': '*', 'month_of_year': '*'},
+        'description': 'Sync ITF tournaments + acceptance lists from MongoDB every 12 hours (00:00, 12:00 UTC)',
+    },
+    {
         'name': 'sync-all-ti-profiles-every-2h',
         'task': 'apps.players.tasks.sync_all_ti_profiles_task',
         'cron': {'minute': '50', 'hour': '*/2', 'day_of_week': '*', 'day_of_month': '*', 'month_of_year': '*'},

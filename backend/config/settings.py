@@ -200,9 +200,7 @@ CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^http://localhost:(3000|5173|8081|19000|19006)$",
     r"^http://127\.0\.0\.1:(3000|5173|8081|19000|19006)$",
-    # Locked to the specific Railway subdomain — prevents other Railway tenants from matching
-    # Legacy Railway subdomain removed — use tennis.app.br domains
-    # Production domains — tennis.app.br
+    r"^https://(api|www|app)\.tenfy\.com\.br$",
     r"^https://(api|www|app)\.tennis\.app\.br$",
 ]
 
@@ -362,6 +360,17 @@ COSAT_MONGO_COLLECTION_TOURNAMENTS = config('COSAT_MONGO_COLLECTION_TOURNAMENTS'
 COSAT_MONGO_COLLECTION_ENTRIES = config('COSAT_MONGO_COLLECTION_ENTRIES', default='players')
 COSAT_MONGO_COLLECTION_RANKINGS = config('COSAT_MONGO_COLLECTION_RANKINGS', default='rankingentries')
 COSAT_MONGO_CONNECT_TIMEOUT_MS = config('COSAT_MONGO_CONNECT_TIMEOUT_MS', default=5000, cast=int)
+
+# ── ITF MongoDB (external scraper service) ───────────────────────────────────
+# The ITF scraper runs as a separate Railway service and writes tournament/
+# acceptance-list data to a dedicated MongoDB collection ('itftournaments').
+# By default reuses the same MongoDB instance as COSAT (COSAT_MONGO_URL /
+# COSAT_MONGO_DB). Override with ITF_MONGO_URL / ITF_MONGO_DB if separate.
+ITF_MONGO_ENABLED = config('ITF_MONGO_ENABLED', default=False, cast=bool)
+ITF_MONGO_URL = config('ITF_MONGO_URL', default='')  # empty → use COSAT_MONGO_URL
+ITF_MONGO_DB = config('ITF_MONGO_DB', default='')    # empty → use COSAT_MONGO_DB
+ITF_MONGO_COLLECTION_TOURNAMENTS = config('ITF_MONGO_COLLECTION_TOURNAMENTS', default='itftournaments')
+ITF_MONGO_CONNECT_TIMEOUT_MS = config('ITF_MONGO_CONNECT_TIMEOUT_MS', default=5000, cast=int)
 
 # Web Push (VAPID) — generate keys with: python -c "from py_vapid import Vapid; v=Vapid(); v.generate_keys(); print(v.private_key, v.public_key)"
 VAPID_PRIVATE_KEY = config('VAPID_PRIVATE_KEY', default='')

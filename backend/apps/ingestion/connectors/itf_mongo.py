@@ -1,0 +1,485 @@
+"""
+ITF MongoDB connector — reads from the external ITF scraper service.
+
+The ITF scraper runs independently on Railway and writes tournament +
+acceptance-list data to a MongoDB collection ('itftournaments').
+By default reuses the same MongoDB instance used by the COSAT scraper
+(COSAT_MONGO_URL / COSAT_MONGO_DB). Override with ITF_MONGO_URL /
+ITF_MONGO_DB if the scraper uses a separate instance.
+
+Document schema (scraper Mongoose model → MongoDB collection 'itftournaments'):
+  slug_externo*    — stable external ID (e.g. "itf-12345-tournament-name")
+  nome*            — tournament name
+  categoria        — circuit label (e.g. "ITF Junior")
+  circuito         — circuit label (same field, alternate key)
+  data_inicio      — start date (ISO or DD/MM/YYYY)
+  data_fim         — end date
+  prazo_inscricao  — entry deadline
+  cidade           — host city
+  codigo_pais      — host country ISO code (e.g. "ARG")
+  superficie       — surface (PT or EN)
+  status           — tournament status string
+  url_oficial      — canonical ITF URL
+  inscritos        — acceptance list:
+    {
+      "masculino": {"draw_principal": [...], "qualifying": [...], "alternates": []},
+      "feminino":  {"draw_principal": [...], "qualifying": [...], "alternates": []}
+    }
+    Each player entry: {"nome": "...", "codigo_pais": "ARG", "ranking": 45}
+
+Design:
+  - Read-only — never writes to MongoDB.
+  - Offline-safe — logs warning, returns empty iterator if unavailable.
+  - Short connection timeout (ITF_MONGO_CONNECT_TIMEOUT_MS, default 5s).
+  - All credentials via env vars / Django settings. Never hardcoded.
+  - Reuses COSAT_MONGO_URL/DB when ITF-specific vars are not set.
+"""
+import logging
+import re
+from datetime import datetime
+from typing import Iterator, Optional
+
+from django.conf import settings
+
+logger = logging.getLogger('apps.ingestion.itf_mongo')
+
+
+def _sanitize_exc(exc: Exception) -> str:
+    msg = str(exc)
+    return re.sub(r'(mongodb(?:\+srv)?://)([^@]+)@', r'\1***:***@', msg)
+
+
+# ── Surface / status / section maps ──────────────────────────────────────────
+
+_SURFACE_MAP = {
+    'clay': 'clay', 'saibro': 'clay', 'terra batida': 'clay',
+    'hard': 'hard', 'dura': 'hard', 'rápida': 'hard', 'rapida': 'hard',
+    'hard (o)': 'hard', 'hard (i)': 'hard',
+    'grass': 'grass', 'grama': 'grass',
+    'carpet': 'carpet', 'carpete': 'carpet', 'carpet (i)': 'carpet',
+    'sand': 'sand', 'areia': 'sand',
+}
+
+_STATUS_MAP = {
+    'accepting entries': 'open',
+    'aceitando inscrições': 'open', 'aceitando inscricoes': 'open',
+    'inscrições abertas': 'open', 'inscricoes abertas': 'open',
+    'entries closed': 'closed',
+    'inscrições encerradas': 'closed', 'inscricoes encerradas': 'closed',
+    'in progress': 'in_progress', 'em andamento': 'in_progress',
+    'completed': 'finished', 'finalizado': 'finished',
+    'cancelled': 'canceled', 'canceled': 'canceled', 'cancelado': 'canceled',
+    'upcoming': 'announced', 'anunciado': 'announced',
+    'draws available': 'draws_published', 'chaves publicadas': 'draws_published',
+}
+
+# Scraper section key → (standard_key, portuguese_label)
+_SECTION_MAP = {
+    'draw_principal': ('main_draw', 'Chave Principal'),
+    'main_draw': ('main_draw', 'Chave Principal'),
+    'chave_principal': ('main_draw', 'Chave Principal'),
+    'qualifying': ('qualifying', 'Qualificação'),
+    'qualificacao': ('qualifying', 'Qualificação'),
+    'qualificação': ('qualifying', 'Qualificação'),
+    'alternates': ('alternates', 'Alternates'),
+    'alternativas': ('alternates', 'Alternates'),
+    'desistencias': ('withdrawn', 'Desistências'),
+    'desistências': ('withdrawn', 'Desistências'),
+    'withdrawn': ('withdrawn', 'Desistências'),
+}
+
+_GENDER_MAP = {
+    'masculino': ('M', 'Masculino'),
+    'feminino': ('F', 'Feminino'),
+    'male': ('M', 'Masculino'),
+    'female': ('F', 'Feminino'),
+    'm': ('M', 'Masculino'),
+    'f': ('F', 'Feminino'),
+    'boys': ('M', 'Masculino'),
+    'girls': ('F', 'Feminino'),
+}
+
+
+# ── Connection ────────────────────────────────────────────────────────────────
+
+def _get_itf_client():
+    """
+    Build a pymongo MongoClient for the ITF collection.
+    Falls back to COSAT_MONGO_URL / COSAT_MONGO_DB when ITF-specific vars are empty.
+    """
+    try:
+        from pymongo import MongoClient
+    except ImportError as exc:
+        raise ImportError('pymongo not installed. Add pymongo to requirements.txt.') from exc
+
+    url = getattr(settings, 'ITF_MONGO_URL', '') or getattr(settings, 'COSAT_MONGO_URL', '')
+    if not url:
+        raise ValueError(
+            'No MongoDB URL configured for ITF. '
+            'Set ITF_MONGO_URL or COSAT_MONGO_URL in Railway Variables.'
+        )
+
+    timeout_ms = getattr(settings, 'ITF_MONGO_CONNECT_TIMEOUT_MS', 5000)
+    return MongoClient(
+        url,
+        serverSelectionTimeoutMS=timeout_ms,
+        connectTimeoutMS=timeout_ms,
+        socketTimeoutMS=timeout_ms,
+    )
+
+
+def _get_itf_db_name() -> str:
+    db = getattr(settings, 'ITF_MONGO_DB', '') or getattr(settings, 'COSAT_MONGO_DB', '')
+    if not db:
+        raise ValueError(
+            'No MongoDB DB name configured for ITF. '
+            'Set ITF_MONGO_DB or COSAT_MONGO_DB in Railway Variables.'
+        )
+    return db
+
+
+# ── Connector class ───────────────────────────────────────────────────────────
+
+class ItfMongoConnector:
+    """
+    Read-only connector to the ITF scraper MongoDB.
+
+    Usage:
+        conn = ItfMongoConnector()
+        if not conn.is_available():
+            logger.warning('ITF Mongo offline — skipping')
+            return
+        for t in conn.iter_tournaments():
+            ...
+        conn.close()
+    """
+
+    def __init__(self):
+        self._client = None
+        self._db = None
+        self._available: Optional[bool] = None
+
+    def _connect(self) -> bool:
+        if self._available is not None:
+            return self._available
+        try:
+            self._client = _get_itf_client()
+            db_name = _get_itf_db_name()
+            self._db = self._client[db_name]
+            self._client.admin.command('ping')
+            self._available = True
+            logger.info('ItfMongoConnector: connected to db=%s', db_name)
+        except Exception as exc:
+            logger.warning(
+                'ItfMongoConnector: MongoDB unavailable — %s. '
+                'ITF data will be skipped this run.',
+                _sanitize_exc(exc),
+            )
+            self._available = False
+        return self._available
+
+    def is_available(self) -> bool:
+        return self._connect()
+
+    def close(self):
+        if self._client:
+            try:
+                self._client.close()
+            except Exception:
+                pass
+            self._client = None
+            self._db = None
+            self._available = None
+
+    def _collection(self):
+        name = getattr(settings, 'ITF_MONGO_COLLECTION_TOURNAMENTS', 'itftournaments')
+        return self._db[name]
+
+    def iter_tournaments(self, limit: int = 0, slug_externo: str = '') -> Iterator[dict]:
+        """
+        Yield normalized tournament dicts from the itftournaments collection.
+
+        Yields dicts conforming to the standard connector schema plus
+        '_raw' (original doc) and '_inscritos' (raw acceptance list).
+        """
+        if not self.is_available():
+            return
+
+        query = {}
+        if slug_externo:
+            query['slug_externo'] = slug_externo
+
+        cursor = self._collection().find(query)
+        if limit:
+            cursor = cursor.limit(limit)
+
+        for doc in cursor:
+            try:
+                normalized = _normalize_tournament(doc)
+                if normalized:
+                    yield normalized
+                else:
+                    logger.debug('ItfMongo: skipped tournament (missing slug_externo/nome): %s',
+                                 doc.get('_id'))
+            except Exception as exc:
+                logger.warning('ItfMongo: failed to normalize tournament %s — %s',
+                               doc.get('slug_externo', '?'), exc)
+
+    def count_tournaments(self) -> int:
+        if not self.is_available():
+            return 0
+        return self._collection().count_documents({})
+
+
+# ── Document normalizers ──────────────────────────────────────────────────────
+
+def _parse_date(value) -> Optional[datetime]:
+    if not value:
+        return None
+    s = str(value).strip()
+    if not s or s.lower() in ('null', 'none', 'n/a', '-'):
+        return None
+
+    if isinstance(value, datetime):
+        return value
+
+    # ISO with timezone
+    if 'T' in s:
+        try:
+            return datetime.fromisoformat(s.replace('Z', '+00:00'))
+        except ValueError:
+            pass
+
+    # YYYY-MM-DD
+    m = re.match(r'^(\d{4})-(\d{2})-(\d{2})', s)
+    if m:
+        try:
+            return datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        except ValueError:
+            pass
+
+    # DD/MM/YYYY
+    m = re.match(r'^(\d{1,2})/(\d{1,2})/(\d{4})', s)
+    if m:
+        try:
+            return datetime(int(m.group(3)), int(m.group(2)), int(m.group(1)))
+        except ValueError:
+            pass
+
+    return None
+
+
+def _normalize_tournament(doc: dict) -> Optional[dict]:
+    """
+    Convert a MongoDB itftournaments document to the standard connector dict.
+    Returns None when mandatory fields (slug_externo, nome) are absent.
+    """
+    slug_externo = str(doc.get('slug_externo') or '').strip()
+    if not slug_externo:
+        return None
+
+    nome = (doc.get('nome') or doc.get('name') or '').strip()
+    if not nome:
+        return None
+
+    circuit = (doc.get('circuito') or doc.get('categoria') or 'ITF Junior').strip()
+    url_oficial = (doc.get('url_oficial') or doc.get('url') or '').strip()
+    cidade = (doc.get('cidade') or doc.get('city') or '').strip()
+    codigo_pais = (doc.get('codigo_pais') or doc.get('country_code') or '').strip().upper()
+
+    surface_raw = (doc.get('superficie') or doc.get('surface') or '').lower().strip()
+    surface = _SURFACE_MAP.get(surface_raw, 'unknown')
+
+    status_raw = (doc.get('status') or '').lower().strip()
+    status = _STATUS_MAP.get(status_raw, 'unknown')
+
+    start_date = _parse_date(doc.get('data_inicio') or doc.get('start_date'))
+    end_date = _parse_date(doc.get('data_fim') or doc.get('end_date'))
+    entry_close = _parse_date(doc.get('prazo_inscricao') or doc.get('entry_deadline'))
+
+    if isinstance(start_date, datetime):
+        start_date = start_date.date()
+    if isinstance(end_date, datetime):
+        end_date = end_date.date()
+    if isinstance(entry_close, datetime):
+        entry_close = entry_close.date()
+
+    season_year = start_date.year if start_date else datetime.now().year
+
+    # Build categories from grade / circuit label
+    grade = (doc.get('grade') or doc.get('categoria') or '').strip()
+    categories = [{'source_text': grade, 'price_brl': None, 'notes': ''}] if grade else []
+
+    from .base import BaseConnector
+    canonical_slug = BaseConnector.slugify(f'itf-{slug_externo}')
+
+    inscritos = doc.get('inscritos') or {}
+
+    return {
+        'external_id': f'itf:{slug_externo}',
+        'canonical_name': nome,
+        'canonical_slug': canonical_slug,
+        'circuit': circuit,
+        'modality': 'tennis',
+        'season_year': season_year,
+        'title': nome,
+        'start_date': start_date.isoformat() if start_date else None,
+        'end_date': end_date.isoformat() if end_date else None,
+        'entry_open_at': None,
+        'entry_close_at': entry_close.isoformat() if entry_close else None,
+        'status': status,
+        'surface': surface,
+        'venue': {
+            'name': '',
+            'city': cidade[:120],
+            'state': '',
+            'address': '',
+            'country_code': codigo_pais[:3],
+        } if cidade else None,
+        'base_price_brl': None,
+        'official_source_url': url_oficial,
+        'categories': categories,
+        'links': (
+            [{'link_type': 'other', 'url': url_oficial, 'label': 'ITF Tournament'}]
+            if url_oficial else []
+        ),
+        '_raw': {
+            'slug_externo': slug_externo,
+            'circuito': circuit,
+            'cidade': cidade,
+            'codigo_pais': codigo_pais,
+            'superficie': surface_raw,
+            'source': 'itf_mongo',
+        },
+        '_inscritos': inscritos,
+    }
+
+
+def normalize_acceptance_list(inscritos: dict) -> list:
+    """
+    Convert the scraper's 'inscritos' dict to the TournamentEdition.acceptance_list format.
+
+    Input:
+        {
+          "masculino": {"draw_principal": [{"nome": "...", "codigo_pais": "ARG", "ranking": 45}]},
+          "feminino": {"qualifying": [...]}
+        }
+
+    Output (TournamentEdition.acceptance_list format):
+        [
+          {"section": "main_draw", "gender": "M", "section_label": "Masculino - Chave Principal",
+           "players": [{"name": "...", "country_code": "ARG", "ranking": 45}]},
+          ...
+        ]
+    """
+    result = []
+    if not inscritos or not isinstance(inscritos, dict):
+        return result
+
+    for gender_key, sections in inscritos.items():
+        gender_code, gender_label = _GENDER_MAP.get(gender_key.lower(), ('', gender_key))
+        if not isinstance(sections, dict):
+            continue
+
+        for section_key, players in sections.items():
+            std_section, section_label = _SECTION_MAP.get(
+                section_key.lower(), (section_key, section_key)
+            )
+            if not isinstance(players, list):
+                continue
+
+            normalized_players = []
+            for p in players:
+                if not isinstance(p, dict):
+                    continue
+                name = (p.get('nome') or p.get('name') or '').strip()
+                if not name:
+                    continue
+                normalized_players.append({
+                    'name': name,
+                    'country': (p.get('pais') or p.get('country') or '').strip(),
+                    'country_code': (p.get('codigo_pais') or p.get('country_code') or '').strip().upper(),
+                    'ranking': p.get('ranking') or p.get('rank'),
+                    'wtn': p.get('wtn'),
+                    'priority': p.get('priority') or p.get('prioridade'),
+                    'information': p.get('information') or p.get('informacao') or '',
+                })
+
+            if normalized_players:
+                result.append({
+                    'section': std_section,
+                    'gender': gender_code,
+                    'section_label': f'{gender_label} - {section_label}',
+                    'players': normalized_players,
+                })
+
+    return result
+
+
+def iter_player_entries(inscritos: dict, slug_externo: str) -> Iterator[dict]:
+    """
+    Yield FederationEntry-compatible dicts from the inscritos structure.
+
+    Each yielded dict has:
+      player_name, player_external_id, category_text, gender,
+      ranking_position, payment_status, removed_or_replaced,
+      player_country_code, player_country_name, source, confidence.
+    """
+    if not inscritos or not isinstance(inscritos, dict):
+        return
+
+    for gender_key, sections in inscritos.items():
+        gender_code, gender_label = _GENDER_MAP.get(gender_key.lower(), ('', gender_key))
+        if not isinstance(sections, dict):
+            continue
+
+        for section_key, players in sections.items():
+            std_section, section_label = _SECTION_MAP.get(
+                section_key.lower(), (section_key, section_key)
+            )
+            is_withdrawn = std_section == 'withdrawn'
+
+            if not isinstance(players, list):
+                continue
+
+            for idx, p in enumerate(players):
+                if not isinstance(p, dict):
+                    continue
+                name = (p.get('nome') or p.get('name') or '').strip()
+                if not name:
+                    continue
+
+                country_code = (p.get('codigo_pais') or p.get('country_code') or '').strip().upper()
+                country_name = (p.get('pais') or p.get('country') or '').strip()
+
+                try:
+                    ranking = int(p['ranking']) if p.get('ranking') is not None else None
+                except (TypeError, ValueError):
+                    ranking = None
+
+                # Stable external ID: source:section:slug(name):country:position
+                import unicodedata as _ud
+                import re as _re
+                slug_name = _re.sub(r'[^a-z0-9]+', '-',
+                    _ud.normalize('NFKD', name.lower()).encode('ascii', 'ignore').decode()
+                ).strip('-')[:40]
+                ext_id = f'itf:{std_section}:{slug_name}:{country_code.lower()}:{idx}'
+
+                category_text = f'{gender_label} - {section_label}'
+
+                yield {
+                    'player_name': name,
+                    'player_external_id': ext_id,
+                    'category_text': category_text,
+                    'gender': gender_code,
+                    'ranking_position': ranking,
+                    'payment_status': 'unknown',
+                    'removed_or_replaced': is_withdrawn,
+                    'replacement_reason': 'Desistência / Withdrawn' if is_withdrawn else '',
+                    'player_country_code': country_code,
+                    'player_country_name': country_name,
+                    'source': 'itf',
+                    'confidence': 'high',
+                    'source_url': '',
+                    '_raw': {k: v for k, v in p.items()},
+                }

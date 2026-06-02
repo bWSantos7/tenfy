@@ -206,6 +206,49 @@ def sync_cosat_from_mongo_task(self):
         cache.delete(lock_key)
 
 
+@shared_task(bind=True, max_retries=0)
+def sync_itf_from_mongo_task(self):
+    """
+    Periodic ITF MongoDB → PostgreSQL sync. Runs every 12h via Celery Beat.
+    Schedule: crontab(minute=0, hour='*/12') — UTC (00:00, 12:00).
+
+    Syncs all ITF tournaments AND player acceptance lists (import_entries=True).
+    Aborts silently when ITF_MONGO_ENABLED is False or MongoDB is unreachable.
+    Uses a cache-based lock to prevent concurrent runs.
+    """
+    from django.conf import settings
+    from django.core.cache import cache
+
+    if not getattr(settings, 'ITF_MONGO_ENABLED', False):
+        logger.info('sync_itf_from_mongo_task: skipped (ITF_MONGO_ENABLED=False)')
+        return {'skipped': True, 'reason': 'disabled'}
+
+    lock_key = 'sync_itf:lock'
+    lock_ttl = 3600  # 1h max
+    if not cache.add(lock_key, True, lock_ttl):
+        logger.warning('sync_itf_from_mongo_task: already running, skipped')
+        return {'skipped': True, 'reason': 'already_running'}
+
+    try:
+        import io
+        from django.core.management import call_command
+        out = io.StringIO()
+        call_command(
+            'sync_itf_from_mongo',
+            dry_run=False,
+            import_entries=True,
+            stdout=out,
+        )
+        tail = out.getvalue()[-400:]
+        logger.info('sync_itf_from_mongo_task complete:\n%s', tail)
+        return {'status': 'success'}
+    except Exception as exc:
+        logger.exception('sync_itf_from_mongo_task failed: %s', exc)
+        return {'status': 'error', 'error': str(exc)[:200]}
+    finally:
+        cache.delete(lock_key)
+
+
 @shared_task
 def detect_tournament_changes():
     now = timezone.now()

@@ -231,6 +231,19 @@ class ItfMongoConnector:
             return 0
         return self._collection().count_documents({})
 
+    def sample_raw(self, key: str = '', n: int = 1) -> list:
+        """Return up to n raw documents (no normalization) for schema inspection."""
+        if not self.is_available():
+            return []
+        query = {}
+        if key:
+            query = {'$or': [{'key': key}, {'slug_externo': key}]}
+        docs = []
+        for doc in self._collection().find(query).limit(n):
+            doc['_id'] = str(doc.get('_id', ''))
+            docs.append(doc)
+        return docs
+
 
 # ── Document normalizers ──────────────────────────────────────────────────────
 

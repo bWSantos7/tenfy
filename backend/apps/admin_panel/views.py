@@ -544,6 +544,38 @@ def data_source_patch(request, pk):
     return Response(ser.data)
 
 
+@api_view(['GET'])
+@permission_classes([IsAdmin])
+def debug_itf_sample(request):
+    """
+    GET /api/admin-panel/debug/itf-sample/?key=J-J100-GTM-2026-001
+    Retorna um documento raw do MongoDB ITF para inspecionar o schema.
+    Seguro: não modifica dados. Apenas staff pode acessar.
+    """
+    from apps.ingestion.connectors.itf_mongo import ItfMongoConnector
+    key = request.query_params.get('key', '')
+    conn = ItfMongoConnector()
+    try:
+        docs = conn.sample_raw(key=key, n=1)
+        if not docs:
+            return Response({'detail': 'Nenhum documento encontrado.', 'key': key})
+        doc = docs[0]
+        # Retorna apenas as chaves do documento (para ver o schema) + valores superficiais
+        schema = {}
+        for k, v in doc.items():
+            if k == '_id':
+                schema[k] = v
+            elif isinstance(v, dict):
+                schema[k] = {'_type': 'dict', '_keys': list(v.keys()), '_sample': str(v)[:100]}
+            elif isinstance(v, list):
+                schema[k] = {'_type': 'list', '_len': len(v), '_sample': str(v[:1])[:200]}
+            else:
+                schema[k] = v
+        return Response({'key': key, 'fields': schema})
+    finally:
+        conn.close()
+
+
 @api_view(['POST'])
 @permission_classes([IsAdmin])
 def trigger_itf_sync(request):

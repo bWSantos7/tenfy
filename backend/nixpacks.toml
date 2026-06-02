@@ -1,14 +1,11 @@
 [phases.setup]
-# chromium do nixpkgs fornece as bibliotecas de sistema que o Playwright precisa
 nixPkgs = ['python311', 'postgresql', 'chromium']
 
 [phases.install]
 cmds = [
     'python -m venv /opt/venv',
     '. /opt/venv/bin/activate && pip install --upgrade pip && pip install -r requirements.txt',
-    # Baixa o Chromium version-matched do Playwright (usa as libs do nixpkgs acima)
-    # PLAYWRIGHT_BROWSERS_PATH garante local previsível dentro do container
-    'PLAYWRIGHT_BROWSERS_PATH=/app/.playwright . /opt/venv/bin/activate && playwright install chromium'
+    'PLAYWRIGHT_BROWSERS_PATH=/app/.playwright /opt/venv/bin/playwright install chromium'
 ]
 
 [phases.build]

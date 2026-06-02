@@ -207,7 +207,8 @@ class ItfMongoConnector:
 
         query = {}
         if slug_externo:
-            query['slug_externo'] = slug_externo
+            # Accept both legacy 'slug_externo' and current scraper 'key' field
+            query = {'$or': [{'slug_externo': slug_externo}, {'key': slug_externo}]}
 
         cursor = self._collection().find(query)
         if limit:
@@ -302,30 +303,72 @@ def _categories_from_inscritos(inscritos: dict) -> list:
 def _normalize_tournament(doc: dict) -> Optional[dict]:
     """
     Convert a MongoDB itftournaments document to the standard connector dict.
-    Returns None when mandatory fields (slug_externo, nome) are absent.
+    Returns None when mandatory fields (slug_externo/key, nome) are absent.
+
+    Field name mapping (scraper Mongoose model → this connector):
+      key / slug_externo → external identifier (e.g. "J-J100-GTM-2026-001")
+      nome / name        → tournament name
+      cidade / city      → host city
+      codigo_pais / country_code → ISO country code
+      url_oficial / url  → official URL
+      data_inicio / startDate → start date
+      data_fim / endDate      → end date
+      prazo_inscricao / entryDeadline / deadline → entry deadline
+      inscritos / entries / acceptanceList       → acceptance list
     """
-    slug_externo = str(doc.get('slug_externo') or '').strip()
+    # Accept both 'slug_externo' (legacy) and 'key' (current scraper Mongoose schema)
+    slug_externo = (
+        str(doc.get('slug_externo') or '').strip()
+        or str(doc.get('key') or '').strip()
+        or str(doc.get('externalId') or '').strip()
+        or str(doc.get('external_id') or '').strip()
+        or str(doc.get('id') or '').strip()
+    )
     if not slug_externo:
         return None
 
-    nome = (doc.get('nome') or doc.get('name') or '').strip()
+    nome = (
+        doc.get('nome') or doc.get('name') or doc.get('title') or doc.get('titulo') or ''
+    ).strip()
     if not nome:
         return None
 
-    circuit = (doc.get('circuito') or doc.get('categoria') or 'ITF Junior').strip()
-    url_oficial = (doc.get('url_oficial') or doc.get('url') or '').strip()
-    cidade = (doc.get('cidade') or doc.get('city') or '').strip()
-    codigo_pais = (doc.get('codigo_pais') or doc.get('country_code') or '').strip().upper()
+    circuit = (
+        doc.get('circuito') or doc.get('categoria') or doc.get('circuit')
+        or doc.get('category') or doc.get('grade') or 'ITF Junior'
+    ).strip()
+    url_oficial = (
+        doc.get('url_oficial') or doc.get('url') or doc.get('officialUrl')
+        or doc.get('official_url') or ''
+    ).strip()
+    cidade = (
+        doc.get('cidade') or doc.get('city') or doc.get('location') or ''
+    ).strip()
+    codigo_pais = (
+        doc.get('codigo_pais') or doc.get('country_code') or doc.get('countryCode')
+        or doc.get('country') or ''
+    ).strip().upper()
 
-    surface_raw = (doc.get('superficie') or doc.get('surface') or '').lower().strip()
+    surface_raw = (
+        doc.get('superficie') or doc.get('surface') or doc.get('court') or ''
+    ).lower().strip()
     surface = _SURFACE_MAP.get(surface_raw, 'unknown')
 
     status_raw = (doc.get('status') or '').lower().strip()
     status = _STATUS_MAP.get(status_raw, 'unknown')
 
-    start_date = _parse_date(doc.get('data_inicio') or doc.get('start_date'))
-    end_date = _parse_date(doc.get('data_fim') or doc.get('end_date'))
-    entry_close = _parse_date(doc.get('prazo_inscricao') or doc.get('entry_deadline'))
+    start_date = _parse_date(
+        doc.get('data_inicio') or doc.get('start_date') or doc.get('startDate')
+        or doc.get('start') or doc.get('data_inicio_torneio')
+    )
+    end_date = _parse_date(
+        doc.get('data_fim') or doc.get('end_date') or doc.get('endDate')
+        or doc.get('end') or doc.get('data_fim_torneio')
+    )
+    entry_close = _parse_date(
+        doc.get('prazo_inscricao') or doc.get('entry_deadline') or doc.get('entryDeadline')
+        or doc.get('deadline') or doc.get('entry_close') or doc.get('entryClose')
+    )
 
     if isinstance(start_date, datetime):
         start_date = start_date.date()
@@ -354,7 +397,14 @@ def _normalize_tournament(doc: dict) -> Optional[dict]:
     from .base import BaseConnector
     canonical_slug = BaseConnector.slugify(f'itf-{slug_externo}')
 
-    inscritos = doc.get('inscritos') or {}
+    inscritos = (
+        doc.get('inscritos')
+        or doc.get('entries')
+        or doc.get('acceptanceList')
+        or doc.get('acceptance_list')
+        or doc.get('players')
+        or {}
+    )
 
     return {
         'external_id': f'itf:{slug_externo}',

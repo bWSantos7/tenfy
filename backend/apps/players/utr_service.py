@@ -250,8 +250,10 @@ def scrape_utr_profile_rating(
     profile_url = f'{UTR_PROFILE_BASE}/{player_id}'
     display_name_found: Optional[str] = player_name
 
+    logger.info('scrape_utr: launching Playwright for player_id=%s url=%s', player_id, profile_url)
     try:
         with sync_playwright() as p:
+            logger.info('scrape_utr: Playwright started, launching Chromium...')
             browser = p.chromium.launch(
                 headless=True,
                 args=[
@@ -260,6 +262,7 @@ def scrape_utr_profile_rating(
                     '--disable-dev-shm-usage',
                 ],
             )
+            logger.info('scrape_utr: Chromium launched OK')
             ctx = browser.new_context(
                 viewport={'width': 1440, 'height': 1200},
                 user_agent=(
@@ -270,11 +273,13 @@ def scrape_utr_profile_rating(
                 locale='en-US',
             )
             page = ctx.new_page()
+            logger.info('scrape_utr: opening page %s', profile_url)
             page.goto(profile_url, wait_until='domcontentloaded', timeout=timeout_ms)
             try:
                 page.wait_for_load_state('networkidle', timeout=15000)
             except PlaywrightTimeout:
                 pass
+            logger.info('scrape_utr: page loaded, extracting ratings...')
 
             # Accept / close cookie banners (same as utr_ranking.py)
             _handle_cookies(page)
@@ -374,6 +379,7 @@ def scrape_utr_profile_rating(
         }
 
     except Exception as exc:
+        logger.error('scrape_utr: exception for player_id=%s: %s: %s', player_id, type(exc).__name__, exc)
         return {
             'success':          False,
             'singles_utr':      None,

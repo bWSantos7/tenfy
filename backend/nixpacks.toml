@@ -1,11 +1,10 @@
 [phases.setup]
-nixPkgs = ['python311', 'postgresql', 'chromium']
+nixPkgs = ['python311', 'postgresql']
 
 [phases.install]
 cmds = [
     'python -m venv /opt/venv',
-    '. /opt/venv/bin/activate && pip install --upgrade pip && pip install -r requirements.txt',
-    'PLAYWRIGHT_BROWSERS_PATH=/app/.playwright /opt/venv/bin/playwright install chromium'
+    '. /opt/venv/bin/activate && pip install --upgrade pip && pip install -r requirements.txt'
 ]
 
 [phases.build]

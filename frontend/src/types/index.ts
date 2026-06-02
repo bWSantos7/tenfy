@@ -104,6 +104,19 @@ export interface PlayerProfileCategory {
   confidence: string;
 }
 
+export interface UtrCandidate {
+  index: number;
+  utr_player_id: string;
+  display_name: string;
+  country: string | null;
+  location: string | null;
+  gender: string | null;
+  singles_utr: string | null;
+  doubles_utr: string | null;
+  rating_status: string | null;
+  profile_url: string;
+}
+
 export interface PlayerProfile {
   id: number;
   user_id?: number;
@@ -125,6 +138,13 @@ export interface PlayerProfile {
   sporting_age: number | null;
   created_at: string;
   updated_at: string;
+  // UTR
+  utr_player_id: string;
+  utr_display_name: string;
+  utr_singles: string;
+  utr_doubles: string;
+  utr_profile_url: string;
+  utr_synced_at: string | null;
 }
 
 // Relação responsável ↔ dependente

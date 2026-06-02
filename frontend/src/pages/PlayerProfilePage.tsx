@@ -1,13 +1,14 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Settings, ExternalLink, Trophy, MapPin, Calendar, User,
   Link as LinkIcon, Loader2, ChevronRight, Ticket, RefreshCw,
+  Unlink, X, Search,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
-import { ParentChild, PlayerProfile, TiData, TiRankingEntry, TournamentRegistration, WatchlistItem } from '../types';
-import { fetchTiData, listChildProfiles, listChildWatchlist, listChildren, listProfiles, syncTiData } from '../services/data';
+import { ParentChild, PlayerProfile, TiData, TiRankingEntry, TournamentRegistration, UtrCandidate, WatchlistItem } from '../types';
+import { fetchTiData, linkUtr, listChildProfiles, listChildWatchlist, listChildren, listProfiles, searchUtr, syncTiData, syncUtr, unlinkUtr } from '../services/data';
 import { myRegistrations } from '../services/registrations';
 import { mediaUrl } from '../services/api';
 import { resolveAvatar } from '../utils/format';
@@ -57,6 +58,15 @@ export const PlayerProfilePage: React.FC = () => {
   const [tiData, setTiData] = useState<TiData | null>(null);
   const [tiLoading, setTiLoading] = useState(false);
   const [tiSyncing, setTiSyncing] = useState(false);
+
+  // UTR modal state
+  const [utrModalOpen, setUtrModalOpen] = useState(false);
+  const [utrQuery, setUtrQuery] = useState('');
+  const [utrSearching, setUtrSearching] = useState(false);
+  const [utrCandidates, setUtrCandidates] = useState<UtrCandidate[]>([]);
+  const [utrError, setUtrError] = useState('');
+  const [utrLinking, setUtrLinking] = useState(false);
+  const [utrSyncing, setUtrSyncing] = useState(false);
 
   const isParent = user?.role === 'parent';
 
@@ -127,6 +137,65 @@ export const PlayerProfilePage: React.FC = () => {
       setTiSyncing(false);
     }
   }
+  async function handleUtrSearch() {
+    if (!primary || utrQuery.trim().length < 2) return;
+    setUtrSearching(true);
+    setUtrError('');
+    setUtrCandidates([]);
+    try {
+      const result = await searchUtr(primary.id, utrQuery.trim());
+      setUtrCandidates((result.candidates ?? []).slice(0, 3));
+      if (!result.candidates?.length) setUtrError('Nenhum perfil encontrado. Tente outro nome.');
+    } catch {
+      setUtrError('Não foi possível buscar. Verifique sua conexão.');
+    } finally {
+      setUtrSearching(false);
+    }
+  }
+
+  async function handleUtrLink(candidate: UtrCandidate) {
+    if (!primary || utrLinking) return;
+    setUtrLinking(true);
+    try {
+      await linkUtr(primary.id, candidate);
+      const fresh = await listProfiles();
+      setProfiles(fresh);
+      setUtrModalOpen(false);
+      toast.success('Perfil UTR vinculado! Rating sendo extraído em segundo plano.');
+    } catch {
+      toast.error('Não foi possível vincular o perfil UTR.');
+    } finally {
+      setUtrLinking(false);
+    }
+  }
+
+  async function handleUtrUnlink() {
+    if (!primary || !window.confirm('Remover vínculo com este perfil UTR?')) return;
+    try {
+      await unlinkUtr(primary.id);
+      const fresh = await listProfiles();
+      setProfiles(fresh);
+      toast.success('Vínculo UTR removido.');
+    } catch {
+      toast.error('Não foi possível remover o vínculo UTR.');
+    }
+  }
+
+  async function handleUtrSync() {
+    if (!primary || utrSyncing) return;
+    setUtrSyncing(true);
+    try {
+      await syncUtr(primary.id);
+      const fresh = await listProfiles();
+      setProfiles(fresh);
+      toast.success('Sincronização UTR iniciada.');
+    } catch {
+      toast.error('Não foi possível sincronizar o UTR agora.');
+    } finally {
+      setUtrSyncing(false);
+    }
+  }
+
   const avatarLetter = (user?.full_name || user?.email || 'U').slice(0, 1).toUpperCase();
   const roleLabel = ROLE_LABELS[user?.role ?? ''] ?? user?.role ?? '';
 
@@ -322,6 +391,155 @@ export const PlayerProfilePage: React.FC = () => {
                     </div>
                   )}
                 </section>
+              )}
+
+              {/* ── UTR Rating ──────────────────────────────────────── */}
+              {!isParent && (
+                <section>
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-xs font-bold text-text-muted uppercase tracking-wide">UTR Rating</h3>
+                    {primary?.utr_player_id && (
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={handleUtrSync}
+                          disabled={utrSyncing}
+                          className="flex items-center gap-1 text-xs text-text-muted hover:text-accent-neon transition-colors disabled:opacity-50"
+                        >
+                          <RefreshCw className={`w-3.5 h-3.5 ${utrSyncing ? 'animate-spin' : ''}`} />
+                        </button>
+                        <button
+                          onClick={handleUtrUnlink}
+                          className="flex items-center gap-1 text-xs text-text-muted hover:text-red-400 transition-colors"
+                        >
+                          <Unlink className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {primary?.utr_player_id ? (
+                    <div className="card">
+                      <div className="flex items-center gap-2 mb-3 pb-3 border-b border-border-subtle">
+                        <Trophy className="w-4 h-4 text-accent-neon shrink-0" />
+                        <span className="text-xs font-semibold text-accent-neon">UTR — Universal Tennis Rating</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4 mb-3">
+                        <div className="text-center">
+                          <p className="text-3xl font-black">{primary.utr_singles || '—'}</p>
+                          <p className="text-xs text-text-muted mt-1">Simples</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-3xl font-black">{primary.utr_doubles || '—'}</p>
+                          <p className="text-xs text-text-muted mt-1">Duplas</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs text-text-muted truncate">
+                          {primary.utr_display_name || `ID: ${primary.utr_player_id}`}
+                        </p>
+                        {primary.utr_profile_url && (
+                          <a
+                            href={primary.utr_profile_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-accent-blue hover:text-accent-neon transition-colors shrink-0 ml-2"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="card flex items-center gap-3">
+                      <Trophy className="w-5 h-5 text-text-muted shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium">UTR não vinculado</p>
+                        <p className="text-xs text-text-muted">Vincule seu perfil UTR para exibir seu rating.</p>
+                      </div>
+                      <button
+                        onClick={() => { setUtrQuery(primary?.display_name ?? ''); setUtrCandidates([]); setUtrError(''); setUtrModalOpen(true); }}
+                        className="shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg bg-accent-neon/15 text-accent-neon border border-accent-neon/30 hover:bg-accent-neon/25 transition-colors"
+                      >
+                        Vincular
+                      </button>
+                    </div>
+                  )}
+                </section>
+              )}
+
+              {/* ── Modal busca UTR ──────────────────────────────────── */}
+              {utrModalOpen && primary && (
+                <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+                  <div className="bg-bg-card border border-border-subtle rounded-2xl w-full max-w-md max-h-[85vh] overflow-y-auto shadow-2xl">
+                    <div className="flex items-center justify-between p-5 border-b border-border-subtle sticky top-0 bg-bg-card rounded-t-2xl">
+                      <div>
+                        <h2 className="text-base font-bold">Vincular perfil UTR</h2>
+                        <p className="text-xs text-text-muted mt-0.5">Busque seu nome e confirme qual perfil é o seu.</p>
+                      </div>
+                      <button onClick={() => setUtrModalOpen(false)} className="text-text-muted hover:text-text-primary transition-colors">
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    <div className="p-5 space-y-4">
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={utrQuery}
+                          onChange={(e) => setUtrQuery(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleUtrSearch()}
+                          placeholder="Nome do atleta..."
+                          className="flex-1 bg-bg-base border border-border-subtle rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent-neon transition-colors"
+                        />
+                        <button
+                          onClick={handleUtrSearch}
+                          disabled={utrSearching || utrQuery.trim().length < 2}
+                          className="px-4 py-2 rounded-lg bg-accent-neon text-bg-base font-semibold text-sm hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center gap-2"
+                        >
+                          {utrSearching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                        </button>
+                      </div>
+
+                      {utrError && <p className="text-xs text-red-400">{utrError}</p>}
+
+                      {utrCandidates.map((c) => (
+                        <div key={c.utr_player_id} className="border border-border-subtle rounded-xl p-4 space-y-3">
+                          <div>
+                            <p className="font-semibold text-sm">{c.display_name}</p>
+                            <p className="text-xs text-text-muted mt-0.5">
+                              {[c.country, c.location].filter(Boolean).join(' · ')}
+                            </p>
+                          </div>
+                          <div className="flex gap-6">
+                            <div className="text-center">
+                              <p className="text-2xl font-black">{c.singles_utr || '—'}</p>
+                              <p className="text-[10px] text-text-muted">UTR Simples</p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-2xl font-black">{c.doubles_utr || '—'}</p>
+                              <p className="text-[10px] text-text-muted">UTR Duplas</p>
+                            </div>
+                          </div>
+                          <p className="text-[10px] text-text-muted">ID: {c.utr_player_id}</p>
+                          <button
+                            onClick={() => handleUtrLink(c)}
+                            disabled={utrLinking}
+                            className="w-full py-2 rounded-lg bg-accent-neon/15 border border-accent-neon/30 text-accent-neon text-sm font-semibold hover:bg-accent-neon/25 transition-colors disabled:opacity-50"
+                          >
+                            {utrLinking ? 'Salvando...' : 'Este sou eu'}
+                          </button>
+                        </div>
+                      ))}
+
+                      <button
+                        onClick={() => setUtrModalOpen(false)}
+                        className="w-full py-2 text-sm text-text-muted hover:text-text-primary transition-colors"
+                      >
+                        Não sou nenhum desses
+                      </button>
+                    </div>
+                  </div>
+                </div>
               )}
 
               {/* ── Vínculos Tênis Integrado ─────────────────────────── */}

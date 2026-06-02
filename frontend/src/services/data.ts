@@ -129,6 +129,31 @@ export async function sendChildPasswordReset(linkId: number): Promise<void> {
   await api.post(`/api/auth/children/${linkId}/reset-password/`);
 }
 
+// ----- UTR -----
+
+export async function searchUtr(profileId: number, name: string): Promise<{ candidates: import('../types').UtrCandidate[] }> {
+  const res = await api.get(`/api/players/profiles/${profileId}/utr-search/?q=${encodeURIComponent(name)}`);
+  return res.data;
+}
+
+export async function linkUtr(profileId: number, candidate: import('../types').UtrCandidate): Promise<void> {
+  await api.post(`/api/players/profiles/${profileId}/utr-link/`, {
+    utr_player_id: candidate.utr_player_id,
+    display_name: candidate.display_name,
+    singles_utr: candidate.singles_utr ?? '',
+    doubles_utr: candidate.doubles_utr ?? '',
+    profile_url: candidate.profile_url,
+  });
+}
+
+export async function unlinkUtr(profileId: number): Promise<void> {
+  await api.post(`/api/players/profiles/${profileId}/utr-unlink/`);
+}
+
+export async function syncUtr(profileId: number): Promise<void> {
+  await api.post(`/api/players/profiles/${profileId}/utr-sync/`);
+}
+
 // ----- Tênis Integrado -----
 
 export async function fetchTiData(profileId: number, refresh = false): Promise<TiData> {

@@ -5,7 +5,7 @@
     "nixpacksConfigPath": "nixpacks.toml"
   },
   "deploy": {
-    "startCommand": ". /opt/venv/bin/activate && python manage.py migrate --noinput && PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=$(which chromium) celery -A config worker --loglevel=info --concurrency=4 --max-tasks-per-child=100",
+    "startCommand": ". /opt/venv/bin/activate && python manage.py migrate --noinput && PLAYWRIGHT_BROWSERS_PATH=/app/.playwright celery -A config worker --loglevel=info --concurrency=4 --max-tasks-per-child=100",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 5
   }

@@ -134,6 +134,16 @@ class PlayerProfile(TimestampedModel):
     ti_rankings_synced_at = models.DateTimeField(null=True, blank=True)
     ti_sync_error = models.CharField(max_length=300, blank=True)
 
+    # ── UTR (Universal Tennis Rating) ────────────────────────────────────────────
+    # User confirms their UTR profile via in-app search; ratings cached here.
+    utr_player_id = models.CharField(max_length=50, blank=True, help_text='Confirmed UTR profile ID')
+    utr_display_name = models.CharField(max_length=200, blank=True)
+    utr_singles = models.CharField(max_length=20, blank=True, help_text='e.g. 4.35 or 4.xx')
+    utr_doubles = models.CharField(max_length=20, blank=True)
+    utr_profile_url = models.CharField(max_length=300, blank=True)
+    utr_synced_at = models.DateTimeField(null=True, blank=True)
+    utr_sync_error = models.CharField(max_length=300, blank=True)
+
     class Meta:
         ordering = ['-is_primary', '-created_at']
         constraints = [

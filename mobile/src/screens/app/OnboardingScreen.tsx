@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { ActivityIndicator, Pressable, View } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { MainStackParamList } from '../../navigation/types';
 import { useTheme } from '../../contexts/ThemeContext';
-import { createProfile } from '../../services/data';
+import { createProfile, linkUtr, searchUtr } from '../../services/data';
 import { extractApiError } from '../../services/api';
+import { UtrCandidate } from '../../types';
 import { LEVEL_LABELS, TENNIS_CLASS_LABELS } from '../../utils/format';
 import { AppText, Button, Card, Input, MultiSelectField, Screen, SectionHeader, SelectField } from '../../components/ui';
 
@@ -67,6 +68,13 @@ export function OnboardingScreen({ navigation }: Props) {
   const [citiesError, setCitiesError] = useState(false);
   const ALL_BR_UFS = UF_OPTIONS.map((o) => o.value);
 
+  // ── UTR step (shown after profile creation) ──────────────────────────────────
+  const [utrStep, setUtrStep] = useState(false);
+  const [utrSearching, setUtrSearching] = useState(false);
+  const [utrCandidates, setUtrCandidates] = useState<UtrCandidate[]>([]);
+  const [utrLinking, setUtrLinking] = useState(false);
+  const [createdProfileId, setCreatedProfileId] = useState<number | null>(null);
+
   const [form, setForm] = useState({
     display_name: '',
     birth_year: '',
@@ -116,7 +124,7 @@ export function OnboardingScreen({ navigation }: Props) {
     }
     setSubmitting(true);
     try {
-      await createProfile({
+      const created = await createProfile({
         display_name: form.display_name.trim(),
         birth_year: form.birth_year ? Number(form.birth_year) : null,
         gender: (form.gender || undefined) as any,
@@ -127,13 +135,132 @@ export function OnboardingScreen({ navigation }: Props) {
         tennis_class: form.tennis_class || '',
         is_primary: true,
       } as any);
-      Toast.show({ type: 'success', text1: 'Perfil criado com sucesso!' });
-      navigation.goBack();
+
+      if (created?.id) {
+        setCreatedProfileId(created.id);
+        setUtrStep(true);
+        _searchUtrBackground(created.id, form.display_name.trim());
+      } else {
+        Toast.show({ type: 'success', text1: 'Perfil criado com sucesso!' });
+        navigation.goBack();
+      }
     } catch (err) {
       Toast.show({ type: 'error', text1: 'Erro ao criar perfil', text2: extractApiError(err) });
     } finally {
       setSubmitting(false);
     }
+  }
+
+  async function _searchUtrBackground(profileId: number, name: string) {
+    if (!name || name.length < 2) return;
+    setUtrSearching(true);
+    setUtrCandidates([]);
+    try {
+      const result = await searchUtr(profileId, name);
+      setUtrCandidates((result.candidates ?? []).slice(0, 3));
+    } catch {
+      // Silently fail
+    } finally {
+      setUtrSearching(false);
+    }
+  }
+
+  function _finishUtr() {
+    Toast.show({ type: 'success', text1: 'Perfil criado com sucesso!' });
+    navigation.goBack();
+  }
+
+  async function _selectUtrCandidate(candidate: UtrCandidate) {
+    if (!createdProfileId || utrLinking) return;
+    setUtrLinking(true);
+    try {
+      await linkUtr(createdProfileId, candidate);
+    } catch {
+      // Non-blocking
+    } finally {
+      setUtrLinking(false);
+      _finishUtr();
+    }
+  }
+
+  // ── UTR step screen ──────────────────────────────────────────────────────────
+  if (utrStep) {
+    return (
+      <Screen>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <Ionicons name="tennisball-outline" size={22} color={colors.accentNeon} />
+          <SectionHeader title="Seu perfil na UTR" />
+        </View>
+        <AppText variant="muted" style={{ marginTop: -8, marginBottom: 16 }}>
+          Encontramos estes possíveis perfis na UTR. Algum deles é você?
+        </AppText>
+
+        <Card>
+          {utrSearching ? (
+            <View style={{ paddingVertical: 24, alignItems: 'center', gap: 10 }}>
+              <ActivityIndicator color={colors.accentNeon} />
+              <AppText variant="muted" style={{ fontSize: 12 }}>Buscando seu perfil UTR...</AppText>
+            </View>
+          ) : utrCandidates.length === 0 ? (
+            <View style={{ paddingVertical: 16, alignItems: 'center', gap: 8 }}>
+              <Ionicons name="search-outline" size={36} color={colors.textMuted} />
+              <AppText variant="muted" style={{ textAlign: 'center', fontSize: 13 }}>
+                Não encontramos perfis UTR para este nome.{'\n'}Você poderá vincular depois em Configurações.
+              </AppText>
+            </View>
+          ) : (
+            <>
+              {utrCandidates.map((c) => (
+                <View
+                  key={c.utr_player_id}
+                  style={{
+                    backgroundColor: colors.bgBase,
+                    borderRadius: 12, borderWidth: 1, borderColor: colors.borderSubtle,
+                    padding: 14, marginBottom: 10,
+                  }}
+                >
+                  <AppText style={{ fontWeight: '700', fontSize: 15, color: colors.textPrimary, marginBottom: 2 }}>
+                    {c.display_name}
+                  </AppText>
+                  <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                    {c.country ? <AppText variant="muted" style={{ fontSize: 11 }}>{c.country}</AppText> : null}
+                    {c.location ? <AppText variant="muted" style={{ fontSize: 11 }}>· {c.location}</AppText> : null}
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 24, marginBottom: 12 }}>
+                    <View style={{ alignItems: 'center' }}>
+                      <AppText style={{ fontSize: 22, fontWeight: '900', color: c.singles_utr ? colors.textPrimary : colors.textMuted }}>
+                        {c.singles_utr || '—'}
+                      </AppText>
+                      <AppText variant="muted" style={{ fontSize: 10 }}>UTR Simples</AppText>
+                    </View>
+                    <View style={{ alignItems: 'center' }}>
+                      <AppText style={{ fontSize: 22, fontWeight: '900', color: c.doubles_utr ? colors.textPrimary : colors.textMuted }}>
+                        {c.doubles_utr || '—'}
+                      </AppText>
+                      <AppText variant="muted" style={{ fontSize: 10 }}>UTR Duplas</AppText>
+                    </View>
+                  </View>
+                  {c.profile_url ? (
+                    <AppText variant="muted" style={{ fontSize: 10, marginBottom: 10 }}>ID: {c.utr_player_id}</AppText>
+                  ) : null}
+                  <Button
+                    title={utrLinking ? 'Salvando...' : 'Este sou eu'}
+                    variant="secondary"
+                    onPress={() => _selectUtrCandidate(c)}
+                  />
+                </View>
+              ))}
+            </>
+          )}
+        </Card>
+
+        <Button
+          title="Não sou nenhum desses"
+          variant="ghost"
+          onPress={_finishUtr}
+        />
+      </Screen>
+    );
   }
 
   return (

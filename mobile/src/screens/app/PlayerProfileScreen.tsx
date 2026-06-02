@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { Image, Linking, Pressable, View } from 'react-native';
+import { ActivityIndicator, Alert as RNAlert, Image, Linking, Modal, Pressable, TextInput, View } from 'react-native';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -7,10 +7,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { MainStackParamList, MainTabParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { fetchTiData, listProfiles, syncTiData } from '../../services/data';
+import { fetchTiData, linkUtr, listProfiles, searchUtr, syncTiData, syncUtr, unlinkUtr } from '../../services/data';
 import { myRegistrations } from '../../services/registrations';
 import { mediaUrl } from '../../services/api';
-import { PlayerProfile, TiData, TiRankingEntry, TournamentRegistration } from '../../types';
+import { PlayerProfile, TiData, TiRankingEntry, TournamentRegistration, UtrCandidate } from '../../types';
 import { GENDER_LABELS, LEVEL_LABELS, ROLE_LABELS } from '../../utils/format';
 import { AppText, Button, Card, EmptyState, LoadingBlock, Screen, SectionHeader } from '../../components/ui';
 
@@ -57,6 +57,15 @@ export function PlayerProfileScreen(_: Props) {
   const [tiData, setTiData] = useState<TiData | null>(null);
   const [tiLoading, setTiLoading] = useState(false);
   const [tiSyncing, setTiSyncing] = useState(false);
+
+  // UTR modal state
+  const [utrModalVisible, setUtrModalVisible] = useState(false);
+  const [utrQuery, setUtrQuery] = useState('');
+  const [utrSearching, setUtrSearching] = useState(false);
+  const [utrCandidates, setUtrCandidates] = useState<UtrCandidate[]>([]);
+  const [utrSearchError, setUtrSearchError] = useState('');
+  const [utrLinking, setUtrLinking] = useState(false);
+  const [utrSyncing, setUtrSyncing] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -278,6 +287,168 @@ export function PlayerProfileScreen(_: Props) {
                 </>
               ) : null}
 
+              {/* ── UTR Rating ────────────────────────────────────── */}
+              <UtrSection
+                profile={primary}
+                utrSyncing={utrSyncing}
+                colors={colors}
+                onOpenModal={() => {
+                  setUtrQuery(primary.display_name || '');
+                  setUtrCandidates([]);
+                  setUtrSearchError('');
+                  setUtrModalVisible(true);
+                }}
+                onSync={async () => {
+                  if (!primary) return;
+                  setUtrSyncing(true);
+                  try {
+                    await syncUtr(primary.id);
+                    const profs = await listProfiles();
+                    setProfiles(profs as PlayerProfile[]);
+                  } catch { /* ignore */ } finally { setUtrSyncing(false); }
+                }}
+                onUnlink={() => {
+                  RNAlert.alert(
+                    'Remover vínculo UTR',
+                    'Tem certeza que deseja remover o vínculo com este perfil UTR?',
+                    [
+                      { text: 'Cancelar', style: 'cancel' },
+                      {
+                        text: 'Remover', style: 'destructive',
+                        onPress: async () => {
+                          if (!primary) return;
+                          try {
+                            await unlinkUtr(primary.id);
+                            const profs = await listProfiles();
+                            setProfiles(profs as PlayerProfile[]);
+                          } catch { /* ignore */ }
+                        },
+                      },
+                    ],
+                  );
+                }}
+              />
+
+              {/* ── Modal de busca UTR ────────────────────────────── */}
+              <Modal
+                visible={utrModalVisible}
+                animationType="slide"
+                presentationStyle="pageSheet"
+                onRequestClose={() => setUtrModalVisible(false)}
+              >
+                <View style={{ flex: 1, backgroundColor: colors.bgBase, padding: 20 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
+                    <AppText variant="title" style={{ flex: 1 }}>Vincular perfil UTR</AppText>
+                    <Pressable onPress={() => setUtrModalVisible(false)} hitSlop={10}>
+                      <Ionicons name="close" size={24} color={colors.textSecondary} />
+                    </Pressable>
+                  </View>
+
+                  <AppText variant="caption" style={{ marginBottom: 12, color: colors.textMuted }}>
+                    Busque seu nome na UTR e confirme qual perfil é o seu.
+                  </AppText>
+
+                  <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+                    <TextInput
+                      value={utrQuery}
+                      onChangeText={setUtrQuery}
+                      placeholder="Nome do atleta..."
+                      placeholderTextColor={colors.textMuted}
+                      style={{
+                        flex: 1, backgroundColor: colors.bgCard, color: colors.textPrimary,
+                        borderWidth: 1, borderColor: colors.borderSubtle, borderRadius: 10,
+                        paddingHorizontal: 14, paddingVertical: 10, fontSize: 14,
+                      }}
+                      autoCapitalize="words"
+                      returnKeyType="search"
+                      onSubmitEditing={async () => {
+                        if (!primary || utrQuery.trim().length < 2) return;
+                        setUtrSearching(true);
+                        setUtrSearchError('');
+                        setUtrCandidates([]);
+                        try {
+                          const result = await searchUtr(primary.id, utrQuery.trim());
+                          setUtrCandidates(result.candidates);
+                          if (result.candidates.length === 0) setUtrSearchError('Nenhum perfil encontrado. Tente outro nome.');
+                        } catch { setUtrSearchError('Não foi possível buscar. Verifique sua conexão.'); }
+                        finally { setUtrSearching(false); }
+                      }}
+                    />
+                    <Pressable
+                      onPress={async () => {
+                        if (!primary || utrQuery.trim().length < 2) return;
+                        setUtrSearching(true);
+                        setUtrSearchError('');
+                        setUtrCandidates([]);
+                        try {
+                          const result = await searchUtr(primary.id, utrQuery.trim());
+                          setUtrCandidates(result.candidates);
+                          if (result.candidates.length === 0) setUtrSearchError('Nenhum perfil encontrado. Tente outro nome.');
+                        } catch { setUtrSearchError('Não foi possível buscar. Verifique sua conexão.'); }
+                        finally { setUtrSearching(false); }
+                      }}
+                      style={{ backgroundColor: colors.accentNeon, borderRadius: 10, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center' }}
+                    >
+                      {utrSearching
+                        ? <ActivityIndicator size="small" color="#000" />
+                        : <Ionicons name="search" size={18} color="#000" />}
+                    </Pressable>
+                  </View>
+
+                  {utrSearchError ? (
+                    <AppText variant="muted" style={{ color: colors.danger, marginBottom: 8 }}>{utrSearchError}</AppText>
+                  ) : null}
+
+                  {utrCandidates.map((c) => (
+                    <View
+                      key={c.utr_player_id}
+                      style={{ backgroundColor: colors.bgCard, borderRadius: 12, borderWidth: 1, borderColor: colors.borderSubtle, padding: 14, marginBottom: 10 }}
+                    >
+                      <AppText style={{ fontWeight: '700', fontSize: 15, color: colors.textPrimary, marginBottom: 2 }}>{c.display_name}</AppText>
+                      <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+                        {c.country ? <AppText variant="muted" style={{ fontSize: 11 }}>{c.country}</AppText> : null}
+                        {c.location ? <AppText variant="muted" style={{ fontSize: 11 }}>• {c.location}</AppText> : null}
+                        {c.gender ? <AppText variant="muted" style={{ fontSize: 11 }}>• {c.gender}</AppText> : null}
+                      </View>
+                      <View style={{ flexDirection: 'row', gap: 16, marginBottom: 10 }}>
+                        {c.singles_utr ? (
+                          <View>
+                            <AppText style={{ fontSize: 20, fontWeight: '900', color: colors.accentNeon }}>{c.singles_utr}</AppText>
+                            <AppText variant="muted" style={{ fontSize: 10 }}>Simples</AppText>
+                          </View>
+                        ) : null}
+                        {c.doubles_utr ? (
+                          <View>
+                            <AppText style={{ fontSize: 20, fontWeight: '900', color: colors.accentBlue }}>{c.doubles_utr}</AppText>
+                            <AppText variant="muted" style={{ fontSize: 10 }}>Duplas</AppText>
+                          </View>
+                        ) : null}
+                        {!c.singles_utr && !c.doubles_utr ? (
+                          <AppText variant="muted" style={{ fontSize: 12 }}>Rating não disponível na busca</AppText>
+                        ) : null}
+                      </View>
+                      <AppText variant="muted" style={{ fontSize: 10, marginBottom: 8 }}>ID: {c.utr_player_id}</AppText>
+                      <Button
+                        title={utrLinking ? 'Vinculando...' : 'Este sou eu — vincular'}
+                        variant="secondary"
+                        onPress={async () => {
+                          if (!primary || utrLinking) return;
+                          setUtrLinking(true);
+                          try {
+                            await linkUtr(primary.id, c);
+                            const profs = await listProfiles();
+                            setProfiles(profs as PlayerProfile[]);
+                            setUtrModalVisible(false);
+                          } catch {
+                            setUtrSearchError('Falha ao vincular. Tente novamente.');
+                          } finally { setUtrLinking(false); }
+                        }}
+                      />
+                    </View>
+                  ))}
+                </View>
+              </Modal>
+
               {/* ── Vínculos com Tênis Integrado ──────────────────── */}
               {tiLinks.length > 0 ? (
                 <>
@@ -460,6 +631,94 @@ function RankingsMobile({ rankings, isStale, colors }: { rankings: TiRankingEntr
         <AppText variant="muted" style={{ fontSize: 10, textAlign: 'center' }}>Dados podem estar desatualizados. Toque em ↻ para atualizar.</AppText>
       )}
     </View>
+  );
+}
+
+// ── UtrSection ───────────────────────────────────────────────────────────────
+
+function UtrSection({
+  profile, utrSyncing, colors, onOpenModal, onSync, onUnlink,
+}: {
+  profile: PlayerProfile;
+  utrSyncing: boolean;
+  colors: any;
+  onOpenModal: () => void;
+  onSync: () => void;
+  onUnlink: () => void;
+}) {
+  const hasUtr = !!profile.utr_player_id;
+
+  return (
+    <>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, marginTop: 4 }}>
+        <AppText variant="section">UTR Rating</AppText>
+        {hasUtr ? (
+          <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+            <Pressable onPress={onSync} disabled={utrSyncing} hitSlop={8}>
+              <Ionicons name={utrSyncing ? 'refresh' : 'refresh-outline'} size={16} color={utrSyncing ? colors.accentNeon : colors.textMuted} />
+            </Pressable>
+            <Pressable onPress={onUnlink} hitSlop={8}>
+              <Ionicons name="unlink-outline" size={16} color={colors.textMuted} />
+            </Pressable>
+          </View>
+        ) : null}
+      </View>
+
+      {hasUtr ? (
+        <View style={{ backgroundColor: colors.bgCard, borderRadius: 16, borderWidth: 1, borderColor: colors.borderSubtle, overflow: 'hidden', marginBottom: 12 }}>
+          {/* Header UTR */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: `${colors.bgElevated}CC`, borderBottomWidth: 1, borderBottomColor: colors.borderSubtle }}>
+            <Ionicons name="tennisball-outline" size={13} color={colors.accentNeon} />
+            <AppText variant="caption" style={{ color: colors.accentNeon, fontWeight: '700', fontSize: 12 }}>UTR — Universal Tennis Rating</AppText>
+          </View>
+
+          {/* Ratings row */}
+          <View style={{ flexDirection: 'row' }}>
+            <View style={{ flex: 1, alignItems: 'center', paddingVertical: 18, borderRightWidth: 1, borderRightColor: colors.borderSubtle }}>
+              <AppText style={{ fontSize: 28, fontWeight: '900', color: colors.textPrimary }}>
+                {profile.utr_singles || '—'}
+              </AppText>
+              <AppText variant="muted" style={{ fontSize: 11, marginTop: 2 }}>Simples</AppText>
+            </View>
+            <View style={{ flex: 1, alignItems: 'center', paddingVertical: 18 }}>
+              <AppText style={{ fontSize: 28, fontWeight: '900', color: colors.textPrimary }}>
+                {profile.utr_doubles || '—'}
+              </AppText>
+              <AppText variant="muted" style={{ fontSize: 11, marginTop: 2 }}>Duplas</AppText>
+            </View>
+          </View>
+
+          {/* Footer */}
+          <View style={{ paddingHorizontal: 14, paddingVertical: 8, borderTopWidth: 1, borderTopColor: colors.borderSubtle, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <AppText variant="muted" style={{ fontSize: 10 }}>
+              {profile.utr_display_name || `ID: ${profile.utr_player_id}`}
+            </AppText>
+            {profile.utr_profile_url ? (
+              <Pressable onPress={() => Linking.openURL(profile.utr_profile_url)} hitSlop={8}>
+                <Ionicons name="open-outline" size={13} color={colors.accentBlue} />
+              </Pressable>
+            ) : null}
+          </View>
+        </View>
+      ) : (
+        <View style={{ backgroundColor: colors.bgCard, borderRadius: 16, borderWidth: 1, borderColor: colors.borderSubtle, padding: 14, marginBottom: 12, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <Ionicons name="tennisball-outline" size={20} color={colors.textMuted} />
+          <View style={{ flex: 1 }}>
+            <AppText variant="caption" style={{ fontWeight: '600', marginBottom: 1 }}>UTR não vinculado</AppText>
+            <AppText variant="muted" style={{ fontSize: 11 }}>
+              Vincule seu perfil UTR para exibir seu rating.
+            </AppText>
+          </View>
+          <Pressable
+            onPress={onOpenModal}
+            hitSlop={8}
+            style={{ backgroundColor: `${colors.accentNeon}18`, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: `${colors.accentNeon}33` }}
+          >
+            <AppText style={{ fontSize: 11, color: colors.accentNeon, fontWeight: '700' }}>Vincular</AppText>
+          </Pressable>
+        </View>
+      )}
+    </>
   );
 }
 

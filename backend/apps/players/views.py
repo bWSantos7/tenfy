@@ -15,8 +15,9 @@ from .serializers import (
 
 logger = logging.getLogger('apps.players')
 
-_TI_CACHE_TTL = timedelta(hours=2)    # serve from cache if younger than this
-_TI_SYNC_COOLDOWN = timedelta(minutes=30)  # min interval between forced re-syncs
+_TI_CACHE_TTL = timedelta(hours=2)
+_TI_SYNC_COOLDOWN = timedelta(minutes=30)
+_UTR_SYNC_COOLDOWN = timedelta(minutes=30)
 
 
 class PlayerProfileViewSet(viewsets.ModelViewSet):
@@ -32,7 +33,6 @@ class PlayerProfileViewSet(viewsets.ModelViewSet):
             child_ids = list(
                 ParentChild.objects.filter(parent=user, is_active=True).values_list('child_id', flat=True)
             )
-            # Optional filter: parent requesting a specific child's profiles
             child_user_id = self.request.query_params.get('user_id')
             if child_user_id:
                 try:
@@ -57,13 +57,10 @@ class PlayerProfileViewSet(viewsets.ModelViewSet):
         )
 
     def _is_managed_child(self):
-        """Check if the current user is a child account managed by a parent."""
         from apps.accounts.models import ParentChild
         return ParentChild.objects.filter(child=self.request.user, is_active=True).exists()
 
     def create(self, request, *args, **kwargs):
-        # Managed children can only create their very first (primary) profile
-        # during onboarding. Additional profiles must be created by the parent.
         if self._is_managed_child():
             already_has_profile = PlayerProfile.objects.filter(user=request.user).exists()
             if already_has_profile:
@@ -71,7 +68,6 @@ class PlayerProfileViewSet(viewsets.ModelViewSet):
                     {'detail': 'Contas de filho não podem criar perfis esportivos adicionais. Peça ao responsável para gerenciar seus perfis.'},
                     status=status.HTTP_403_FORBIDDEN,
                 )
-        # Enforce dependent profile limit for parent accounts
         if request.user.role == 'parent':
             from apps.billing.models import Subscription
             current_count = PlayerProfile.objects.filter(user=request.user).count()
@@ -79,7 +75,7 @@ class PlayerProfileViewSet(viewsets.ModelViewSet):
                 sub = request.user.subscription
                 max_dependent_profiles = sub.plan.max_members - 1
             except Subscription.DoesNotExist:
-                max_dependent_profiles = 3  # safe default (tester plan: max_members=4 → 3 dependents)
+                max_dependent_profiles = 3
             if current_count >= max_dependent_profiles:
                 return Response(
                     {'detail': f'Limite de {max_dependent_profiles} perfil(is) de dependentes atingido para o seu plano.'},
@@ -93,7 +89,6 @@ class PlayerProfileViewSet(viewsets.ModelViewSet):
         match_new_profile_to_entries.delay(profile.pk)
 
     def destroy(self, request, *args, **kwargs):
-        # Managed children cannot delete profiles
         if self._is_managed_child():
             return Response(
                 {'detail': 'Contas de filho não podem remover perfis esportivos.'},
@@ -150,11 +145,6 @@ class PlayerProfileViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['get'], url_path='ti-data')
     def ti_data(self, request, pk=None):
-        """
-        Return cached Tênis Integrado results & rankings for a player profile.
-        Triggers a background sync if the cache is stale (> 2 h old).
-        Pass ?refresh=1 to force an inline re-sync (throttled to 30 min).
-        """
         profile = self.get_object()
 
         from .parsers import extract_ti_id, TenisScrapeError
@@ -180,8 +170,6 @@ class PlayerProfileViewSet(viewsets.ModelViewSet):
             or (now - profile.ti_rankings_synced_at) > _TI_CACHE_TTL
         )
 
-        # Inline sync when: forced, cache timestamps missing, or cache is empty
-        # (empty cache catches old broken syncs that returned no data)
         cache_empty = not profile.ti_results_cache and not profile.ti_rankings_cache
         if force_refresh or not profile.ti_results_synced_at or not profile.ti_rankings_synced_at or cache_empty:
             cooldown_ok = (
@@ -203,7 +191,6 @@ class PlayerProfileViewSet(viewsets.ModelViewSet):
 
             _sync_ti_data_inline(profile, ti_id)
         elif results_stale or rankings_stale:
-            # Background sync — don't block the response
             try:
                 from .tasks import sync_ti_data_task
                 sync_ti_data_task.delay(profile.pk)
@@ -232,7 +219,6 @@ class PlayerProfileViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'], url_path='ti-sync')
     def ti_sync(self, request, pk=None):
-        """Force an immediate re-sync of TI data. Throttled to once per 30 min."""
         profile = self.get_object()
 
         from .parsers import extract_ti_id
@@ -260,6 +246,140 @@ class PlayerProfileViewSet(viewsets.ModelViewSet):
             'rankings_count': len(profile.ti_rankings_cache or []),
             'synced_at': profile.ti_results_synced_at,
             'sync_error': profile.ti_sync_error or None,
+        })
+
+    # ── UTR (Universal Tennis Rating) ────────────────────────────────────────────
+
+    @action(detail=True, methods=['get'], url_path='utr-search')
+    def utr_search(self, request, pk=None):
+        """
+        Search UTR public API by player name.
+        GET /api/players/profiles/{id}/utr-search/?q=Julia+Nardy
+        Returns up to 8 candidates with name, location, UTR singles/doubles.
+        """
+        self.get_object()  # permission / ownership check
+
+        name = (request.query_params.get('q') or '').strip()
+        if not name or len(name) < 2:
+            return Response({'error': 'Informe pelo menos 2 caracteres no parâmetro q.'}, status=400)
+
+        try:
+            from .utr_service import search_utr_players
+            candidates = search_utr_players(name)
+            return Response({'candidates': candidates, 'query': name})
+        except Exception as exc:
+            logger.warning('UTR search error: %s', exc)
+            return Response({'error': 'Não foi possível buscar na UTR. Tente novamente.'}, status=503)
+
+    @action(detail=True, methods=['post'], url_path='utr-link')
+    def utr_link(self, request, pk=None):
+        """
+        Confirm and store a UTR profile for this player profile.
+
+        Body: { utr_player_id, display_name, singles_utr?, doubles_utr?, profile_url? }
+
+        After saving the candidate data, tries to enrich ratings by calling the
+        UTR player-detail API directly (fetch_utr_ratings_by_id), which is more
+        reliable than the search API for some profiles.
+        """
+        profile = self.get_object()
+
+        utr_player_id = str(request.data.get('utr_player_id') or '').strip()
+        if not utr_player_id:
+            return Response({'error': 'utr_player_id é obrigatório.'}, status=400)
+
+        display_name = str(request.data.get('display_name') or '').strip()
+        singles_utr  = str(request.data.get('singles_utr')  or '').strip()
+        doubles_utr  = str(request.data.get('doubles_utr')  or '').strip()
+        profile_url  = (
+            str(request.data.get('profile_url') or '').strip()
+            or f'https://app.utrsports.net/profiles/{utr_player_id}'
+        )
+
+        # No inline enrichment — the Celery task handles Playwright extraction
+
+        profile.utr_player_id   = utr_player_id
+        profile.utr_display_name = display_name
+        profile.utr_singles      = singles_utr
+        profile.utr_doubles      = doubles_utr
+        profile.utr_profile_url  = profile_url
+        profile.utr_synced_at    = timezone.now()
+        profile.utr_sync_error   = ''
+        profile.save(update_fields=[
+            'utr_player_id', 'utr_display_name', 'utr_singles', 'utr_doubles',
+            'utr_profile_url', 'utr_synced_at', 'utr_sync_error', 'updated_at',
+        ])
+
+        # Fire Celery task to open the profile in a headless browser and extract the real rating
+        try:
+            from .tasks import extract_utr_rating_task
+            extract_utr_rating_task.delay(profile.pk)
+        except Exception as exc:
+            logger.warning('Could not enqueue UTR extraction task for profile=%s: %s', profile.pk, exc)
+
+        return Response({
+            'detail': 'Perfil UTR vinculado. Rating sendo extraído em segundo plano.',
+            'utr_player_id':   profile.utr_player_id,
+            'utr_display_name': profile.utr_display_name,
+            'utr_singles':     profile.utr_singles,
+            'utr_doubles':     profile.utr_doubles,
+            'utr_profile_url': profile.utr_profile_url,
+            'utr_synced_at':   profile.utr_synced_at,
+        })
+
+    @action(detail=True, methods=['post'], url_path='utr-unlink')
+    def utr_unlink(self, request, pk=None):
+        """Remove the UTR profile link from this player profile."""
+        profile = self.get_object()
+        profile.utr_player_id    = ''
+        profile.utr_display_name = ''
+        profile.utr_singles      = ''
+        profile.utr_doubles      = ''
+        profile.utr_profile_url  = ''
+        profile.utr_synced_at    = None
+        profile.utr_sync_error   = ''
+        profile.save(update_fields=[
+            'utr_player_id', 'utr_display_name', 'utr_singles', 'utr_doubles',
+            'utr_profile_url', 'utr_synced_at', 'utr_sync_error', 'updated_at',
+        ])
+        return Response({'detail': 'Vínculo UTR removido.'})
+
+    @action(detail=True, methods=['post'], url_path='utr-sync')
+    def utr_sync(self, request, pk=None):
+        """
+        Refresh UTR rating for a linked profile.
+        Strategy: try player-detail endpoint by ID first; fall back to search by name.
+        Throttled to once per 30 min.
+        """
+        profile = self.get_object()
+
+        if not profile.utr_player_id:
+            return Response({'error': 'Nenhum perfil UTR vinculado.'}, status=400)
+
+        now = timezone.now()
+        if profile.utr_synced_at and (now - profile.utr_synced_at) < _UTR_SYNC_COOLDOWN:
+            wait = int((_UTR_SYNC_COOLDOWN - (now - profile.utr_synced_at)).total_seconds() / 60) + 1
+            return Response(
+                {'error': f'Aguarde {wait} minuto(s) antes de sincronizar novamente.'},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+
+        # Enqueue Playwright extraction task
+        try:
+            from .tasks import extract_utr_rating_task
+            extract_utr_rating_task.delay(profile.pk)
+            profile.utr_synced_at  = now
+            profile.utr_sync_error = ''
+            profile.save(update_fields=['utr_synced_at', 'utr_sync_error', 'updated_at'])
+        except Exception as exc:
+            logger.warning('Could not enqueue UTR extraction for profile=%s: %s', profile.pk, exc)
+            return Response({'error': 'Falha ao sincronizar UTR. Tente novamente.'}, status=503)
+
+        return Response({
+            'detail': 'Sincronização em andamento. O rating será atualizado em instantes.',
+            'utr_singles':    profile.utr_singles,
+            'utr_doubles':    profile.utr_doubles,
+            'utr_synced_at':  profile.utr_synced_at,
         })
 
 

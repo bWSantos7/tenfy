@@ -6,12 +6,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { AuthStackParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { createProfile } from '../../services/data';
+import { createProfile, linkUtr, searchUtr } from '../../services/data';
 import { extractApiError, storage } from '../../services/api';
 import { markProfileDirty } from '../../utils/profileRefresh';
 import { createChildAccount, register, sendEmailOtp, verifyEmailOtp } from '../../services/auth';
 import { checkout, fetchPlans, Plan } from '../../services/billing';
-import { User } from '../../types';
+import { UtrCandidate, User } from '../../types';
 import { LEVEL_LABELS, TENNIS_CLASS_LABELS } from '../../utils/format';
 import { MODALITY_OPTIONS, setProfileModality } from '../../utils/profileModality';
 import { AppText, Button, Card, Checkbox, Input, MultiSelectField, Screen, SelectField } from '../../components/ui';
@@ -33,7 +33,7 @@ function passwordStrength(pwd: string, c: AppColors): { score: number; label: st
 }
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Register'>;
-type Step = 'plan' | 'form' | 'otp' | 'payment' | 'profile' | 'dependent' | 'done_parent';
+type Step = 'plan' | 'form' | 'otp' | 'payment' | 'profile' | 'utr' | 'dependent' | 'done_parent';
 type PlanSlug = 'free' | 'individual' | 'familia' | 'tester';
 
 // Hardcoded fallback shown while API loads or if it fails
@@ -129,6 +129,12 @@ export function RegisterScreen({ navigation }: Props) {
   });
   const [cities, setCities]     = useState<{ value: string; label: string }[]>([]);
   const [loadingCities, setLoadingCities] = useState(false);
+
+  // ── UTR state ────────────────────────────────────────────────────────────────
+  const [utrCandidates, setUtrCandidates] = useState<UtrCandidate[]>([]);
+  const [utrSearching, setUtrSearching] = useState(false);
+  const [utrLinking, setUtrLinking] = useState(false);
+  const [createdProfileId, setCreatedProfileId] = useState<number | null>(null);
 
   // ── Payment state ────────────────────────────────────────────────────────────
   const [paymentLoading, setPaymentLoading] = useState(false);
@@ -284,13 +290,20 @@ export function RegisterScreen({ navigation }: Props) {
       if (profile.modality && created?.id) await setProfileModality(created.id, profile.modality);
       markProfileDirty();
       await storage.set('th_just_registered', '1');
-      if (registeredUser) setUser(registeredUser);
-      Toast.show({ type: 'success', text1: 'Perfil criado! Bem-vindo!' });
+
+      if (created?.id) {
+        setCreatedProfileId(created.id);
+        setStep('utr');
+        // Start UTR search in background — non-blocking
+        _searchUtrForProfile(created.id, profile.display_name || form.full_name || '');
+      } else {
+        if (registeredUser) setUser(registeredUser);
+        Toast.show({ type: 'success', text1: 'Perfil criado! Bem-vindo!' });
+      }
     } catch (err: any) {
       const httpStatus: number | undefined = err?.response?.status;
       const isServerOrNetwork = !httpStatus || httpStatus >= 500;
       if (isServerOrNetwork) {
-        // Server/network error — let user in so registration isn't blocked
         Toast.show({
           type: 'info',
           text1: 'Perfil não configurado',
@@ -302,6 +315,38 @@ export function RegisterScreen({ navigation }: Props) {
         Toast.show({ type: 'error', text1: 'Erro ao finalizar cadastro', text2: extractApiError(err), visibilityTime: 5000 });
       }
     } finally { setSubmitting(false); }
+  }
+
+  async function _searchUtrForProfile(profileId: number, name: string) {
+    if (!name.trim() || name.trim().length < 2) return;
+    setUtrSearching(true);
+    setUtrCandidates([]);
+    try {
+      const result = await searchUtr(profileId, name.trim());
+      setUtrCandidates((result.candidates ?? []).slice(0, 3));
+    } catch {
+      // Silently fail — user continues normally without UTR
+    } finally {
+      setUtrSearching(false);
+    }
+  }
+
+  function _finishAfterUtr() {
+    if (registeredUser) setUser(registeredUser);
+    Toast.show({ type: 'success', text1: 'Bem-vindo!' });
+  }
+
+  async function _onSelectUtrCandidate(candidate: UtrCandidate) {
+    if (!createdProfileId || utrLinking) return;
+    setUtrLinking(true);
+    try {
+      await linkUtr(createdProfileId, candidate);
+    } catch {
+      // Non-blocking — proceed even if linking fails
+    } finally {
+      setUtrLinking(false);
+      _finishAfterUtr();
+    }
   }
 
   async function onCreateDependent() {
@@ -639,6 +684,79 @@ export function RegisterScreen({ navigation }: Props) {
 
             <Button title="Finalizar cadastro" onPress={onFinish} loading={submitting} />
             <Button title="Pular (configurar depois)" variant="ghost" onPress={() => { if (registeredUser) setUser(registeredUser); }} />
+          </>
+        ) : null}
+
+        {/* ── Step: UTR profile linking ─────────────────────────────────── */}
+        {step === 'utr' ? (
+          <>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <Ionicons name="tennisball-outline" size={20} color={colors.accentNeon} />
+              <AppText variant="body" style={{ fontWeight: '600' }}>Seu perfil na UTR</AppText>
+            </View>
+            <AppText variant="muted" style={{ marginBottom: 16 }}>
+              Encontramos estes possíveis perfis na UTR. Algum deles é você?
+            </AppText>
+
+            {utrSearching ? (
+              <View style={{ paddingVertical: 24, alignItems: 'center', gap: 10 }}>
+                <ActivityIndicator color={colors.accentNeon} />
+                <AppText variant="muted" style={{ fontSize: 12 }}>Buscando seu perfil UTR...</AppText>
+              </View>
+            ) : utrCandidates.length === 0 ? (
+              <View style={{ paddingVertical: 16, alignItems: 'center', gap: 6 }}>
+                <Ionicons name="search-outline" size={32} color={colors.textMuted} />
+                <AppText variant="muted" style={{ textAlign: 'center', fontSize: 13 }}>
+                  Não encontramos perfis UTR para este nome.{'\n'}Você poderá vincular depois no seu perfil.
+                </AppText>
+              </View>
+            ) : (
+              <>
+                {utrCandidates.map((c) => (
+                  <View
+                    key={c.utr_player_id}
+                    style={{
+                      backgroundColor: colors.bgCard,
+                      borderRadius: 14, borderWidth: 1, borderColor: colors.borderSubtle,
+                      padding: 14, marginBottom: 10,
+                    }}
+                  >
+                    <AppText style={{ fontWeight: '700', fontSize: 15, color: colors.textPrimary, marginBottom: 2 }}>
+                      {c.display_name}
+                    </AppText>
+                    <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                      {c.country ? <AppText variant="muted" style={{ fontSize: 11 }}>{c.country}</AppText> : null}
+                      {c.location ? <AppText variant="muted" style={{ fontSize: 11 }}>· {c.location}</AppText> : null}
+                    </View>
+                    <View style={{ flexDirection: 'row', gap: 20, marginBottom: 12 }}>
+                      <View style={{ alignItems: 'center' }}>
+                        <AppText style={{ fontSize: 22, fontWeight: '900', color: c.singles_utr ? colors.textPrimary : colors.textMuted }}>
+                          {c.singles_utr || '—'}
+                        </AppText>
+                        <AppText variant="muted" style={{ fontSize: 10 }}>UTR Simples</AppText>
+                      </View>
+                      <View style={{ alignItems: 'center' }}>
+                        <AppText style={{ fontSize: 22, fontWeight: '900', color: c.doubles_utr ? colors.textPrimary : colors.textMuted }}>
+                          {c.doubles_utr || '—'}
+                        </AppText>
+                        <AppText variant="muted" style={{ fontSize: 10 }}>UTR Duplas</AppText>
+                      </View>
+                    </View>
+                    <Button
+                      title={utrLinking ? 'Salvando...' : 'Este sou eu'}
+                      variant="secondary"
+                      onPress={() => _onSelectUtrCandidate(c)}
+                    />
+                  </View>
+                ))}
+              </>
+            )}
+
+            <Button
+              title="Não sou nenhum desses"
+              variant="ghost"
+              onPress={_finishAfterUtr}
+            />
           </>
         ) : null}
 

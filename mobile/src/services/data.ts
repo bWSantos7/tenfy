@@ -1,5 +1,5 @@
 import api from './api';
-import { Alert, CoachAthlete, DependentInvite, Paginated, ParentChild, PlayerCategory, PlayerProfile, PlayerSearchResult, TiData, WatchlistItem } from '../types';
+import { Alert, CoachAthlete, DependentInvite, Paginated, ParentChild, PlayerCategory, PlayerProfile, PlayerSearchResult, TiData, UtrCandidate, UtrSearchResult, WatchlistItem } from '../types';
 
 // ----- Players -----
 export async function listProfiles() {
@@ -177,6 +177,38 @@ export async function fetchTiData(profileId: number, refresh = false): Promise<T
 
 export async function syncTiData(profileId: number): Promise<{ detail: string; results_count: number; rankings_count: number }> {
   const res = await api.post(`/api/players/profiles/${profileId}/ti-sync/`);
+  return res.data;
+}
+
+// ----- UTR (Universal Tennis Rating) -----
+
+export async function searchUtr(profileId: number, name: string): Promise<UtrSearchResult> {
+  const res = await api.get<UtrSearchResult>(
+    `/api/players/profiles/${profileId}/utr-search/?q=${encodeURIComponent(name)}`,
+  );
+  return res.data;
+}
+
+export async function linkUtr(
+  profileId: number,
+  candidate: Pick<UtrCandidate, 'utr_player_id' | 'display_name' | 'singles_utr' | 'doubles_utr' | 'profile_url'>,
+): Promise<PlayerProfile> {
+  const res = await api.post<PlayerProfile>(`/api/players/profiles/${profileId}/utr-link/`, {
+    utr_player_id: candidate.utr_player_id,
+    display_name: candidate.display_name,
+    singles_utr: candidate.singles_utr ?? '',
+    doubles_utr: candidate.doubles_utr ?? '',
+    profile_url: candidate.profile_url,
+  });
+  return res.data;
+}
+
+export async function unlinkUtr(profileId: number): Promise<void> {
+  await api.post(`/api/players/profiles/${profileId}/utr-unlink/`);
+}
+
+export async function syncUtr(profileId: number): Promise<{ utr_singles: string; utr_doubles: string }> {
+  const res = await api.post(`/api/players/profiles/${profileId}/utr-sync/`);
   return res.data;
 }
 

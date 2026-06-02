@@ -34,8 +34,15 @@ class PlayerProfileSerializer(serializers.ModelSerializer):
             'competitive_level', 'dominant_hand', 'tennis_class', 'preferred_modality',
             'is_primary', 'external_ids', 'categories', 'sporting_age',
             'created_at', 'updated_at',
+            # UTR
+            'utr_player_id', 'utr_display_name', 'utr_singles', 'utr_doubles',
+            'utr_profile_url', 'utr_synced_at',
         )
-        read_only_fields = ('created_at', 'updated_at', 'sporting_age')
+        read_only_fields = (
+            'created_at', 'updated_at', 'sporting_age',
+            'utr_player_id', 'utr_display_name', 'utr_singles', 'utr_doubles',
+            'utr_profile_url', 'utr_synced_at',
+        )
 
     def create(self, validated_data):
         user = self.context['request'].user

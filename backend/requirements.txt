@@ -30,3 +30,4 @@ cloudinary==1.40.0
 django-cloudinary-storage==0.3.0
 pywebpush==2.0.0
 pymongo==4.7.2
+playwright==1.44.0

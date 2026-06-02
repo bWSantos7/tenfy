@@ -9,6 +9,7 @@ from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from apps.audit.models import AuditLog
 from apps.core.permissions import IsAdmin
 from apps.core.throttles import HeavyUserThrottle
 from .filters import TournamentEditionFilter
@@ -48,23 +49,31 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
         Replicates compute_dynamic_status() logic as a SQL annotation so ordering
         uses the live calculated status instead of the stored status field.
         Fixes cases where status='open' but dynamic_status='announced' or 'finished'.
+
+        Priority scale (lower = shown first):
+          0 = closing_soon / open (actionable now)
+          1 = in_progress
+          2 = registrations closed
+          3 = announced / unknown
+          4 = finished
+          5 = canceled
         """
         now = timezone.now()
         today = now.date()
         soon = now + timedelta(days=3)
-        # Q-based condition: status=open but no entry dates → announced priority
+        # Q-based condition: status=open but no entry dates → treat as announced
         open_no_dates = Q(status='open') & Q(entry_close_at__isnull=True) & Q(entry_open_at__isnull=True)
         return Case(
-            When(status='canceled',          then=Value(5)),
-            When(status='finished',          then=Value(4)),
-            When(end_date__lt=today,         then=Value(4)),   # past end_date → finished
-            When(start_date__lte=today,      then=Value(1)),   # started → in_progress
-            When(entry_close_at__lt=now,     then=Value(2)),   # registrations closed
-            When(entry_close_at__lte=soon,   then=Value(0)),   # closing in ≤3 days
-            When(entry_close_at__isnull=False, then=Value(0)), # open with known deadline
-            When(entry_open_at__lte=now,     then=Value(0)),   # registration period opened
-            When(open_no_dates,              then=Value(1)),   # open status, no dates → announced
-            default=Value(1),                                   # announced / unknown
+            When(status='canceled',            then=Value(5)),
+            When(status='finished',            then=Value(4)),
+            When(end_date__lt=today,           then=Value(4)),  # past end_date → finished
+            When(start_date__lte=today,        then=Value(1)),  # started → in_progress
+            When(entry_close_at__lt=now,       then=Value(2)),  # registrations closed
+            When(entry_close_at__lte=soon,     then=Value(0)),  # closing in ≤3 days
+            When(entry_close_at__isnull=False, then=Value(0)),  # open with known deadline
+            When(entry_open_at__lte=now,       then=Value(0)),  # registration period opened
+            When(open_no_dates,                then=Value(3)),  # open status, no dates → announced
+            default=Value(3),                                    # announced / unknown
             output_field=IntegerField(),
         )
 
@@ -270,6 +279,14 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
                 TournamentEdition.STATUS_CANCELED,
                 TournamentEdition.STATUS_FINISHED,
             ]
+        ).exclude(
+            # ITF e COSAT são torneios por classificação/ranking, não por inscrição paga.
+            # Não devem aparecer em "Compatíveis com você" na tela inicial.
+            Q(external_id__startswith='itf:')
+            | Q(tournament__organization__short_name__iexact='ITF')
+            | Q(tournament__organization__short_name__iexact='COSAT')
+            | Q(tournament__organization__name__icontains='International Tennis Federation')
+            | Q(tournament__organization__name__icontains='COSAT')
         )
         category_filter = self._build_compatible_candidate_filter(profile)
         candidate_qs = qs.filter(category_filter).distinct().order_by('start_date', 'id')
@@ -388,8 +405,6 @@ class TournamentEditionAdminViewSet(viewsets.ModelViewSet):
             reviewed_at=timezone.now(),
             is_manual_override=True,
         )
-        from apps.audit.models import AuditLog
-
         AuditLog.objects.create(
             actor=self.request.user,
             action=AuditLog.ACTION_UPDATE,

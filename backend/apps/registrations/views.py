@@ -713,8 +713,6 @@ def _run_import(request):
                 warnings.append({'row': row_num, 'warning': f'player_external_id ausente para "{player_name}" — ID determinístico: {external_id}'})
 
             # Non-blocking warnings
-            if not external_id:
-                warnings.append({'row': row_num, 'warning': f'player_external_id ausente para "{player_name}" — dedup por nome apenas, risco de duplicata.'})
             if entry_data.get('ranking_position') is None:
                 warnings.append({'row': row_num, 'warning': f'ranking_position ausente para "{player_name}" — status/slot_position pode ficar impreciso.'})
             if not (entry_data.get('payment_status') or '').strip():
@@ -836,7 +834,7 @@ def _run_import(request):
     return Response(result)
 
 @api_view(['GET'])
-@permission_classes([permissions.AllowAny])
+@permission_classes([IsAdminUser])
 def debug_matching(request, edition_id):
     from .models import MatchingLog
     qs = MatchingLog.objects.all()
@@ -848,13 +846,13 @@ def debug_matching(request, edition_id):
     ))
     return Response({'edition_id': edition_id, 'logs': logs})
 
+
 @api_view(['GET'])
-@permission_classes([permissions.AllowAny])
+@permission_classes([IsAdminUser])
 def force_match_all(request):
-    from apps.tournaments.models import TournamentEdition
     from apps.watchlist.models import WatchlistItem
     from .tasks import match_federation_entries
-    
+
     editions = WatchlistItem.objects.values_list('edition_id', flat=True).distinct()
     results = []
     for ed_id in editions:
@@ -863,7 +861,7 @@ def force_match_all(request):
             results.append(res)
         except Exception as e:
             results.append({'edition_id': ed_id, 'error': str(e)})
-            
+
     return Response({'matched_editions': len(editions), 'results': results})
 
 

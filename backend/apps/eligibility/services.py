@@ -29,6 +29,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
 
+from django.utils import timezone
+
 from apps.players.models import PlayerCategory, PlayerProfile
 from apps.tournaments.models import TournamentCategory, TournamentEdition
 
@@ -85,7 +87,7 @@ class EligibilityEngine:
 
     def __init__(self, profile: PlayerProfile):
         self.profile = profile
-        self._current_year = datetime.now().year
+        self._current_year = timezone.now().year
 
     @property
     def sporting_age(self) -> Optional[int]:

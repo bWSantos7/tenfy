@@ -74,7 +74,7 @@ class CheckoutSerializer(serializers.Serializer):
     plan_slug      = serializers.ChoiceField(choices=['individual', 'familia', 'tester'])
     billing_period = serializers.ChoiceField(choices=['monthly', 'yearly'], default='monthly')
     payment_method = serializers.ChoiceField(
-        choices=['credit_card', 'pix', 'debit_card'], default='pix'
+        choices=['credit_card', 'pix', 'debit_card', 'boleto'], default='pix'
     )
     # PCI-DSS: backend only accepts a tokenized card reference, NEVER raw card data.
     # Client-side tokenization is performed directly with Asaas from the mobile device.

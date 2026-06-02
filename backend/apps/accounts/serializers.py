@@ -8,6 +8,10 @@ User = get_user_model()
 
 CURRENT_CONSENT_VERSION = '1.0.0'
 
+# Base URL for Tênis Integrado player avatar images (external S3 bucket, public CDN).
+# Format: {base}/id{ti_id}/fotos/avatar.jpg
+_TI_AVATAR_BASE_URL = 'https://tenis-integrado-prod.s3.amazonaws.com/sync-prod'
+
 
 class UserSerializer(serializers.ModelSerializer):
     managed_by_parent = serializers.SerializerMethodField()
@@ -41,7 +45,7 @@ class UserSerializer(serializers.ModelSerializer):
             ti_id, _ = extract_ti_id(profile.external_ids or {})
             if not ti_id:
                 return None
-            return f'https://tenis-integrado-prod.s3.amazonaws.com/sync-prod/id{ti_id}/fotos/avatar.jpg'
+            return f'{_TI_AVATAR_BASE_URL}/id{ti_id}/fotos/avatar.jpg'
         except Exception:
             return None
 

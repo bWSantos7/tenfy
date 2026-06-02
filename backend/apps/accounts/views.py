@@ -105,7 +105,7 @@ class CustomTokenObtainPairView(TokenObtainPairView):
         response = super().post(request, *args, **kwargs)
         if response.status_code == 200:
             ip = self._get_ip(request)
-            email = request.data.get('email')
+            email = request.data.get('email', '').strip().lower()
             if email:
                 try:
                     user = User.objects.get(email=email)
@@ -232,10 +232,14 @@ def delete_account(request):
     anon_token = secrets.token_hex(16)
 
     with transaction.atomic():
-        # Invalidate all JWT tokens
+        # Invalidate all JWT tokens by blacklisting every outstanding token
         try:
-            from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
-            OutstandingToken.objects.filter(user=user).update(token='')
+            from rest_framework_simplejwt.token_blacklist.models import (
+                BlacklistedToken,
+                OutstandingToken,
+            )
+            for outstanding in OutstandingToken.objects.filter(user=user):
+                BlacklistedToken.objects.get_or_create(token=outstanding)
         except Exception:
             pass
 
@@ -417,13 +421,6 @@ class ParentChildViewSet(viewsets.ModelViewSet):
         )
 
     def create(self, request, *args, **kwargs):
-        # Enforce role check — only parent/responsible accounts can add dependents
-        if request.user.role != 'parent':
-            return Response(
-                {'detail': 'Apenas contas do tipo Responsável/Pai podem cadastrar dependentes.'},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
         # Enforce plan-based dependent limit
         from apps.billing.models import Subscription, Plan
         current_dependents = ParentChild.objects.filter(parent=request.user, is_active=True).count()

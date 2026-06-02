@@ -14,6 +14,7 @@ Endpoints:
 import logging
 from datetime import date
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 
 from django.db import transaction
@@ -97,7 +98,6 @@ def subscription_checkout(request):
     d = ser.validated_data
 
     # Paid plans temporarily unavailable — only Free plan supported for now.
-    from django.conf import settings
     _TEMPORARILY_UNAVAILABLE = {'individual', 'familia'}
     if d['plan_slug'] in _TEMPORARILY_UNAVAILABLE and not getattr(settings, 'TESTING', False):
         return Response(
@@ -426,10 +426,19 @@ def _handle_payment_confirmed(payload: dict):
     asaas_sub_id = p.get('subscription', '')
     sub = _find_subscription_by_asaas(asaas_sub_id) if asaas_sub_id else None
 
+    user = sub.user if sub else _user_from_external_ref(p.get('externalReference', ''))
+    if user is None:
+        logger.error(
+            'PAYMENT_CONFIRMED: user not found for asaas_payment_id=%s externalReference=%s — '
+            'payment record not created. Check externalReference in Asaas subscription.',
+            p.get('id', ''), p.get('externalReference', ''),
+        )
+        return
+
     Payment.objects.update_or_create(
         asaas_payment_id=p.get('id', ''),
         defaults={
-            'user': sub.user if sub else _user_from_external_ref(p.get('externalReference', '')),
+            'user': user,
             'subscription': sub,
             'amount': p.get('value', 0),
             'payment_method': _map_billing_type(p.get('billingType', '')),
@@ -505,9 +514,13 @@ def _handle_subscription_created(payload: dict):
     if sub and sub.pending_plan_id:
         logger.info('Subscription %s created at Asaas; waiting for payment confirmation', sub.id)
         return
-    if sub and _transition_subscription(sub, Subscription.STATUS_ACTIVE, 'subscription_created'):
-        sub.status = Subscription.STATUS_ACTIVE
-        sub.save(update_fields=['status', 'updated_at'])
+    # Only activate subscriptions that are explicitly pending (awaiting first confirmation).
+    # Never re-activate expired or canceled subscriptions via this event alone — payment
+    # confirmation (PAYMENT_CONFIRMED) is the authoritative activation trigger.
+    if sub and sub.status == Subscription.STATUS_PENDING:
+        if _transition_subscription(sub, Subscription.STATUS_ACTIVE, 'subscription_created'):
+            sub.status = Subscription.STATUS_ACTIVE
+            sub.save(update_fields=['status', 'updated_at'])
 
 
 def _handle_subscription_updated(payload: dict):
@@ -610,10 +623,10 @@ def _log_action(user, action: str, detail: str):
     try:
         AuditLog.objects.create(
             actor=user,
-            action=action,
-            resource_type='subscription',
-            resource_id=str(user.id),
-            changes={'detail': detail},
+            action=AuditLog.ACTION_UPDATE,
+            entity_type='subscription',
+            entity_id=str(user.id),
+            diff={'action': action, 'detail': detail},
         )
     except Exception:
         pass

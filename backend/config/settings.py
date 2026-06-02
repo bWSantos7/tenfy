@@ -201,7 +201,9 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^http://localhost:(3000|5173|8081|19000|19006)$",
     r"^http://127\.0\.0\.1:(3000|5173|8081|19000|19006)$",
     r"^https://(api|www|app)\.tenfy\.com\.br$",
+    r"^https://tenfy\.com\.br$",           # bare domain (sem www)
     r"^https://(api|www|app)\.tennis\.app\.br$",
+    r"^https://tennis\.app\.br$",          # bare domain (sem www)
 ]
 
 # REST Framework

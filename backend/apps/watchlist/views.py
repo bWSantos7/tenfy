@@ -16,10 +16,10 @@ def _audit(user, action_name: str, resource_id: str, detail: str = ''):
         from apps.audit.models import AuditLog
         AuditLog.objects.create(
             actor=user,
-            action=action_name,
-            resource_type='watchlist',
-            resource_id=resource_id,
-            changes={'detail': detail},
+            action=AuditLog.ACTION_UPDATE,
+            entity_type='watchlist',
+            entity_id=resource_id,
+            diff={'action': action_name, 'detail': detail},
         )
     except Exception as exc:
         logger.warning('Audit log failed: %s', exc)

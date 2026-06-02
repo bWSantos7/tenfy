@@ -117,8 +117,9 @@ class Command(BaseCommand):
             action = 'Created' if created else 'Updated'
             self.stdout.write(f'  {action} feature: {code}')
 
-        # Upsert plans
+        # Upsert plans — use a shallow copy so the module-level PLANS constant is not mutated
         for plan_data in PLANS:
+            plan_data = dict(plan_data)  # copy before pop to preserve the original
             features = plan_data.pop('features')
             plan, created = Plan.objects.update_or_create(
                 slug=plan_data['slug'],
@@ -140,5 +141,5 @@ class Command(BaseCommand):
             if removed:
                 self.stdout.write(f'  Removed {removed} orphaned feature(s) from plan: {plan.slug}')
 
-        self.stdout.write(self.style.SUCCESS('Plans seeded: Individual e Família.'))
+        self.stdout.write(self.style.SUCCESS('Plans seeded: Tester, Individual e Família.'))
         self.stdout.write('Run with --deactivate-old to disable legacy free/pro/elite plans.')

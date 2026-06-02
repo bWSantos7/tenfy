@@ -226,7 +226,15 @@ class TournamentEdition(TimestampedModel):
             models.Index(fields=['raw_content_hash']),
             models.Index(fields=['dedup_fingerprint']),
         ]
-        unique_together = ('tournament', 'season_year', 'external_id')
+        constraints = [
+            # Only enforce uniqueness when external_id is non-empty.
+            # Blank external_id is allowed to repeat (editions without source ID).
+            models.UniqueConstraint(
+                fields=['tournament', 'season_year', 'external_id'],
+                condition=~models.Q(external_id=''),
+                name='unique_edition_external_id',
+            ),
+        ]
 
     def __str__(self):
         return f'{self.title} ({self.season_year})'

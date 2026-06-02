@@ -152,7 +152,15 @@ O MVP deve operar com dois conceitos de assinatura:
 - **Individual:** 1 usuário titular.
 - **Família:** 1 responsável pagante com perfis vinculados, dentro do limite definido no projeto.
 
-Os únicos planos comerciais permitidos no projeto são **Individual** e **Família**. A IA não deve criar, manter ou expandir planos `Free`, `Pro`, `Elite`, `Basic` ou equivalentes como estrutura de produto. Se o código ainda tiver referências antigas a esses nomes, tratar como débito técnico a ser migrado/removido com compatibilidade e sem migração destrutiva. Durante a transição, qualquer seed, serializer, regra de acesso, tela, copy ou integração de pagamento deve apontar para Individual/Família.
+Os planos permitidos no projeto são **Individual**, **Família** e **Tester**. A IA não deve criar, manter ou expandir planos `Free`, `Pro`, `Elite`, `Basic` ou equivalentes como estrutura de produto. Se o código ainda tiver referências antigas a esses nomes, tratar como débito técnico a ser migrado/removido com compatibilidade e sem migração destrutiva. Durante a transição, qualquer seed, serializer, regra de acesso, tela, copy ou integração de pagamento deve apontar para Individual/Família/Tester.
+
+**Plano Tester** é um plano interno/operacional, não comercial, utilizado para acesso antecipado por membros da equipe, parceiros e testes de produto. Suas características são:
+
+- Ativado imediatamente no checkout sem necessidade de pagamento (sem integração Asaas).
+- Não deve ser exibido em telas públicas de planos para usuários finais.
+- Pode ser concedido manualmente via painel admin ou seed.
+- Equivale funcionalmente ao Plano Individual em termos de permissões, salvo decisão explícita do contratante.
+- Slug: `tester`. Nunca remover nem renomear este slug sem migração.
 
 Plano Família deve considerar:
 
@@ -168,9 +176,9 @@ Regras:
 
 - Não liberar funcionalidades do Plano Família sem assinatura válida e permissão correta.
 - Não simular assinatura ativa com mock.
-- Não atualizar plano antes de pagamento confirmado.
-- Não criar novos planos fora de Individual/Família.
-- Não exibir no mobile/web/admin planos antigos como Free, Pro, Elite ou Basic, exceto em tela técnica de migração/admin quando necessário.
+- Não atualizar plano antes de pagamento confirmado (exceto Tester, que ativa imediatamente).
+- Não criar novos planos fora de Individual/Família/Tester.
+- Não exibir Tester nem planos antigos (Free, Pro, Elite, Basic) no mobile/web/admin para usuários finais, exceto em tela técnica de migração/admin quando necessário.
 - Documentar migrações, seeds e compatibilidade sempre que mexer em planos.
 
 ---

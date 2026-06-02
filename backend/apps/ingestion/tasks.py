@@ -290,3 +290,22 @@ def detect_tournament_changes():
         )
         closed_n += 1
     return {'closing_soon': n, 'closed': closed_n}
+
+
+@shared_task(bind=True, max_retries=0)
+def cleanup_db_task(self):
+    """
+    Remove dados obsoletos do banco para liberar espaço no volume Postgres.
+    Triggered via POST /api/admin-panel/maintenance/cleanup/ (IsAdmin).
+    """
+    import io
+    from django.core.management import call_command
+    out = io.StringIO()
+    try:
+        call_command('cleanup_db', dry_run=False, stdout=out)
+        tail = out.getvalue()[-600:]
+        logger.info('cleanup_db_task complete:\n%s', tail)
+        return {'status': 'success', 'output': tail}
+    except Exception as exc:
+        logger.exception('cleanup_db_task failed: %s', exc)
+        return {'status': 'error', 'error': str(exc)[:200]}

@@ -601,17 +601,8 @@ def trigger_db_cleanup(request):
     Executa cleanup_db --no-dry-run em background via Celery.
     Libera espaço removendo IngestionRun antigas, raw_payload, WebhookEvent e AuditLog obsoletos.
     """
-    from celery import shared_task
-    import io
-    from django.core.management import call_command
-
-    @shared_task
-    def _run_cleanup():
-        out = io.StringIO()
-        call_command('cleanup_db', dry_run=False, stdout=out)
-        return out.getvalue()[-500:]
-
-    task = _run_cleanup.delay()
+    from apps.ingestion.tasks import cleanup_db_task
+    task = cleanup_db_task.delay()
     return Response({
         'detail': 'Cleanup do banco disparado em background.',
         'task_id': str(task.id),

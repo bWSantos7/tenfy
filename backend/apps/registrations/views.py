@@ -317,6 +317,7 @@ class RegistrationViewSet(viewsets.GenericViewSet):
             })
 
         if not result:
+            # Fallback 1: TournamentRegistration (inscrições internas da plataforma)
             regs = _annotate_slot_positions(
                 TournamentRegistration.objects
                 .filter(edition=edition, is_withdrawn=False)
@@ -375,6 +376,54 @@ class RegistrationViewSet(viewsets.GenericViewSet):
                         'pending': len(cat_regs) - paid,
                         'in_draw': in_draw,
                         'waiting_list': max(paid - in_draw, 0),
+                    },
+                    'entries': entries_data,
+                })
+
+        if not result:
+            # Fallback 2: acceptance_list JSONField (ITF / federações que não usam FederationEntry)
+            acceptance = edition.acceptance_list or []
+            for section in acceptance:
+                if not isinstance(section, dict):
+                    continue
+                players = section.get('players') or []
+                if not players:
+                    continue
+                cat_text = section.get('section_label') or section.get('section', 'Inscritos')
+                entries_data = []
+                for idx, p in enumerate(players):
+                    if not isinstance(p, dict):
+                        continue
+                    entries_data.append({
+                        'id': None,
+                        'category_text': cat_text,
+                        'player_name': p.get('name') or 'Atleta',
+                        'player_country': p.get('country') or '',
+                        'player_country_code': p.get('country_code') or '',
+                        'player_external_id': '',
+                        'ranking_position': p.get('ranking'),
+                        'wtn': p.get('wtn'),
+                        'payment_status': 'unknown',
+                        'payment_status_label': 'Não informado',
+                        'source': 'itf',
+                        'notes': p.get('information') or '',
+                        'synced_at': edition.last_synced_at,
+                        'slot_position': idx + 1,
+                        'in_draw': True,
+                        'status': 'confirmed_in_draw',
+                        'status_label': 'Confirmado na chave',
+                        'priority': p.get('priority'),
+                    })
+                result.append({
+                    'category_text': cat_text,
+                    'max_participants': None,
+                    'source': 'acceptance_list',
+                    'summary': {
+                        'total': len(entries_data),
+                        'paid': 0,
+                        'pending': 0,
+                        'in_draw': len(entries_data),
+                        'waiting_list': 0,
                     },
                     'entries': entries_data,
                 })

@@ -159,6 +159,11 @@ class EligibilityEngine:
         )
         _ANOS = _re.compile(r'(?:sub\s*[-–]?\s*)?(\d{1,2})\s*anos?', _re.IGNORECASE)
         _U_AGE = _re.compile(r'\bU\s*(\d{1,2})\b', _re.IGNORECASE)
+        # ITF/federation format: "Sub-18", "sub18", "sub 18" (without "anos")
+        _SUB_AGE = _re.compile(r'\bsub\s*[-–]?\s*(\d{1,2})\b', _re.IGNORECASE)
+        # ITF gender words: "Masculino - ..." or "Feminino - ..."
+        _MASC = _re.compile(r'\b(masculino|boys?|male)\b', _re.IGNORECASE)
+        _FEM  = _re.compile(r'\b(feminino|girls?|female)\b', _re.IGNORECASE)
 
         extracted_age: Optional[int] = None
         extracted_gender: Optional[str] = None  # 'M', 'F', or None = unknown
@@ -209,6 +214,19 @@ class EligibilityEngine:
             m = _U_AGE.search(raw)
             if m:
                 extracted_age = int(m.group(1))
+
+        # "Sub-18", "sub18", "sub 18" (ITF / federation format, no "anos")
+        if extracted_age is None:
+            m = _SUB_AGE.search(raw)
+            if m:
+                extracted_age = int(m.group(1))
+
+        # Extract gender from "Masculino" / "Feminino" / "Boys" / "Girls" when not yet set
+        if extracted_gender is None and extracted_age is not None:
+            if _MASC.search(raw):
+                extracted_gender = 'M'
+            elif _FEM.search(raw):
+                extracted_gender = 'F'
 
         if extracted_age is None:
             return EligibilityResult(

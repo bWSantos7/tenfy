@@ -269,6 +269,36 @@ def _parse_date(value) -> Optional[datetime]:
     return None
 
 
+def _categories_from_inscritos(inscritos: dict) -> list:
+    """
+    Derive TournamentCategory source_text entries from the inscritos structure.
+
+    ITF Junior tournaments are always U18. The grade (J100, J200…) is the
+    circuit tier, not the age category. For each gender × section combination
+    present in inscritos we generate a category like "Masculino - Chave Principal - Sub-18".
+    This allows the eligibility engine to match the category as CBT/FPT age ≤18.
+    """
+    result = []
+    seen = set()
+    for gender_key, sections in (inscritos or {}).items():
+        gender_code, gender_label = _GENDER_MAP.get(gender_key.lower(), ('', gender_key.capitalize()))
+        if not isinstance(sections, dict):
+            continue
+        for section_key, players in sections.items():
+            if not isinstance(players, list) or not players:
+                continue
+            _, section_label = _SECTION_MAP.get(section_key.lower(), (section_key, section_key.capitalize()))
+            source_text = f'{gender_label} - {section_label} - Sub-18'
+            if source_text not in seen:
+                seen.add(source_text)
+                result.append({
+                    'source_text': source_text,
+                    'price_brl': None,
+                    'notes': f'gender:{gender_code} section:{section_key}',
+                })
+    return result
+
+
 def _normalize_tournament(doc: dict) -> Optional[dict]:
     """
     Convert a MongoDB itftournaments document to the standard connector dict.
@@ -306,9 +336,20 @@ def _normalize_tournament(doc: dict) -> Optional[dict]:
 
     season_year = start_date.year if start_date else datetime.now().year
 
-    # Build categories from grade / circuit label
-    grade = (doc.get('grade') or doc.get('categoria') or '').strip()
-    categories = [{'source_text': grade, 'price_brl': None, 'notes': ''}] if grade else []
+    # Build categories from inscritos structure (gender × section).
+    # ITF Junior tournaments are always U18 — the grade (J100, J200…) is the circuit tier,
+    # not the player age category. Derive real categories from inscritos when available.
+    inscritos_for_cats = doc.get('inscritos') or {}
+    categories = _categories_from_inscritos(inscritos_for_cats)
+    if not categories:
+        # Fallback: one category per gender inferred from circuit label
+        grade = (doc.get('grade') or doc.get('categoria') or circuit).strip()
+        for gender_text, gender_code in [('Masculino', 'M'), ('Feminino', 'F')]:
+            categories.append({
+                'source_text': f'{gender_text} - {grade} - Sub-18',
+                'price_brl': None,
+                'notes': f'grade:{grade}',
+            })
 
     from .base import BaseConnector
     canonical_slug = BaseConnector.slugify(f'itf-{slug_externo}')

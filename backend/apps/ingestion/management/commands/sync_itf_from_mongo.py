@@ -129,9 +129,12 @@ class Command(BaseCommand):
         self.stdout.write('\n--- Tournaments ---')
         data_source = self._get_or_create_datasource(dry_run)
 
+        # Single IngestionRun for the entire sync batch — one per execution, not one per tournament
+        batch_run = None if dry_run else self._create_batch_run(data_source)
+
         for t_data in conn.iter_tournaments(limit=limit, slug_externo=slug):
             raw = t_data.get('_raw', {})
-            slug_ext = raw.get('slug_externo', '')
+            slug_ext = raw.get('slug_externo', '') or raw.get('key', '')
             title = t_data.get('title', '')[:60]
             ext_id = t_data.get('external_id', '')
             inscritos = t_data.get('_inscritos') or {}
@@ -149,11 +152,10 @@ class Command(BaseCommand):
                 continue
 
             try:
-                edition, created = self._upsert_tournament(t_data, data_source)
+                edition, created = self._upsert_tournament(t_data, data_source, batch_run)
                 if edition:
                     edition_map[slug_ext] = edition.id
                     inscritos_map[slug_ext] = inscritos
-                    # Update acceptance_list JSONField on the edition
                     self._update_acceptance_list(edition, inscritos)
                     stats['acceptance_list_updated'] += 1
                 verb = 'created' if created else 'updated'
@@ -168,6 +170,16 @@ class Command(BaseCommand):
                     f'  ERROR [{slug_ext}] {title}: {str(exc)[:200]}'
                 ))
                 stats['tournaments_error'] += 1
+
+        if batch_run:
+            from apps.ingestion.models import IngestionRun
+            from django.utils import timezone as _tz
+            batch_run.status = IngestionRun.STATUS_SUCCESS if not stats['tournaments_error'] else IngestionRun.STATUS_PARTIAL
+            batch_run.items_fetched = stats['tournaments_created'] + stats['tournaments_updated'] + stats['tournaments_error']
+            batch_run.items_created = stats['tournaments_created']
+            batch_run.items_updated = stats['tournaments_updated']
+            batch_run.finished_at = _tz.now()
+            batch_run.save(update_fields=['status', 'items_fetched', 'items_created', 'items_updated', 'finished_at', 'updated_at'])
 
         # ── Step 2: Player entries (FederationEntry) ─────────────────────────
         if import_entries:
@@ -302,17 +314,22 @@ class Command(BaseCommand):
         )
         return data_source
 
-    def _upsert_tournament(self, data: dict, data_source):
-        """Upsert TournamentEdition via TournamentPersister."""
-        from apps.ingestion.persistence import TournamentPersister
+    def _create_batch_run(self, data_source):
+        """Create a single IngestionRun for the entire sync batch."""
         from apps.ingestion.models import IngestionRun
-        from apps.tournaments.models import TournamentEdition
-
-        run = IngestionRun.objects.create(
+        from django.utils import timezone
+        return IngestionRun.objects.create(
             data_source=data_source,
             triggered_by='sync_itf_from_mongo',
             status=IngestionRun.STATUS_RUNNING,
+            started_at=timezone.now(),
         )
+
+    def _upsert_tournament(self, data: dict, data_source, batch_run=None):
+        """Upsert TournamentEdition via TournamentPersister using the shared batch run."""
+        from apps.ingestion.persistence import TournamentPersister
+        from apps.ingestion.models import IngestionRun
+        from apps.tournaments.models import TournamentEdition
 
         clean_data = {k: v for k, v in data.items() if k not in ('_raw', '_inscritos')}
 
@@ -322,11 +339,8 @@ class Command(BaseCommand):
                 TournamentEdition.objects.filter(external_id=ext_id)
                 .values_list('id', flat=True)
             )
-            persister = TournamentPersister(data_source, run)
+            persister = TournamentPersister(data_source, batch_run)
             persister.upsert(clean_data)
-
-            run.status = IngestionRun.STATUS_SUCCESS
-            run.save(update_fields=['status', 'updated_at'])
 
             edition = TournamentEdition.objects.filter(external_id=ext_id).first()
             after_ids = set(
@@ -337,8 +351,6 @@ class Command(BaseCommand):
             return edition, created
 
         except Exception:
-            run.status = IngestionRun.STATUS_FAILED
-            run.save(update_fields=['status', 'updated_at'])
             raise
 
     def _update_acceptance_list(self, edition, inscritos: dict):

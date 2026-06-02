@@ -595,6 +595,32 @@ def trigger_itf_sync(request):
 
 @api_view(['POST'])
 @permission_classes([IsAdmin])
+def trigger_db_cleanup(request):
+    """
+    POST /api/admin-panel/maintenance/cleanup/
+    Executa cleanup_db --no-dry-run em background via Celery.
+    Libera espaço removendo IngestionRun antigas, raw_payload, WebhookEvent e AuditLog obsoletos.
+    """
+    from celery import shared_task
+    import io
+    from django.core.management import call_command
+
+    @shared_task
+    def _run_cleanup():
+        out = io.StringIO()
+        call_command('cleanup_db', dry_run=False, stdout=out)
+        return out.getvalue()[-500:]
+
+    task = _run_cleanup.delay()
+    return Response({
+        'detail': 'Cleanup do banco disparado em background.',
+        'task_id': str(task.id),
+        'hint': 'Aguarde ~1-2 minutos. Verifique o volume Postgres após conclusão.',
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAdmin])
 def trigger_cosat_sync(request):
     """
     POST /api/admin-panel/sync/cosat/

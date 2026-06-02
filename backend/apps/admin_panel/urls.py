@@ -5,7 +5,7 @@ from .views import (
     edition_patch, edition_create, admin_editions_list,
     data_sources_list, data_source_patch, connector_status,
     ingestion_runs_list, execution_logs,
-    trigger_itf_sync, trigger_cosat_sync, debug_itf_sample,
+    trigger_itf_sync, trigger_cosat_sync, debug_itf_sample, trigger_db_cleanup,
 )
 
 urlpatterns = [
@@ -26,4 +26,5 @@ urlpatterns = [
     path('sync/itf/', trigger_itf_sync, name='admin-sync-itf'),
     path('sync/cosat/', trigger_cosat_sync, name='admin-sync-cosat'),
     path('debug/itf-sample/', debug_itf_sample, name='admin-debug-itf-sample'),
+    path('maintenance/cleanup/', trigger_db_cleanup, name='admin-db-cleanup'),
 ]

@@ -221,7 +221,6 @@ def scrape_utr_profile_rating(
     player_id: str,
     player_name: str = '',
     timeout_ms: int = 45000,
-    browsers_path: str = '/app/.playwright',
 ) -> dict[str, Any]:
     """
     Open the confirmed UTR profile page with a headless Chromium browser and
@@ -236,11 +235,6 @@ def scrape_utr_profile_rating(
 
     Returns: { success, singles_utr, doubles_utr, display_name, extraction_method, error }
     """
-    import os
-    # Garante que o Playwright encontra o Chromium baixado no build
-    if browsers_path and 'PLAYWRIGHT_BROWSERS_PATH' not in os.environ:
-        os.environ['PLAYWRIGHT_BROWSERS_PATH'] = browsers_path
-
     try:
         from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
     except ImportError:

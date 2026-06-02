@@ -5,7 +5,6 @@
     "dockerfilePath": "Dockerfile.worker"
   },
   "deploy": {
-    "startCommand": "python manage.py migrate --noinput 2>&1 && echo '=== CELERY STARTING ===' && python -m celery -A config worker --loglevel=debug 2>&1 || echo '=== CELERY FAILED ==='",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 5
   }

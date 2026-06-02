@@ -1,6 +1,5 @@
 FROM python:3.11-slim
 
-# Playwright needs these system libs (standard paths — works on Debian/Ubuntu)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget curl gnupg ca-certificates \
     fonts-liberation libappindicator3-1 libasound2 libatk-bridge2.0-0 \
@@ -18,7 +17,9 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Download Playwright's own Chromium (version-matched, uses system libs above)
 RUN playwright install chromium
 
 COPY . .
+RUN chmod +x start-worker.sh
+
+CMD ["./start-worker.sh"]

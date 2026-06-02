@@ -5,6 +5,7 @@ from .views import (
     edition_patch, edition_create, admin_editions_list,
     data_sources_list, data_source_patch, connector_status,
     ingestion_runs_list, execution_logs,
+    trigger_itf_sync, trigger_cosat_sync,
 )
 
 urlpatterns = [
@@ -22,4 +23,6 @@ urlpatterns = [
     path('connector-status/', connector_status, name='admin-connector-status'),
     path('runs/', ingestion_runs_list, name='admin-runs-list'),
     path('execution-logs/', execution_logs, name='admin-execution-logs'),
+    path('sync/itf/', trigger_itf_sync, name='admin-sync-itf'),
+    path('sync/cosat/', trigger_cosat_sync, name='admin-sync-cosat'),
 ]

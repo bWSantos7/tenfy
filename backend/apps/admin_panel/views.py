@@ -544,6 +544,40 @@ def data_source_patch(request, pk):
     return Response(ser.data)
 
 
+@api_view(['POST'])
+@permission_classes([IsAdmin])
+def trigger_itf_sync(request):
+    """
+    POST /api/admin-panel/sync/itf/
+    Dispara o sync ITF MongoDB → PostgreSQL imediatamente via Celery task.
+    Requer ITF_MONGO_ENABLED=true no Railway.
+    """
+    from apps.ingestion.tasks import sync_itf_from_mongo_task
+    task = sync_itf_from_mongo_task.delay()
+    return Response({
+        'detail': 'Sync ITF disparado em background.',
+        'task_id': str(task.id),
+        'hint': 'Acompanhe o resultado em /api/admin-panel/runs/ após ~1 minuto.',
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAdmin])
+def trigger_cosat_sync(request):
+    """
+    POST /api/admin-panel/sync/cosat/
+    Dispara o sync COSAT MongoDB → PostgreSQL imediatamente via Celery task.
+    Requer COSAT_MONGO_ENABLED=true no Railway.
+    """
+    from apps.ingestion.tasks import sync_cosat_from_mongo_task
+    task = sync_cosat_from_mongo_task.delay()
+    return Response({
+        'detail': 'Sync COSAT disparado em background.',
+        'task_id': str(task.id),
+        'hint': 'Acompanhe o resultado em /api/admin-panel/runs/ após ~1 minuto.',
+    })
+
+
 @api_view(['GET'])
 @permission_classes([IsAdmin])
 def ingestion_runs_list(request):

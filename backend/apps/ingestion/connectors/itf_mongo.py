@@ -416,8 +416,21 @@ def _normalize_tournament(doc: dict) -> Optional[dict]:
         or doc.get('acceptanceList')
         or doc.get('acceptance_list')
         or doc.get('players')
+        or doc.get('draws')
+        or doc.get('acc')
+        or doc.get('draw')
         or {}
     )
+
+    # Temporary: log document keys when inscritos is empty so we can find the right field name
+    if not inscritos:
+        all_keys = [k for k in doc.keys() if k != '_id']
+        nested_keys = {k: list(v.keys()) if isinstance(v, dict) else type(v).__name__
+                       for k, v in doc.items() if k not in ('_id',)}
+        logger.info(
+            'ITF doc schema (no inscritos found) slug=%s — keys: %s — nested: %s',
+            slug_externo, all_keys, nested_keys,
+        )
 
     return {
         'external_id': f'itf:{slug_externo}',

@@ -22,4 +22,4 @@ RUN playwright install chromium
 COPY . .
 RUN chmod +x start-worker.sh
 
-CMD ["./start-worker.sh"]
+CMD ["bash", "start-worker.sh"]

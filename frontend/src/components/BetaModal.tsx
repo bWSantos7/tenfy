@@ -2,22 +2,21 @@ import React, { useEffect, useState } from 'react';
 import { FlaskConical } from 'lucide-react';
 import { User } from '../types';
 
-// Chave única por dispositivo/browser — persiste entre sessões e usuários
-const BETA_ACK_KEY = 'tenfy_beta_ack';
+// Chave por usuário — cada conta vê o modal uma vez
+const betaAckKey = (userId: number) => `tenfy_beta_ack_${userId}`;
 
 export const BetaModal: React.FC<{ user: User | null }> = ({ user }) => {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    // Só exibe quando o usuário estiver carregado e nunca tiver confirmado antes
     if (!user) return;
-    if (!localStorage.getItem(BETA_ACK_KEY)) {
+    if (!localStorage.getItem(betaAckKey(user.id))) {
       setVisible(true);
     }
   }, [user]);
 
   const dismiss = () => {
-    localStorage.setItem(BETA_ACK_KEY, '1');
+    if (user) localStorage.setItem(betaAckKey(user.id), '1');
     setVisible(false);
   };
 

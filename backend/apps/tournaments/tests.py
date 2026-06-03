@@ -4,11 +4,12 @@ Tests for tournament filters, views, modality isolation and UF validation.
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework.test import APIClient
 
-from apps.players.models import PlayerProfile
+from apps.players.models import PlayerCategory, PlayerProfile
 from apps.sources.models import Organization, DataSource
-from apps.tournaments.models import Tournament, TournamentEdition, Venue
+from apps.tournaments.models import Tournament, TournamentCategory, TournamentEdition, Venue
 
 User = get_user_model()
 
@@ -296,6 +297,171 @@ class CompatibleEndpointModalityTestCase(TestCase):
 
 
 # ─── Modality inference utility ───────────────────────────────────────────────
+
+class YouthCategoryPromotionCompatibilityTestCase(TestCase):
+    """Business rules for youth category promotion by tournament circuit."""
+
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            email='youth_rules@test.com', password='pass', full_name='Youth Rules'
+        )
+        self.client.force_authenticate(user=self.user)
+        self.categories = {
+            age: PlayerCategory.objects.get_or_create(
+                taxonomy=PlayerCategory.TAXONOMY_CBT_AGE,
+                code=f'{age}M',
+                gender_scope='M',
+                defaults={
+                    'label_ptbr': f'Sub-{age} Masculino',
+                    'min_age': age,
+                    'max_age': age,
+                },
+            )[0]
+            for age in (12, 14, 16, 18)
+        }
+        self.orgs = {
+            'FPT': self._org('Youth Rules FPT', 'FPT', Organization.TYPE_FEDERATION, 'SP'),
+            'CBT': self._org('Youth Rules CBT', 'CBT', Organization.TYPE_CONFEDERATION, ''),
+            'COSAT': self._org('Youth Rules COSAT', 'COSAT', Organization.TYPE_CONFEDERATION, ''),
+            'ITF': self._org('Youth Rules ITF', 'ITF', Organization.TYPE_CONFEDERATION, ''),
+        }
+
+    def _org(self, name, short_name, org_type, state):
+        return Organization.objects.create(
+            name=name,
+            short_name=short_name,
+            type=org_type,
+            state=state,
+        )
+
+    def _profile(self, age):
+        return PlayerProfile.objects.create(
+            user=self.user,
+            display_name=f'Atleta {age}',
+            birth_year=timezone.now().year - age,
+            gender='M',
+            preferred_modality='tennis',
+            competitive_level=PlayerProfile.LEVEL_YOUTH,
+        )
+
+    def _edition(self, org_key, slug, title, category_text, normalized_age=None, start_date='2026-07-10'):
+        org = self.orgs[org_key]
+        tournament = Tournament.objects.create(
+            canonical_name=title,
+            canonical_slug=slug,
+            organization=org,
+            circuit=org_key,
+            modality='tennis',
+        )
+        edition = TournamentEdition.objects.create(
+            tournament=tournament,
+            external_id=f'{org_key.lower()}:{slug}',
+            title=title,
+            season_year=2026,
+            status=TournamentEdition.STATUS_OPEN,
+            start_date=start_date,
+            is_youth=True,
+            is_published=True,
+        )
+        TournamentCategory.objects.create(
+            edition=edition,
+            source_category_text=category_text,
+            normalized_category=self.categories.get(normalized_age) if normalized_age else None,
+        )
+        return edition
+
+    def _compatible_ids(self, profile, **params):
+        response = self.client.get(
+            '/api/tournaments/editions/compatible/',
+            {'profile_id': profile.id, 'page_size': 100, **params},
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        return [item['id'] for item in response.data.get('results', [])]
+
+    def test_default_listing_shows_only_official_category(self):
+        profile = self._profile(14)
+        official = self._edition('CBT', 'default-14', 'CBT Sub-14', '14M', 14)
+        superior = self._edition('CBT', 'default-16', 'CBT Sub-16', '16M', 16)
+
+        ids = self._compatible_ids(profile)
+
+        self.assertIn(official.id, ids)
+        self.assertNotIn(superior.id, ids)
+
+    def test_advanced_filter_allows_paulista_up_to_two_categories(self):
+        profile = self._profile(12)
+        sub16 = self._edition('FPT', 'fpt-16', 'Paulista Sub-16', '16M', 16)
+        sub18 = self._edition('FPT', 'fpt-18', 'Paulista Sub-18', '18M', 18)
+
+        ids = self._compatible_ids(profile, include_category_up='true')
+
+        self.assertIn(sub16.id, ids)
+        self.assertNotIn(sub18.id, ids)
+
+    def test_advanced_filter_allows_brasileiro_only_one_category(self):
+        profile = self._profile(14)
+        sub16 = self._edition('CBT', 'cbt-16', 'Brasileiro Sub-16', '16M', 16)
+        sub18 = self._edition('CBT', 'cbt-18', 'Brasileiro Sub-18', '18M', 18)
+
+        ids = self._compatible_ids(profile, include_category_up='true')
+
+        self.assertIn(sub16.id, ids)
+        self.assertNotIn(sub18.id, ids)
+
+    def test_category_filter_blocks_brasileiro_above_limit(self):
+        profile = self._profile(14)
+        sub18 = self._edition('CBT', 'cbt-filter-18', 'Brasileiro Filtrado Sub-18', '18M', 18)
+
+        ids = self._compatible_ids(profile, category='18')
+
+        self.assertNotIn(sub18.id, ids)
+
+    def test_cosat_only_uses_14_and_16_categories(self):
+        profile = self._profile(14)
+        sub14 = self._edition('COSAT', 'cosat-14', 'COSAT U14', 'BS U14')
+        sub16 = self._edition('COSAT', 'cosat-16', 'COSAT U16', 'BS U16')
+        sub18 = self._edition('COSAT', 'cosat-18', 'COSAT U18', 'BS U18')
+
+        ids = self._compatible_ids(profile, include_category_up='true')
+
+        self.assertIn(sub14.id, ids)
+        self.assertIn(sub16.id, ids)
+        self.assertNotIn(sub18.id, ids)
+
+    def test_itf_junior_is_treated_as_18_only_in_advanced_listing(self):
+        profile = self._profile(14)
+        itf = self._edition('ITF', 'itf-junior', 'ITF Junior J30', 'Boys Singles')
+
+        default_ids = self._compatible_ids(profile)
+        advanced_ids = self._compatible_ids(profile, include_category_up='true')
+
+        self.assertNotIn(itf.id, default_ids)
+        self.assertIn(itf.id, advanced_ids)
+
+    def test_cosat_and_itf_can_coexist_on_same_calendar_date(self):
+        profile = self._profile(16)
+        cosat = self._edition(
+            'COSAT',
+            'same-date-cosat',
+            'COSAT Same Date',
+            'BS U16',
+            start_date='2026-08-01',
+        )
+        itf = self._edition(
+            'ITF',
+            'same-date-itf',
+            'ITF Junior Same Date',
+            'Boys Singles',
+            start_date='2026-08-01',
+        )
+
+        ids = self._compatible_ids(profile, include_category_up='true')
+
+        self.assertIn(cosat.id, ids)
+        self.assertIn(itf.id, ids)
+
 
 class ModalityUtilsTestCase(TestCase):
     """Unit tests for apps.ingestion.modality_utils.infer_modality."""

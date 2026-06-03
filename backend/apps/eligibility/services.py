@@ -51,6 +51,20 @@ REASON_NOT_NORMALIZED = 'category_not_normalized'
 REASON_MATCH = 'matches_profile'
 REASON_COSAT_RANKING_REQUIRED = 'cosat_ranking_required'
 REASON_ITF_RANKING_REQUIRED = 'itf_ranking_required'
+REASON_CATEGORY_ABOVE_LIMIT = 'category_above_circuit_limit'
+REASON_CATEGORY_UNAVAILABLE = 'category_unavailable_for_circuit'
+
+YOUTH_CATEGORY_BUCKETS = (10, 12, 14, 16, 18)
+CIRCUIT_PAULISTA = 'paulista'
+CIRCUIT_BRASILEIRO = 'brasileiro'
+CIRCUIT_COSAT = 'cosat'
+CIRCUIT_ITF = 'itf'
+SUPPORTED_YOUTH_CIRCUITS = {
+    CIRCUIT_PAULISTA,
+    CIRCUIT_BRASILEIRO,
+    CIRCUIT_COSAT,
+    CIRCUIT_ITF,
+}
 
 # Ranking check states (informational — do not flip the main eligibility status).
 RANKING_NOT_APPLICABLE = 'not_applicable'   # Categoria sem max_participants
@@ -82,11 +96,126 @@ class EligibilityResult:
         }
 
 
+def official_youth_category_age(profile: PlayerProfile) -> Optional[int]:
+    """
+    Return the player's official youth category age.
+
+    Prefer the declared primary age category in the profile. If it is absent,
+    derive the category from sporting age using the youth category buckets.
+    """
+    categories_rel = getattr(profile, 'profile_categories', None)
+    if categories_rel is not None and hasattr(categories_rel, 'select_related'):
+        declared = (
+            categories_rel
+            .select_related('category')
+            .filter(
+                category__taxonomy__in=[
+                    PlayerCategory.TAXONOMY_CBT_AGE,
+                    PlayerCategory.TAXONOMY_FPT_AGE,
+                    PlayerCategory.TAXONOMY_KIDS,
+                ],
+                category__max_age__isnull=False,
+            )
+            .order_by('-is_primary', 'category__max_age')
+            .first()
+        )
+        if declared and declared.category.max_age:
+            return declared.category.max_age
+
+    sporting_age = getattr(profile, 'sporting_age', None)
+    if sporting_age is None and getattr(profile, 'birth_year', None):
+        sporting_age = timezone.now().year - profile.birth_year
+    if sporting_age is None:
+        return None
+    for bucket in YOUTH_CATEGORY_BUCKETS:
+        if sporting_age <= bucket:
+            return bucket
+    return None
+
+
+def classify_tournament_circuit(edition: TournamentEdition) -> Optional[str]:
+    """Map a tournament edition to the circuit policy used by youth category rules."""
+    tournament = getattr(edition, 'tournament', None)
+    org = getattr(tournament, 'organization', None)
+    org_short = (getattr(org, 'short_name', '') or '').upper()
+    org_name = (getattr(org, 'name', '') or '').upper()
+    circuit = (getattr(tournament, 'circuit', '') or '').upper()
+    title = (getattr(edition, 'title', '') or '').upper()
+    external_id = (getattr(edition, 'external_id', '') or '').lower()
+
+    if (
+        external_id.startswith('itf:')
+        or org_short == 'ITF'
+        or 'INTERNATIONAL TENNIS FEDERATION' in org_name
+        or 'ITF' in circuit
+        or ('ITF' in title and ('JUNIOR' in title or 'JUVENIL' in title))
+    ):
+        return CIRCUIT_ITF
+    if (
+        external_id.startswith('cosat:')
+        or org_short == 'COSAT'
+        or 'COSAT' in org_name
+        or 'COSAT' in circuit
+        or 'COSAT' in title
+    ):
+        return CIRCUIT_COSAT
+    if org_short == 'CBT' or 'CONFEDERACAO BRASILEIRA' in org_name or 'BRASILEIRA DE TENIS' in org_name:
+        return CIRCUIT_BRASILEIRO
+    if (
+        org_short == 'FPT'
+        or 'FEDERACAO PAULISTA' in org_name
+        or 'PAULISTA' in circuit
+    ):
+        return CIRCUIT_PAULISTA
+    return None
+
+
+def allowed_youth_category_ages(
+    profile: PlayerProfile,
+    edition: TournamentEdition,
+    include_category_up: bool = True,
+) -> Optional[set[int]]:
+    """Return allowed youth category ages for the profile and tournament circuit."""
+    official_age = official_youth_category_age(profile)
+    if official_age is None:
+        return None
+
+    if not include_category_up:
+        return {official_age}
+
+    circuit = classify_tournament_circuit(edition)
+    if circuit == CIRCUIT_PAULISTA:
+        start = YOUTH_CATEGORY_BUCKETS.index(official_age) if official_age in YOUTH_CATEGORY_BUCKETS else None
+        if start is None:
+            return {official_age}
+        return set(YOUTH_CATEGORY_BUCKETS[start:start + 3])
+    if circuit == CIRCUIT_BRASILEIRO:
+        start = YOUTH_CATEGORY_BUCKETS.index(official_age) if official_age in YOUTH_CATEGORY_BUCKETS else None
+        if start is None:
+            return {official_age}
+        return set(YOUTH_CATEGORY_BUCKETS[start:start + 2])
+    if circuit == CIRCUIT_COSAT:
+        start = YOUTH_CATEGORY_BUCKETS.index(official_age) if official_age in YOUTH_CATEGORY_BUCKETS else None
+        if start is None:
+            return set()
+        return set(YOUTH_CATEGORY_BUCKETS[start:start + 2]) & {14, 16}
+    if circuit == CIRCUIT_ITF:
+        return {18}
+
+    sporting_age = getattr(profile, 'sporting_age', None)
+    if sporting_age is None and getattr(profile, 'birth_year', None):
+        sporting_age = timezone.now().year - profile.birth_year
+    if sporting_age is None:
+        return None
+    return {age for age in YOUTH_CATEGORY_BUCKETS if age >= sporting_age}
+
+
 class EligibilityEngine:
     """Evaluate a player profile against tournament categories."""
 
-    def __init__(self, profile: PlayerProfile):
+    def __init__(self, profile: PlayerProfile, include_category_up: bool = True):
         self.profile = profile
+        self.include_category_up = include_category_up
         self._current_year = timezone.now().year
 
     @property
@@ -102,12 +231,14 @@ class EligibilityEngine:
         norm: Optional[PlayerCategory] = tc.normalized_category
         if norm is None:
             # Try raw text extraction for COSAT/duplas/unnormalized categories
-            base = self._evaluate_raw_text(tc.source_category_text)
+            forced_age = 18 if classify_tournament_circuit(tc.edition) == CIRCUIT_ITF else None
+            base = self._evaluate_raw_text(tc.source_category_text, forced_age=forced_age)
         else:
             base = self.evaluate_player_category(
                 norm,
                 source_text=tc.source_category_text,
             )
+        base = self._apply_tournament_youth_policy(tc, base)
 
         # Ranking metadata (informational, never flips main status to compatible).
         rank_check, rank_note = self._check_ranking(tc)
@@ -115,22 +246,15 @@ class EligibilityEngine:
         base.ranking_note = rank_note
         return base
 
-    def _evaluate_raw_text(self, text: str) -> EligibilityResult:
+    def _extract_raw_age_gender(self, text: str, forced_age: Optional[int] = None) -> tuple[Optional[int], Optional[str]]:
         """
-        Handle COSAT/ITF codes, duplas/simples por texto, and generic age extraction
-        for categories that could not be normalized to a PlayerCategory row.
-
-        Extracts (max_age, gender) from the raw text and evaluates directly.
+        Extract (max_age, gender) from COSAT/ITF codes, duplas/simples text,
+        and generic age labels.
         """
         import re as _re
 
         if not text:
-            return EligibilityResult(
-                status=STATUS_UNKNOWN,
-                reasons=[REASON_NOT_NORMALIZED],
-                category_code=text,
-                category_label=text,
-            )
+            return forced_age, None
 
         raw = text.strip()
 
@@ -165,14 +289,20 @@ class EligibilityEngine:
         _MASC = _re.compile(r'\b(masculino|boys?|male)\b', _re.IGNORECASE)
         _FEM  = _re.compile(r'\b(feminino|girls?|female)\b', _re.IGNORECASE)
 
-        extracted_age: Optional[int] = None
+        extracted_age: Optional[int] = forced_age
         extracted_gender: Optional[str] = None  # 'M', 'F', or None = unknown
 
-        m = _COSAT_NOSPACE.match(raw) or _COSAT_CODE.match(raw)
-        if m:
-            code_part, age_str = m.group(1), m.group(2)
-            extracted_gender = 'M' if code_part[0].upper() == 'B' else 'F'
-            extracted_age = int(age_str)
+        if forced_age is None:
+            m = _COSAT_NOSPACE.match(raw) or _COSAT_CODE.match(raw)
+            if m:
+                code_part, age_str = m.group(1), m.group(2)
+                extracted_gender = 'M' if code_part[0].upper() == 'B' else 'F'
+                extracted_age = int(age_str)
+        else:
+            m = _COSAT_NOSPACE.match(raw) or _COSAT_CODE.match(raw)
+            if m:
+                code_part = m.group(1)
+                extracted_gender = 'M' if code_part[0].upper() == 'B' else 'F'
 
         if extracted_age is None:
             m = _COSAT_FULL.match(raw)
@@ -228,6 +358,17 @@ class EligibilityEngine:
             elif _FEM.search(raw):
                 extracted_gender = 'F'
 
+        return extracted_age, extracted_gender
+
+    def _evaluate_raw_text(self, text: str, forced_age: Optional[int] = None) -> EligibilityResult:
+        """
+        Handle COSAT/ITF codes, duplas/simples por texto, and generic age extraction
+        for categories that could not be normalized to a PlayerCategory row.
+
+        Extracts (max_age, gender) from the raw text and evaluates directly.
+        """
+        extracted_age, extracted_gender = self._extract_raw_age_gender(text, forced_age=forced_age)
+
         if extracted_age is None:
             return EligibilityResult(
                 status=STATUS_UNKNOWN,
@@ -237,6 +378,71 @@ class EligibilityEngine:
             )
 
         return self._check_raw_age_gender(extracted_age, extracted_gender, text)
+
+    def _category_youth_age(self, tc: TournamentCategory) -> Optional[int]:
+        norm = tc.normalized_category
+        if norm is not None and norm.taxonomy in (
+            PlayerCategory.TAXONOMY_FPT_AGE,
+            PlayerCategory.TAXONOMY_CBT_AGE,
+            PlayerCategory.TAXONOMY_KIDS,
+        ):
+            return norm.max_age
+
+        forced_age = 18 if classify_tournament_circuit(tc.edition) == CIRCUIT_ITF else None
+        extracted_age, _gender = self._extract_raw_age_gender(
+            tc.source_category_text,
+            forced_age=forced_age,
+        )
+        return extracted_age
+
+    def _apply_tournament_youth_policy(
+        self,
+        tc: TournamentCategory,
+        result: EligibilityResult,
+    ) -> EligibilityResult:
+        if result.status != STATUS_COMPATIBLE:
+            return result
+
+        category_age = self._category_youth_age(tc)
+        if category_age is None:
+            return result
+
+        circuit = classify_tournament_circuit(tc.edition)
+        if circuit == CIRCUIT_COSAT and category_age not in {14, 16}:
+            return EligibilityResult(
+                status=STATUS_INCOMPATIBLE,
+                reasons=list(set(result.reasons + [REASON_CATEGORY_UNAVAILABLE])),
+                category_code=result.category_code,
+                category_label=result.category_label,
+                ranking_check=result.ranking_check,
+                ranking_note=result.ranking_note,
+            )
+        if circuit == CIRCUIT_ITF and category_age != 18:
+            return EligibilityResult(
+                status=STATUS_INCOMPATIBLE,
+                reasons=list(set(result.reasons + [REASON_CATEGORY_UNAVAILABLE])),
+                category_code=result.category_code,
+                category_label=result.category_label,
+                ranking_check=result.ranking_check,
+                ranking_note=result.ranking_note,
+            )
+
+        if circuit in SUPPORTED_YOUTH_CIRCUITS:
+            allowed = allowed_youth_category_ages(
+                self.profile,
+                tc.edition,
+                include_category_up=self.include_category_up,
+            )
+            if allowed is not None and category_age not in allowed:
+                return EligibilityResult(
+                    status=STATUS_INCOMPATIBLE,
+                    reasons=list(set(result.reasons + [REASON_CATEGORY_ABOVE_LIMIT])),
+                    category_code=result.category_code,
+                    category_label=result.category_label,
+                    ranking_check=result.ranking_check,
+                    ranking_note=result.ranking_note,
+                )
+        return result
 
     def _check_raw_age_gender(
         self, max_age: int, gender: Optional[str], source_text: str = ''

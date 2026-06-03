@@ -110,8 +110,9 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
             return TournamentEditionDetailSerializer
         return TournamentEditionListSerializer
 
-    def _build_compatible_candidate_filter(self, profile):
+    def _build_compatible_candidate_filter(self, profile, include_category_up=False):
         from apps.players.models import PlayerCategory
+        from apps.eligibility.services import YOUTH_CATEGORY_BUCKETS, official_youth_category_age
 
         # Always include OPEN categories
         category_filter = Q(categories__normalized_category__taxonomy=PlayerCategory.TAXONOMY_OPEN)
@@ -122,15 +123,27 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
 
         sporting_age = profile.sporting_age
         if sporting_age is not None:
-            # A player may enter any age category whose max_age >= their age.
-            category_filter |= Q(
-                categories__normalized_category__taxonomy__in=[
-                    PlayerCategory.TAXONOMY_CBT_AGE,
-                    PlayerCategory.TAXONOMY_FPT_AGE,
-                    PlayerCategory.TAXONOMY_KIDS,
-                ],
-                categories__normalized_category__max_age__gte=sporting_age,
-            )
+            official_age = official_youth_category_age(profile)
+            youth_taxonomies = [
+                PlayerCategory.TAXONOMY_CBT_AGE,
+                PlayerCategory.TAXONOMY_FPT_AGE,
+                PlayerCategory.TAXONOMY_KIDS,
+            ]
+            if include_category_up:
+                category_filter |= Q(
+                    categories__normalized_category__taxonomy__in=youth_taxonomies,
+                    categories__normalized_category__max_age__gte=sporting_age,
+                )
+            elif official_age is not None:
+                category_filter |= Q(
+                    categories__normalized_category__taxonomy__in=youth_taxonomies,
+                    categories__normalized_category__max_age=official_age,
+                )
+            else:
+                category_filter |= Q(
+                    categories__normalized_category__taxonomy__in=youth_taxonomies,
+                    categories__normalized_category__max_age__in=YOUTH_CATEGORY_BUCKETS,
+                )
             category_filter |= Q(
                 categories__normalized_category__taxonomy=PlayerCategory.TAXONOMY_SENIORS,
                 categories__normalized_category__min_age__lte=sporting_age,
@@ -274,24 +287,27 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
         if cached_payload is not None:
             return Response(cached_payload)
 
+        include_category_up = (
+            request.query_params.get('include_category_up', '').lower() in ('1', 'true', 'yes', 'sim')
+            or any(
+                request.query_params.get(param)
+                for param in ('category', 'category_id', 'category_code')
+            )
+        )
+
         qs = self.filter_queryset(self.get_queryset()).exclude(
             status__in=[
                 TournamentEdition.STATUS_CANCELED,
                 TournamentEdition.STATUS_FINISHED,
             ]
-        ).exclude(
-            # ITF e COSAT são torneios por classificação/ranking, não por inscrição paga.
-            # Não devem aparecer em "Compatíveis com você" na tela inicial.
-            Q(external_id__startswith='itf:')
-            | Q(tournament__organization__short_name__iexact='ITF')
-            | Q(tournament__organization__short_name__iexact='COSAT')
-            | Q(tournament__organization__name__icontains='International Tennis Federation')
-            | Q(tournament__organization__name__icontains='COSAT')
         )
-        category_filter = self._build_compatible_candidate_filter(profile)
+        category_filter = self._build_compatible_candidate_filter(
+            profile,
+            include_category_up=include_category_up,
+        )
         candidate_qs = qs.filter(category_filter).distinct().order_by('start_date', 'id')
 
-        engine = EligibilityEngine(profile)
+        engine = EligibilityEngine(profile, include_category_up=include_category_up)
         compatible = []
         for edition in candidate_qs:
             # Location check using states (primary) — only exclude when explicitly outside
@@ -317,6 +333,7 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
                 'distance_status': loc['status'],
                 'distance_message': loc['message'],
                 'circuit_hint': result.get('circuit_hint'),
+                'include_category_up': include_category_up,
             }
             compatible.append(data)
 

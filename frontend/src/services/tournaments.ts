@@ -22,6 +22,7 @@ export interface TournamentFilters {
   category?: string;
   category_id?: number;
   category_code?: string;
+  include_category_up?: boolean | string;
   near_profile?: number;
   /** Locked filter derived from active profile's competitive_level. Not user-editable. */
   player_level?: string;

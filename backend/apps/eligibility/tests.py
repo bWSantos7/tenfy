@@ -206,6 +206,9 @@ class TournamentYouthPolicyDefaultTestCase(TestCase):
         from django.utils import timezone
         p = MagicMock(spec=PlayerProfile)
         p.birth_year = timezone.now().year - age
+        # sporting_age is a real @property on PlayerProfile; the mock must provide it
+        # or official_youth_category_age() compares a MagicMock against an int.
+        p.sporting_age = age
         p.gender = 'M'
         p.tennis_class = ''
         p.external_ids = {}

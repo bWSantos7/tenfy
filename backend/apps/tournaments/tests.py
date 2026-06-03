@@ -979,3 +979,134 @@ class PersistenceUFValidationTestCase(TestCase):
             any('uf_mismatch' in str(e) for e in (ed.validation_errors or [])),
             'National org with no state must not produce uf_mismatch errors.',
         )
+
+
+class CompatibleStatusOrderingTestCase(TestCase):
+    """
+    Regression: the "torneios compatíveis" endpoint must return ONLY editions whose
+    live (dynamic) status is acionável — Inscrições abertas / Encerrando em breve /
+    Anunciado — and must not let old finished/in-progress/closed editions crowd the
+    first page (which the clients then strip, leaving the user with an empty list).
+
+    Root cause that this guards against: candidate ordering was `start_date ASC`, so the
+    oldest (already finished) editions filled the paginated page even though plenty of
+    compatible OPEN editions existed further down the list.
+    """
+
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            email='compat_status@test.com', password='pass', full_name='Compat Status'
+        )
+        self.client.force_authenticate(user=self.user)
+        self.now = timezone.now()
+        self.cat14 = PlayerCategory.objects.get_or_create(
+            taxonomy=PlayerCategory.TAXONOMY_CBT_AGE, code='14M', gender_scope='M',
+            defaults={'label_ptbr': 'Sub-14 Masculino', 'min_age': 14, 'max_age': 14},
+        )[0]
+        self.org = Organization.objects.create(
+            name='Compat Status CBT', short_name='CBT',
+            type=Organization.TYPE_CONFEDERATION, state='',
+        )
+        self.profile = PlayerProfile.objects.create(
+            user=self.user, display_name='Atleta 14', birth_year=self.now.year - 14,
+            gender='M', preferred_modality='tennis',
+            competitive_level=PlayerProfile.LEVEL_YOUTH, travel_states=['SP'],
+        )
+        self.venue = Venue.objects.create(name='Arena SP', city='Sao Paulo', state='SP')
+
+    def _edition(self, slug, *, stored_status='unknown', start_date=None,
+                 end_date=None, entry_open_at=None, entry_close_at=None):
+        tournament = Tournament.objects.create(
+            canonical_name=slug, canonical_slug=slug, organization=self.org,
+            circuit='CBT', modality='tennis',
+        )
+        edition = TournamentEdition.objects.create(
+            tournament=tournament, external_id=f'cbt:{slug}', title=slug,
+            season_year=self.now.year, status=stored_status,
+            start_date=start_date, end_date=end_date,
+            entry_open_at=entry_open_at, entry_close_at=entry_close_at,
+            venue=self.venue, is_youth=True, is_published=True,
+        )
+        TournamentCategory.objects.create(
+            edition=edition, source_category_text='14M', normalized_category=self.cat14,
+        )
+        return edition
+
+    def _compatible(self, **params):
+        response = self.client.get(
+            '/api/tournaments/editions/compatible/',
+            {'profile_id': self.profile.id, 'page_size': 100, **params},
+        )
+        self.assertEqual(response.status_code, 200, getattr(response, 'data', None))
+        return response.data.get('results', [])
+
+    def test_only_active_status_editions_are_returned(self):
+        from datetime import timedelta
+        day = timedelta(days=1)
+        active_open = self._edition(
+            'active-open', start_date=(self.now + 20 * day).date(),
+            entry_close_at=self.now + 10 * day,
+        )
+        active_closing = self._edition(
+            'active-closing', start_date=(self.now + 5 * day).date(),
+            entry_close_at=self.now + 2 * day,
+        )
+        active_announced = self._edition(
+            'active-announced', start_date=(self.now + 40 * day).date(),
+        )
+        # Inactive ones — must never appear.
+        self._edition('finished', start_date=(self.now - 30 * day).date(),
+                      end_date=(self.now - 25 * day).date())
+        self._edition('in-progress', start_date=(self.now - 2 * day).date(),
+                      end_date=(self.now + 2 * day).date())
+        self._edition('closed', start_date=(self.now + 10 * day).date(),
+                      entry_close_at=self.now - day)
+        self._edition('canceled', stored_status=TournamentEdition.STATUS_CANCELED,
+                      start_date=(self.now + 10 * day).date())
+
+        ids = {item['id'] for item in self._compatible()}
+        self.assertIn(active_open.id, ids)
+        self.assertIn(active_closing.id, ids)
+        self.assertIn(active_announced.id, ids)
+        self.assertEqual(len(ids), 3, 'Only the three active editions must be returned.')
+        statuses = {item['dynamic_status'] for item in self._compatible()}
+        self.assertTrue(statuses <= {'open', 'closing_soon', 'announced'}, statuses)
+
+    def test_old_finished_editions_do_not_crowd_out_active_on_first_page(self):
+        """The regression itself: many old finished editions + one future OPEN one."""
+        from datetime import timedelta
+        day = timedelta(days=1)
+        for i in range(25):
+            self._edition(
+                f'old-finished-{i}', start_date=(self.now - (60 - i) * day).date(),
+                end_date=(self.now - (59 - i) * day).date(),
+            )
+        active = self._edition(
+            'the-open-one', start_date=(self.now + 30 * day).date(),
+            entry_close_at=self.now + 15 * day,
+        )
+
+        # Even with a small page, the active edition must be present (it is not buried
+        # behind 25 finished editions, because finished ones are excluded server-side).
+        response = self.client.get(
+            '/api/tournaments/editions/compatible/',
+            {'profile_id': self.profile.id, 'page_size': 10},
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        ids = [item['id'] for item in response.data.get('results', [])]
+        self.assertIn(active.id, ids)
+        self.assertEqual(response.data.get('count'), 1)
+
+    def test_messy_stored_status_is_normalized_by_dynamic_status(self):
+        """A messy/legacy stored status string must not break the allowlist: the
+        dynamic status (from dates) decides. Future entry_close_at => open => shown."""
+        from datetime import timedelta
+        day = timedelta(days=1)
+        ed = self._edition(
+            'messy-status', stored_status='Inscrições Abertas',
+            start_date=(self.now + 12 * day).date(), entry_close_at=self.now + 6 * day,
+        )
+        ids = {item['id'] for item in self._compatible()}
+        self.assertIn(ed.id, ids)

@@ -13,6 +13,8 @@ import { getProfileModality, syncModalityFromProfile } from '../utils/profileMod
 
 // Apenas torneios com inscrições abertas ou encerrando em breve aparecem na Home
 const ACTIVE_STATUSES = new Set(['open', 'closing_soon']);
+// Torneios compatíveis: inscrições abertas, encerrando em breve ou anunciado (spec).
+const COMPATIBLE_STATUSES = new Set(['open', 'closing_soon', 'announced']);
 
 interface ProfileOption {
   profile: PlayerProfile;
@@ -52,7 +54,7 @@ export const HomePage: React.FC = () => {
         return { results: [] as TournamentEditionList[] };
       });
       const filtered = (compatData.results || [])
-        .filter((t) => ACTIVE_STATUSES.has((t.dynamic_status || t.status) ?? ''))
+        .filter((t) => COMPATIBLE_STATUSES.has((t.dynamic_status || t.status) ?? ''))
         .slice(0, 8);
       setCompat(filtered);
     } finally {

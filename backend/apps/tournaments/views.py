@@ -24,7 +24,15 @@ from .serializers import (
 )
 
 _COMPATIBLE_CACHE_TTL = 300   # 5 minutes
-_COMPATIBLE_CACHE_VERSION = 5
+_COMPATIBLE_CACHE_VERSION = 6  # bumped: active-status filter + priority ordering
+
+# Spec §4/§22: "torneios compatíveis" exibe somente status acionáveis.
+# Comparação feita sobre o status dinâmico (canônico), nunca o texto bruto.
+_COMPATIBLE_ACTIVE_STATUSES = frozenset({
+    TournamentEdition.STATUS_OPEN,
+    TournamentEdition.STATUS_CLOSING_SOON,
+    TournamentEdition.STATUS_ANNOUNCED,
+})
 _LIST_CACHE_TTL       = 120   # 2 minutes for public tournament list
 _CALENDAR_CACHE_TTL   = 600   # 10 minutes for calendar (changes less often)
 
@@ -306,16 +314,28 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
         # Keep the SQL candidate set broad and let EligibilityEngine decide the
         # category match. A strict category pre-filter can hide real tournaments
         # when source categories are old, raw, or normalized differently.
+        #
+        # Order by the live status priority (status_priority annotation) FIRST so the
+        # page is filled with actionable editions. Ordering only by start_date ASC put
+        # the oldest (already finished/in-progress) editions on the first page, which
+        # the clients then stripped via their active-status filter — leaving the user
+        # with an empty list even though compatible upcoming tournaments existed.
         candidate_qs = (
             qs
             .filter(tournament__modality__iexact=profile.preferred_modality.strip())
             .distinct()
-            .order_by('start_date', 'id')
+            .order_by('status_priority', 'start_date', 'id')
         )
 
         engine = EligibilityEngine(profile, include_category_up=include_category_up)
         compatible = []
         for edition in candidate_qs:
+            # Spec: a listagem de torneios compatíveis exibe SOMENTE torneios com
+            # status Inscrições abertas / Encerrando em breve / Anunciado. We use the
+            # dynamic status (computed from dates) so messy/legacy stored statuses and
+            # accent/case variations are normalized to the canonical set.
+            if edition.compute_dynamic_status() not in _COMPATIBLE_ACTIVE_STATUSES:
+                continue
             # Location check using states (primary) — only exclude when explicitly outside
             loc = profile_state_result(profile, edition)
             if not loc['included']:

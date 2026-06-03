@@ -287,18 +287,31 @@ class CBTPublicConnector(BaseConnector):
 
         rankings = ((item.get('grupo_pontos') or {}).get('ranking') or [])
         categories = []
-        for order, ranking in enumerate(rankings):
+        global_order = 0
+        for ranking in rankings:
             name = (ranking.get('nome_ranking') or '').strip()
             groups = ranking.get('grupos') or []
-            source_text = ' - '.join(part for part in [name, ', '.join(groups)] if part)
-            if not source_text:
-                continue
-            categories.append({
-                'source_text': source_text[:200],
-                'price_brl': None,
-                'notes': '',
-                'order': order,
-            })
+            if groups:
+                for group in groups:
+                    group_text = (group or '').strip()
+                    if not group_text:
+                        continue
+                    source_text = f'{name} - {group_text}' if name else group_text
+                    categories.append({
+                        'source_text': source_text[:200],
+                        'price_brl': None,
+                        'notes': '',
+                        'order': global_order,
+                    })
+                    global_order += 1
+            elif name:
+                categories.append({
+                    'source_text': name[:200],
+                    'price_brl': None,
+                    'notes': '',
+                    'order': global_order,
+                })
+                global_order += 1
         return categories
 
     def _extract_base_price(self, value_items: list[dict], categories: list[dict]):

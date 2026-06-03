@@ -406,6 +406,26 @@ class YouthCategoryPromotionCompatibilityTestCase(TestCase):
 
         self.assertIn(official.id, ids)
 
+    def test_default_listing_accepts_raw_embedded_age_gender_code(self):
+        profile = self._profile(14)
+        raw_rank = self._edition(
+            'FPT',
+            'raw-ranking-14m',
+            'FPT Ranking Raw Sub-14',
+            'Ranking Infantojuvenil 2026 - 14M',
+        )
+        raw_superior = self._edition(
+            'FPT',
+            'raw-ranking-16m',
+            'FPT Ranking Raw Sub-16',
+            'Ranking Infantojuvenil 2026 - 16M',
+        )
+
+        ids = self._compatible_ids(profile)
+
+        self.assertIn(raw_rank.id, ids)
+        self.assertNotIn(raw_superior.id, ids)
+
     def test_advanced_filter_allows_paulista_up_to_two_categories(self):
         profile = self._profile(12)
         sub16 = self._edition('FPT', 'fpt-16', 'Paulista Sub-16', '16M', 16)

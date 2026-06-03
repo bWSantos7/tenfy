@@ -285,6 +285,7 @@ class EligibilityEngine:
         _U_AGE = _re.compile(r'\bU\s*(\d{1,2})\b', _re.IGNORECASE)
         # ITF/federation format: "Sub-18", "sub18", "sub 18" (without "anos")
         _SUB_AGE = _re.compile(r'\bsub\s*[-–]?\s*(\d{1,2})\b', _re.IGNORECASE)
+        _AGE_GENDER_CODE = _re.compile(r'\b(10|12|14|16|18)\s*([MF])\b', _re.IGNORECASE)
         # ITF gender words: "Masculino - ..." or "Feminino - ..."
         _MASC = _re.compile(r'\b(masculino|boys?|male)\b', _re.IGNORECASE)
         _FEM  = _re.compile(r'\b(feminino|girls?|female)\b', _re.IGNORECASE)
@@ -334,6 +335,12 @@ class EligibilityEngine:
             if m:
                 extracted_gender = 'F'
                 extracted_age = int(m.group(1))
+
+        if extracted_age is None:
+            m = _AGE_GENDER_CODE.search(raw)
+            if m:
+                extracted_age = int(m.group(1))
+                extracted_gender = m.group(2).upper()
 
         if extracted_age is None:
             m = _ANOS.search(raw)

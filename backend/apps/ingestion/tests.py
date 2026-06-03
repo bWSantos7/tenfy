@@ -102,6 +102,16 @@ class YouthClassifierTestCase(TestCase):
         ]))
 
 
+class CategoryCodeInferenceTestCase(TestCase):
+    def test_embedded_age_gender_code_is_inferred(self):
+        from apps.ingestion.persistence import TournamentPersister
+
+        self.assertEqual(
+            TournamentPersister._infer_category_code('Ranking Infantojuvenil 2026 - 14M'),
+            '14M',
+        )
+
+
 # ── COSAT MongoDB connector tests ─────────────────────────────────────────────
 
 class CosatMongoNormalizationTestCase(TestCase):

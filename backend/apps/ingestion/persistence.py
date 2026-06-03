@@ -520,6 +520,10 @@ class TournamentPersister:
         if age_match and gender in {'M', 'F'}:
             return f'{age_match.group(1)}{gender}'
 
+        age_gender_match = re.search(r'\b(10|12|14|16|18)\s*([MF])\b', normalized)
+        if age_gender_match:
+            return f'{age_gender_match.group(1)}{age_gender_match.group(2)}'
+
         senior_match = re.search(r'\b(30|35|40|45|50|55|60|65|70|75)\+\b', normalized)
         if senior_match:
             if gender in {'M', 'F'}:

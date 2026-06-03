@@ -44,7 +44,18 @@ class Command(BaseCommand):
         except Exception as exc:
             self.stdout.write(self.style.WARNING(f'⚠ Periodic tasks: {exc}'))
 
-        # 3. Dispara sync imediato de inscritos (enfileira no Redis/Celery)
+        # 4. Dispara ingestão de torneios (connector run) para todas as fontes ativas
+        self.stdout.write('▶ Disparando ingestão de torneios (todas as fontes ativas)...')
+        try:
+            from apps.ingestion.tasks import run_all_active_sources
+            run_all_active_sources.delay()
+            self.stdout.write(self.style.SUCCESS(
+                '✓ Ingestão enfileirada: torneios FPT, CBT, COSAT e demais serão atualizados assim que o Worker iniciar'
+            ))
+        except Exception as exc:
+            self.stdout.write(self.style.WARNING(f'⚠ Ingestão enfileiramento: {exc}'))
+
+        # 5. Dispara sync imediato de inscritos (enfileira no Redis/Celery)
         self.stdout.write('▶ Disparando sync imediato de inscritos...')
         try:
             from apps.registrations.tasks import (

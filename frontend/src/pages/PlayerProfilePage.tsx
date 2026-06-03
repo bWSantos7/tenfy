@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Settings, ExternalLink, Trophy, MapPin, Calendar, User,
@@ -136,6 +136,57 @@ export const PlayerProfilePage: React.FC = () => {
     && !primary?.utr_doubles
     && !primary?.utr_sync_error
   );
+  const utrPollAttempts = useRef(0);
+
+  const refreshActiveProfiles = useCallback(async () => {
+    if (isParent) {
+      if (!selectedChildId) return [] as PlayerProfile[];
+      const fresh = await listChildProfiles(selectedChildId);
+      setChildProfiles(fresh);
+      return fresh;
+    }
+    const fresh = await listProfiles();
+    setProfiles(fresh);
+    return fresh;
+  }, [isParent, selectedChildId]);
+
+  useEffect(() => {
+    if (!isUtrExtractionPending) {
+      utrPollAttempts.current = 0;
+      return;
+    }
+
+    let canceled = false;
+    async function pollUtrRating() {
+      try {
+        const fresh = await refreshActiveProfiles();
+        const freshPrimary = fresh.find((p) => p.is_primary) ?? fresh[0] ?? null;
+        if (
+          !canceled
+          && (freshPrimary?.utr_singles || freshPrimary?.utr_doubles || freshPrimary?.utr_sync_error)
+        ) {
+          utrPollAttempts.current = 0;
+        }
+      } catch {
+        // Keep the current loading state and try again on the next tick.
+      }
+    }
+
+    pollUtrRating();
+    const interval = window.setInterval(() => {
+      utrPollAttempts.current += 1;
+      if (utrPollAttempts.current > 30) {
+        window.clearInterval(interval);
+        return;
+      }
+      pollUtrRating();
+    }, 5000);
+
+    return () => {
+      canceled = true;
+      window.clearInterval(interval);
+    };
+  }, [isUtrExtractionPending, refreshActiveProfiles]);
 
   async function handleTiSync() {
     if (!primary) return;
@@ -172,8 +223,7 @@ export const PlayerProfilePage: React.FC = () => {
     setUtrLinking(true);
     try {
       await linkUtr(primary.id, candidate);
-      const fresh = await listProfiles();
-      setProfiles(fresh);
+      await refreshActiveProfiles();
       setUtrModalOpen(false);
       toast.success('Perfil UTR vinculado! Rating sendo extraído em segundo plano.');
     } catch {
@@ -187,8 +237,7 @@ export const PlayerProfilePage: React.FC = () => {
     if (!primary || !window.confirm('Remover vínculo com este perfil UTR?')) return;
     try {
       await unlinkUtr(primary.id);
-      const fresh = await listProfiles();
-      setProfiles(fresh);
+      await refreshActiveProfiles();
       toast.success('Vínculo UTR removido.');
     } catch {
       toast.error('Não foi possível remover o vínculo UTR.');
@@ -200,8 +249,7 @@ export const PlayerProfilePage: React.FC = () => {
     setUtrSyncing(true);
     try {
       await syncUtr(primary.id);
-      const fresh = await listProfiles();
-      setProfiles(fresh);
+      await refreshActiveProfiles();
       toast.success('Sincronização UTR iniciada.');
     } catch {
       toast.error('Não foi possível sincronizar o UTR agora.');

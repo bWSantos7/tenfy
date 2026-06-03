@@ -7,9 +7,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { MainStackParamList, MainTabParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
+import Toast from 'react-native-toast-message';
 import { fetchTiData, linkUtr, listProfiles, searchUtr, syncTiData, syncUtr, unlinkUtr } from '../../services/data';
 import { myRegistrations } from '../../services/registrations';
-import { mediaUrl } from '../../services/api';
+import { extractApiError, mediaUrl } from '../../services/api';
 import { PlayerProfile, TiData, TiRankingEntry, TournamentRegistration, UtrCandidate } from '../../types';
 import { GENDER_LABELS, LEVEL_LABELS, ROLE_LABELS } from '../../utils/format';
 import { AppText, Button, Card, EmptyState, LoadingBlock, Screen, SectionHeader } from '../../components/ui';
@@ -309,19 +310,26 @@ export function PlayerProfileScreen(_: Props) {
                 }}
                 onUnlink={() => {
                   RNAlert.alert(
-                    'Remover vínculo UTR',
-                    'Tem certeza que deseja remover o vínculo com este perfil UTR?',
+                    'Remover rating UTR?',
+                    'O rating UTR e o vínculo com este perfil serão removidos do seu perfil esportivo. Você poderá vincular novamente depois.',
                     [
                       { text: 'Cancelar', style: 'cancel' },
                       {
-                        text: 'Remover', style: 'destructive',
+                        text: 'Confirmar exclusão', style: 'destructive',
                         onPress: async () => {
                           if (!primary) return;
                           try {
                             await unlinkUtr(primary.id);
                             const profs = await listProfiles();
                             setProfiles(profs as PlayerProfile[]);
-                          } catch { /* ignore */ }
+                            Toast.show({ type: 'success', text1: 'Rating UTR removido do perfil.' });
+                          } catch (err) {
+                            Toast.show({
+                              type: 'error',
+                              text1: 'Não foi possível remover o rating UTR',
+                              text2: extractApiError(err),
+                            });
+                          }
                         },
                       },
                     ],

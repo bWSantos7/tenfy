@@ -261,3 +261,45 @@ class PlayerCategoryAPITestCase(TestCase):
         anon = APIClient()
         res = anon.get('/api/players/categories/')
         self.assertEqual(res.status_code, 401)
+
+
+class UtrUnlinkTestCase(TestCase):
+    """utr-unlink clears every UTR field (backs the 'Confirmar exclusão' modal)."""
+
+    def setUp(self):
+        self.user = make_user(email='utr_unlink@example.com')
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+        from django.utils import timezone
+        self.profile = PlayerProfile.objects.create(
+            user=self.user, display_name='UTR Player',
+            utr_player_id='12345', utr_display_name='UTR Player',
+            utr_singles='8.50', utr_doubles='8.00',
+            utr_profile_url='https://app.utrsports.net/profiles/12345',
+            utr_synced_at=timezone.now(), utr_sync_error='',
+        )
+
+    def test_unlink_clears_all_utr_fields(self):
+        res = self.client.post(f'/api/players/profiles/{self.profile.id}/utr-unlink/')
+        self.assertEqual(res.status_code, 200, res.data)
+        self.profile.refresh_from_db()
+        self.assertEqual(self.profile.utr_player_id, '')
+        self.assertEqual(self.profile.utr_singles, '')
+        self.assertEqual(self.profile.utr_doubles, '')
+        self.assertEqual(self.profile.utr_display_name, '')
+        self.assertEqual(self.profile.utr_profile_url, '')
+        self.assertIsNone(self.profile.utr_synced_at)
+
+    def test_unlink_is_idempotent(self):
+        self.client.post(f'/api/players/profiles/{self.profile.id}/utr-unlink/')
+        res = self.client.post(f'/api/players/profiles/{self.profile.id}/utr-unlink/')
+        self.assertEqual(res.status_code, 200)
+
+    def test_unlink_requires_owner(self):
+        other = make_user(email='utr_other@example.com')
+        other_client = APIClient()
+        other_client.force_authenticate(user=other)
+        res = other_client.post(f'/api/players/profiles/{self.profile.id}/utr-unlink/')
+        self.assertIn(res.status_code, (403, 404))
+        self.profile.refresh_from_db()
+        self.assertEqual(self.profile.utr_player_id, '12345')  # untouched

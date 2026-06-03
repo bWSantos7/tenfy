@@ -24,7 +24,7 @@ from .serializers import (
 )
 
 _COMPATIBLE_CACHE_TTL = 300   # 5 minutes
-_COMPATIBLE_CACHE_VERSION = 3
+_COMPATIBLE_CACHE_VERSION = 4
 _LIST_CACHE_TTL       = 120   # 2 minutes for public tournament list
 _CALENDAR_CACHE_TTL   = 600   # 10 minutes for calendar (changes less often)
 
@@ -303,11 +303,15 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
                 TournamentEdition.STATUS_FINISHED,
             ]
         )
-        category_filter = self._build_compatible_candidate_filter(
-            profile,
-            include_category_up=include_category_up,
+        # Keep the SQL candidate set broad and let EligibilityEngine decide the
+        # category match. A strict category pre-filter can hide real tournaments
+        # when source categories are old, raw, or normalized differently.
+        candidate_qs = (
+            qs
+            .filter(tournament__modality__iexact=profile.preferred_modality.strip())
+            .distinct()
+            .order_by('start_date', 'id')
         )
-        candidate_qs = qs.filter(category_filter).distinct().order_by('start_date', 'id')
 
         engine = EligibilityEngine(profile, include_category_up=include_category_up)
         compatible = []

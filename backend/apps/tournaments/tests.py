@@ -7,7 +7,7 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from apps.players.models import PlayerCategory, PlayerProfile
+from apps.players.models import PlayerCategory, PlayerProfile, PlayerProfileCategory
 from apps.sources.models import Organization, DataSource
 from apps.tournaments.models import Tournament, TournamentCategory, TournamentEdition, Venue
 

@@ -100,9 +100,19 @@ def official_youth_category_age(profile: PlayerProfile) -> Optional[int]:
     """
     Return the player's official youth category age.
 
-    Prefer the declared primary age category in the profile. If it is absent,
-    derive the category from sporting age using the youth category buckets.
+    Prefer the sporting age because the youth official category is derived from
+    civil year. Fall back to a declared primary age category only when the birth
+    year is unavailable.
     """
+    sporting_age = getattr(profile, 'sporting_age', None)
+    if sporting_age is None and getattr(profile, 'birth_year', None):
+        sporting_age = timezone.now().year - profile.birth_year
+    if sporting_age is not None:
+        for bucket in YOUTH_CATEGORY_BUCKETS:
+            if sporting_age <= bucket:
+                return bucket
+        return None
+
     categories_rel = getattr(profile, 'profile_categories', None)
     if categories_rel is not None and hasattr(categories_rel, 'select_related'):
         declared = (
@@ -122,14 +132,6 @@ def official_youth_category_age(profile: PlayerProfile) -> Optional[int]:
         if declared and declared.category.max_age:
             return declared.category.max_age
 
-    sporting_age = getattr(profile, 'sporting_age', None)
-    if sporting_age is None and getattr(profile, 'birth_year', None):
-        sporting_age = timezone.now().year - profile.birth_year
-    if sporting_age is None:
-        return None
-    for bucket in YOUTH_CATEGORY_BUCKETS:
-        if sporting_age <= bucket:
-            return bucket
     return None
 
 
@@ -282,13 +284,16 @@ class EligibilityEngine:
             r'simples\s+feminin[ao]s?\s*[-–]?\s*(\d{1,2})\s*(?:anos?)?', _re.IGNORECASE
         )
         _ANOS = _re.compile(r'(?:sub\s*[-–]?\s*)?(\d{1,2})\s*anos?', _re.IGNORECASE)
-        _U_AGE = _re.compile(r'\bU\s*(\d{1,2})\b', _re.IGNORECASE)
+        # U14, U 14, U-14 (with optional hyphen/dash)
+        _U_AGE = _re.compile(r'\bU\s*[-–]?\s*(\d{1,2})\b', _re.IGNORECASE)
         # ITF/federation format: "Sub-18", "sub18", "sub 18" (without "anos")
         _SUB_AGE = _re.compile(r'\bsub\s*[-–]?\s*(\d{1,2})\b', _re.IGNORECASE)
+        # Last-resort: bare youth age bucket number, e.g. "14 Masc" or "IJ 14"
+        _AGE_BARE = _re.compile(r'\b(10|12|14|16|18)\b')
         _AGE_GENDER_CODE = _re.compile(r'\b(10|12|14|16|18)\s*([MF])\b', _re.IGNORECASE)
-        # ITF gender words: "Masculino - ..." or "Feminino - ..."
-        _MASC = _re.compile(r'\b(masculino|boys?|male)\b', _re.IGNORECASE)
-        _FEM  = _re.compile(r'\b(feminino|girls?|female)\b', _re.IGNORECASE)
+        # Gender words — full and abbreviated (Masc, Fem are common FPT/CBT shorthands)
+        _MASC = _re.compile(r'\b(masculin[ao]|masc|boys?|male)\b', _re.IGNORECASE)
+        _FEM  = _re.compile(r'\b(feminin[ao]|fem|girls?|female)\b', _re.IGNORECASE)
 
         extracted_age: Optional[int] = forced_age
         extracted_gender: Optional[str] = None  # 'M', 'F', or None = unknown
@@ -358,6 +363,14 @@ class EligibilityEngine:
             if m:
                 extracted_age = int(m.group(1))
 
+        # Fallback: bare youth age bucket number with word boundaries.
+        # Handles "14 Masc", "IJ 14", "Masculino 14", "Feminino 14 anos" (already
+        # caught by _ANOS above, so no double-match), etc.
+        if extracted_age is None:
+            m = _AGE_BARE.search(raw)
+            if m:
+                extracted_age = int(m.group(1))
+
         # Extract gender from "Masculino" / "Feminino" / "Boys" / "Girls" when not yet set
         if extracted_gender is None and extracted_age is not None:
             if _MASC.search(raw):
@@ -415,6 +428,8 @@ class EligibilityEngine:
             return result
 
         circuit = classify_tournament_circuit(tc.edition)
+
+        # COSAT: only 14 and 16 years are valid categories.
         if circuit == CIRCUIT_COSAT and category_age not in {14, 16}:
             return EligibilityResult(
                 status=STATUS_INCOMPATIBLE,
@@ -424,6 +439,7 @@ class EligibilityEngine:
                 ranking_check=result.ranking_check,
                 ranking_note=result.ranking_note,
             )
+        # ITF juvenile: treated as category 18 only.
         if circuit == CIRCUIT_ITF and category_age != 18:
             return EligibilityResult(
                 status=STATUS_INCOMPATIBLE,
@@ -434,11 +450,27 @@ class EligibilityEngine:
                 ranking_note=result.ranking_note,
             )
 
+        # Default listing: show ONLY the official category regardless of circuit.
+        # Advanced filter (include_category_up=True) applies per-circuit limits below.
+        if not self.include_category_up:
+            official_age = official_youth_category_age(self.profile)
+            if official_age is not None and category_age != official_age:
+                return EligibilityResult(
+                    status=STATUS_INCOMPATIBLE,
+                    reasons=list(set(result.reasons + [REASON_CATEGORY_ABOVE_LIMIT])),
+                    category_code=result.category_code,
+                    category_label=result.category_label,
+                    ranking_check=result.ranking_check,
+                    ranking_note=result.ranking_note,
+                )
+            return result
+
+        # Advanced filter: apply per-circuit promotion limits.
         if circuit in SUPPORTED_YOUTH_CIRCUITS:
             allowed = allowed_youth_category_ages(
                 self.profile,
                 tc.edition,
-                include_category_up=self.include_category_up,
+                include_category_up=True,
             )
             if allowed is not None and category_age not in allowed:
                 return EligibilityResult(

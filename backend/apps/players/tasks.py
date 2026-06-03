@@ -43,7 +43,7 @@ def sync_all_ti_profiles_task():
     has a Tênis Integrado ID.  Tasks are staggered by _TI_STAGGER_SECONDS to
     avoid sending a burst of HTTP requests to tenisintegrado.com.br.
 
-    Scheduled every 2 hours via Celery Beat.
+    Scheduled hourly via Celery Beat (ratings, partidas, ranking, inscrições).
     """
     from .models import PlayerProfile
     from .parsers import extract_ti_id
@@ -62,6 +62,44 @@ def sync_all_ti_profiles_task():
         dispatched += 1
 
     logger.info('sync_all_ti_profiles_task: dispatched %d profile sync(s)', dispatched)
+
+
+_UTR_STAGGER_SECONDS = 30
+# Only re-scrape a profile whose UTR is older than this — avoids unnecessary
+# external (Playwright) calls when an hourly run finds recently-synced profiles.
+_UTR_REFRESH_MIN_AGE_MINUTES = 55
+
+
+@shared_task(name='apps.players.tasks.sync_all_utr_profiles_task')
+def sync_all_utr_profiles_task():
+    """
+    Periodic task (hourly): refresh the UTR rating for every player profile that
+    has a confirmed UTR id and whose rating is stale (older than
+    _UTR_REFRESH_MIN_AGE_MINUTES) or never synced. Tasks are staggered to avoid a
+    burst of headless-browser scrapes.
+
+    Relevance gate (utr_player_id set) + staleness gate keep external calls down,
+    per the "evitar chamadas externas desnecessárias" requirement.
+    """
+    from datetime import timedelta
+    from django.db.models import Q
+    from .models import PlayerProfile
+
+    cutoff = timezone.now() - timedelta(minutes=_UTR_REFRESH_MIN_AGE_MINUTES)
+    profiles = (
+        PlayerProfile.objects
+        .exclude(utr_player_id='')
+        .filter(Q(utr_synced_at__isnull=True) | Q(utr_synced_at__lte=cutoff))
+        .only('id', 'utr_player_id', 'utr_synced_at')
+    )
+
+    dispatched = 0
+    for i, profile in enumerate(profiles):
+        extract_utr_rating_task.apply_async(args=[profile.pk], countdown=i * _UTR_STAGGER_SECONDS)
+        dispatched += 1
+
+    logger.info('sync_all_utr_profiles_task: dispatched %d UTR sync(s)', dispatched)
+    return dispatched
 
 
 @shared_task(

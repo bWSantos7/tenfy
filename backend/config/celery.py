@@ -35,9 +35,13 @@ app.conf.beat_schedule = {
         'task': 'apps.ingestion.tasks.sync_cosat_from_mongo_task',
         'schedule': crontab(minute=30, hour='*/6'),  # 00:30, 06:30, 12:30, 18:30 UTC
     },
-    'sync-all-ti-profiles-every-2h': {
+    'sync-all-ti-profiles-hourly': {
         'task': 'apps.players.tasks.sync_all_ti_profiles_task',
-        'schedule': crontab(minute=50, hour='*/2'),  # 00:50, 02:50, 04:50 … UTC
+        'schedule': crontab(minute=50),  # every hour at :50 (ratings, partidas, ranking, inscrições)
+    },
+    'sync-all-utr-profiles-hourly': {
+        'task': 'apps.players.tasks.sync_all_utr_profiles_task',
+        'schedule': crontab(minute=40),  # every hour at :40 (rating UTR de perfis vinculados)
     },
     'sync-fpt-sp-entries-hourly': {
         'task': 'apps.registrations.tasks.sync_fpt_sp_entries_task',

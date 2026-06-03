@@ -303,3 +303,72 @@ class UtrUnlinkTestCase(TestCase):
         self.assertIn(res.status_code, (403, 404))
         self.profile.refresh_from_db()
         self.assertEqual(self.profile.utr_player_id, '12345')  # untouched
+
+
+class HourlySyncTasksTestCase(TestCase):
+    """
+    Atualização automática de hora em hora: as tasks periódicas enfileiram um
+    sync por perfil relevante, sem duplicar e sem chamadas externas desnecessárias.
+    """
+
+    def _profile(self, email, **kw):
+        user = make_user(email=email)
+        return PlayerProfile.objects.create(user=user, display_name=email, **kw)
+
+    def test_ti_sync_dispatches_once_per_linked_profile(self):
+        from unittest.mock import patch
+        from apps.players.tasks import sync_all_ti_profiles_task
+
+        self._profile('ti_a@test.com', external_ids={'cbt': 'tenisintegrado:111'})
+        self._profile('ti_b@test.com', external_ids={'fpt': '222'})
+        self._profile('ti_none@test.com', external_ids={})  # no TI id → skipped
+
+        with patch('apps.players.tasks.sync_ti_data_task.apply_async') as mock_apply:
+            sync_all_ti_profiles_task()
+
+        self.assertEqual(mock_apply.call_count, 2)  # only the two TI-linked profiles
+
+    def test_utr_sync_only_dispatches_stale_linked_profiles(self):
+        from unittest.mock import patch
+        from datetime import timedelta
+        from django.utils import timezone
+        from apps.players.tasks import sync_all_utr_profiles_task
+
+        now = timezone.now()
+        # Stale (old sync) → dispatched
+        self._profile('utr_stale@test.com', utr_player_id='1', utr_synced_at=now - timedelta(hours=3))
+        # Never synced → dispatched
+        self._profile('utr_new@test.com', utr_player_id='2', utr_synced_at=None)
+        # Fresh (synced 5 min ago) → skipped (avoid unnecessary external call)
+        self._profile('utr_fresh@test.com', utr_player_id='3', utr_synced_at=now - timedelta(minutes=5))
+        # No UTR id → skipped
+        self._profile('utr_unlinked@test.com', utr_player_id='')
+
+        with patch('apps.players.tasks.extract_utr_rating_task.apply_async') as mock_apply:
+            dispatched = sync_all_utr_profiles_task()
+
+        self.assertEqual(dispatched, 2)
+        self.assertEqual(mock_apply.call_count, 2)
+
+    def test_setup_periodic_tasks_registers_hourly_and_prunes_obsolete(self):
+        from django_celery_beat.models import PeriodicTask, CrontabSchedule
+        from django.core.management import call_command
+
+        # Simulate a leftover obsolete task from a previous deploy.
+        old_cron, _ = CrontabSchedule.objects.get_or_create(
+            minute='50', hour='*/2', day_of_week='*', day_of_month='*', month_of_year='*',
+        )
+        PeriodicTask.objects.create(
+            name='sync-all-ti-profiles-every-2h',
+            task='apps.players.tasks.sync_all_ti_profiles_task', crontab=old_cron,
+        )
+
+        call_command('setup_periodic_tasks', verbosity=0)
+
+        names = set(PeriodicTask.objects.values_list('name', flat=True))
+        self.assertIn('sync-all-ti-profiles-hourly', names)
+        self.assertIn('sync-all-utr-profiles-hourly', names)
+        self.assertNotIn('sync-all-ti-profiles-every-2h', names)  # pruned
+
+        ti = PeriodicTask.objects.get(name='sync-all-ti-profiles-hourly')
+        self.assertEqual(ti.crontab.hour, '*')  # hourly, not */2

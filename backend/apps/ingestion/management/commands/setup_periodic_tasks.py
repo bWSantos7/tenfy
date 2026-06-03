@@ -60,11 +60,23 @@ TASKS = [
         'description': 'Sync ITF tournaments + acceptance lists from MongoDB every 12 hours (00:00, 12:00 UTC)',
     },
     {
-        'name': 'sync-all-ti-profiles-every-2h',
+        'name': 'sync-all-ti-profiles-hourly',
         'task': 'apps.players.tasks.sync_all_ti_profiles_task',
-        'cron': {'minute': '50', 'hour': '*/2', 'day_of_week': '*', 'day_of_month': '*', 'month_of_year': '*'},
-        'description': 'Sync TI results & rankings for all profiles with a Tênis Integrado ID every 2 hours at :50',
+        'cron': {'minute': '50', 'hour': '*', 'day_of_week': '*', 'day_of_month': '*', 'month_of_year': '*'},
+        'description': 'Sync TI results, rankings, partidas e inscrições for all profiles with a Tênis Integrado ID every hour at :50',
     },
+    {
+        'name': 'sync-all-utr-profiles-hourly',
+        'task': 'apps.players.tasks.sync_all_utr_profiles_task',
+        'cron': {'minute': '40', 'hour': '*', 'day_of_week': '*', 'day_of_month': '*', 'month_of_year': '*'},
+        'description': 'Refresh UTR rating for profiles with a confirmed UTR id (stale only) every hour at :40',
+    },
+]
+
+# Periodic tasks that were renamed/retired — removed so a previous deploy's
+# schedule does not keep firing them (e.g. the old every-2h TI sync).
+OBSOLETE_TASKS = [
+    'sync-all-ti-profiles-every-2h',
 ]
 
 
@@ -95,6 +107,11 @@ class Command(BaseCommand):
                 updated_count += 1
                 self.stdout.write(f'  Updated: {task.name}')
 
+        removed_count, _ = PeriodicTask.objects.filter(name__in=OBSOLETE_TASKS).delete()
+        if removed_count:
+            self.stdout.write(f'  Removed {removed_count} obsolete task(s): {", ".join(OBSOLETE_TASKS)}')
+
         self.stdout.write(self.style.SUCCESS(
-            f'Done. Created: {created_count}, Updated: {updated_count} periodic tasks.'
+            f'Done. Created: {created_count}, Updated: {updated_count}, '
+            f'Removed: {removed_count} periodic tasks.'
         ))

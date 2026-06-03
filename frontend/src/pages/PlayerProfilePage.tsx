@@ -424,12 +424,24 @@ export const PlayerProfilePage: React.FC = () => {
                         <span className="text-xs font-semibold text-accent-neon">UTR — Universal Tennis Rating</span>
                       </div>
                       <div className="grid grid-cols-2 gap-4 mb-3">
-                        <div className="text-center">
-                          <p className="text-3xl font-black">{primary.utr_singles || '—'}</p>
+                        <div className="text-center flex flex-col items-center">
+                          {!primary.utr_singles && !primary.utr_synced_at ? (
+                            <div className="h-9 flex items-center justify-center">
+                              <Loader2 className="w-5 h-5 text-accent-neon animate-spin" />
+                            </div>
+                          ) : (
+                            <p className="text-3xl font-black">{primary.utr_singles || '—'}</p>
+                          )}
                           <p className="text-xs text-text-muted mt-1">Simples</p>
                         </div>
-                        <div className="text-center">
-                          <p className="text-3xl font-black">{primary.utr_doubles || '—'}</p>
+                        <div className="text-center flex flex-col items-center">
+                          {!primary.utr_doubles && !primary.utr_synced_at ? (
+                            <div className="h-9 flex items-center justify-center">
+                              <Loader2 className="w-5 h-5 text-accent-neon animate-spin" />
+                            </div>
+                          ) : (
+                            <p className="text-3xl font-black">{primary.utr_doubles || '—'}</p>
+                          )}
                           <p className="text-xs text-text-muted mt-1">Duplas</p>
                         </div>
                       </div>

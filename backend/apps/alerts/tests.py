@@ -126,3 +126,48 @@ class UserAlertPreferenceTestCase(TestCase):
         p1 = UserAlertPreference.get_or_create_defaults(self.user)
         p2 = UserAlertPreference.get_or_create_defaults(self.user)
         self.assertEqual(p1.id, p2.id)
+
+
+class AlertMarkReadFlowTestCase(TestCase):
+    """
+    Marcar como lido remove o alerta da lista ativa e atualiza o contador.
+    A lista usa /api/alerts/unread/, que exclui alertas lidos, então o item
+    não reaparece "esmaecido" depois de marcado.
+    """
+
+    def setUp(self):
+        from rest_framework.test import APIClient
+        self.client = APIClient()
+        self.user = User.objects.create_user(email='alert_read@test.com', password='pass')
+        self.client.force_authenticate(user=self.user)
+        self.a1 = Alert.objects.create(
+            user=self.user, kind=Alert.KIND_OTHER, channel=Alert.CHANNEL_IN_APP,
+            status=Alert.STATUS_SENT, title='Alerta 1',
+        )
+        self.a2 = Alert.objects.create(
+            user=self.user, kind=Alert.KIND_OTHER, channel=Alert.CHANNEL_IN_APP,
+            status=Alert.STATUS_SENT, title='Alerta 2',
+        )
+
+    def _unread_ids(self):
+        res = self.client.get('/api/alerts/unread/')
+        self.assertEqual(res.status_code, 200, res.data)
+        data = res.data['results'] if isinstance(res.data, dict) and 'results' in res.data else res.data
+        return [a['id'] for a in data]
+
+    def test_mark_read_removes_from_unread_list(self):
+        self.assertCountEqual(self._unread_ids(), [self.a1.id, self.a2.id])
+
+        res = self.client.post(f'/api/alerts/{self.a1.id}/mark-read/')
+        self.assertEqual(res.status_code, 200, res.data)
+
+        # Backend records the read state…
+        self.a1.refresh_from_db()
+        self.assertEqual(self.a1.status, Alert.STATUS_READ)
+        # …and it no longer appears in the active (unread) list.
+        self.assertEqual(self._unread_ids(), [self.a2.id])
+
+    def test_mark_all_read_empties_unread_list(self):
+        res = self.client.post('/api/alerts/mark-all-read/')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(self._unread_ids(), [])

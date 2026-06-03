@@ -130,6 +130,12 @@ export const PlayerProfilePage: React.FC = () => {
     || primary?.utr_synced_at
   );
   const showUtrSection = !!primary && (canManageUtr || hasUtrData);
+  const isUtrExtractionPending = !!(
+    primary?.utr_player_id
+    && !primary?.utr_singles
+    && !primary?.utr_doubles
+    && !primary?.utr_sync_error
+  );
 
   async function handleTiSync() {
     if (!primary) return;
@@ -433,7 +439,7 @@ export const PlayerProfilePage: React.FC = () => {
                       </div>
                       <div className="grid grid-cols-2 gap-4 mb-3">
                         <div className="text-center flex flex-col items-center">
-                          {!primary.utr_singles && !primary.utr_synced_at ? (
+                          {!primary.utr_singles && isUtrExtractionPending ? (
                             <div className="h-9 flex items-center justify-center">
                               <Loader2 className="w-5 h-5 text-accent-neon animate-spin" />
                             </div>
@@ -443,7 +449,7 @@ export const PlayerProfilePage: React.FC = () => {
                           <p className="text-xs text-text-muted mt-1">Simples</p>
                         </div>
                         <div className="text-center flex flex-col items-center">
-                          {!primary.utr_doubles && !primary.utr_synced_at ? (
+                          {!primary.utr_doubles && isUtrExtractionPending ? (
                             <div className="h-9 flex items-center justify-center">
                               <Loader2 className="w-5 h-5 text-accent-neon animate-spin" />
                             </div>

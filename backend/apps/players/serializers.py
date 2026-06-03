@@ -36,12 +36,12 @@ class PlayerProfileSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at',
             # UTR
             'utr_player_id', 'utr_display_name', 'utr_singles', 'utr_doubles',
-            'utr_profile_url', 'utr_synced_at',
+            'utr_profile_url', 'utr_synced_at', 'utr_sync_error',
         )
         read_only_fields = (
             'created_at', 'updated_at', 'sporting_age',
             'utr_player_id', 'utr_display_name', 'utr_singles', 'utr_doubles',
-            'utr_profile_url', 'utr_synced_at',
+            'utr_profile_url', 'utr_synced_at', 'utr_sync_error',
         )
 
     def create(self, validated_data):

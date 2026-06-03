@@ -153,6 +153,7 @@ export interface PlayerProfile {
   utr_doubles: string;
   utr_profile_url: string;
   utr_synced_at: string | null;
+  utr_sync_error?: string;
 }
 
 export type TournamentStatus =

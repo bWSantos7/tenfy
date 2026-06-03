@@ -2,10 +2,23 @@ import api from './api';
 import { Alert, CoachAthlete, DependentInvite, Paginated, ParentChild, PlayerCategory, PlayerProfile, PlayerSearchResult, TiData, WatchlistItem } from '../types';
 
 // ----- Players -----
+// In-flight dedup: listProfiles() is called from several pages/components that
+// often mount together (Home chama 2x). Sharing the pending promise collapses
+// concurrent identical GETs into one request. Only merges in-flight calls, so it
+// never serves stale data — the next call after resolution fetches fresh.
+let _profilesInFlight: Promise<PlayerProfile[]> | null = null;
 export async function listProfiles() {
-  const res = await api.get<Paginated<PlayerProfile> | PlayerProfile[]>('/api/players/profiles/');
-  const d = res.data as Paginated<PlayerProfile>;
-  return d.results ?? (res.data as PlayerProfile[]);
+  if (_profilesInFlight) return _profilesInFlight;
+  _profilesInFlight = (async () => {
+    const res = await api.get<Paginated<PlayerProfile> | PlayerProfile[]>('/api/players/profiles/');
+    const d = res.data as Paginated<PlayerProfile>;
+    return d.results ?? (res.data as PlayerProfile[]);
+  })();
+  try {
+    return await _profilesInFlight;
+  } finally {
+    _profilesInFlight = null;
+  }
 }
 export async function getProfile(id: number) {
   const res = await api.get<PlayerProfile>(`/api/players/profiles/${id}/`);
@@ -220,9 +233,9 @@ export async function getAthleteWatchlist(id: number) {
 
 // ----- Alerts -----
 export async function listAlerts() {
-  const res = await api.get<Paginated<Alert> | Alert[]>('/api/alerts/');
+  const res = await api.get<{ count: number; results: Alert[] } | Paginated<Alert>>('/api/alerts/unread/');
   const d = res.data as Paginated<Alert>;
-  return d.results ?? (res.data as Alert[]);
+  return d.results ?? (res.data as { count: number; results: Alert[] }).results;
 }
 export async function unreadAlerts() {
   const res = await api.get<{ count: number; results: Alert[] } | Paginated<Alert>>(

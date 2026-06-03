@@ -2,10 +2,22 @@ import api from './api';
 import { Alert, CoachAthlete, DependentInvite, Paginated, ParentChild, PlayerCategory, PlayerProfile, PlayerSearchResult, TiData, UtrCandidate, UtrSearchResult, WatchlistItem } from '../types';
 
 // ----- Players -----
+// In-flight dedup: collapses concurrent identical GETs (várias telas pedem o
+// perfil ao montar) numa única requisição. Só mescla chamadas simultâneas — a
+// próxima chamada após resolver busca dados frescos (sem risco de cache velho).
+let _profilesInFlight: Promise<PlayerProfile[]> | null = null;
 export async function listProfiles() {
-  const res = await api.get<Paginated<PlayerProfile> | PlayerProfile[]>('/api/players/profiles/');
-  const d = res.data as Paginated<PlayerProfile>;
-  return d.results ?? (res.data as PlayerProfile[]);
+  if (_profilesInFlight) return _profilesInFlight;
+  _profilesInFlight = (async () => {
+    const res = await api.get<Paginated<PlayerProfile> | PlayerProfile[]>('/api/players/profiles/');
+    const d = res.data as Paginated<PlayerProfile>;
+    return d.results ?? (res.data as PlayerProfile[]);
+  })();
+  try {
+    return await _profilesInFlight;
+  } finally {
+    _profilesInFlight = null;
+  }
 }
 export async function getProfile(id: number) {
   const res = await api.get<PlayerProfile>(`/api/players/profiles/${id}/`);
@@ -245,9 +257,9 @@ export async function requestDataExport() {
 
 // ----- Alerts -----
 export async function listAlerts() {
-  const res = await api.get<Paginated<Alert> | Alert[]>('/api/alerts/');
+  const res = await api.get<{ count: number; results: Alert[] } | Paginated<Alert>>('/api/alerts/unread/');
   const d = res.data as Paginated<Alert>;
-  return d.results ?? (res.data as Alert[]);
+  return d.results ?? (res.data as { count: number; results: Alert[] }).results;
 }
 export async function unreadAlerts() {
   const res = await api.get<{ count: number; results: Alert[] } | Paginated<Alert>>(

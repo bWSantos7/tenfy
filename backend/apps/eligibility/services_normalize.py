@@ -74,6 +74,17 @@ _SIMPLES_FEM_RE = re.compile(
 _ANOS_RE = re.compile(r'(?:sub\s*[-–]?\s*)?(\d{1,2})\s*anos?', re.IGNORECASE)
 _U_AGE_RE = re.compile(r'\bU\s*(\d{1,2})\b', re.IGNORECASE)
 
+# FPT "N Anos Masculino/Feminino [Simples|Duplas]" — e.g. "14 Anos Masculino Simples"
+# Also handles bare "N Masculino" / "N Feminino" used in raw group labels.
+_FPT_AGE_GENDER_RE = re.compile(
+    r'^(\d{1,2})\s+anos?\s+(masculin[ao]|feminin[ao])\b',
+    re.IGNORECASE,
+)
+_BARE_AGE_GENDER_RE = re.compile(
+    r'^\s*(\d{1,2})\s+(masculin[ao]|feminin[ao])\b',
+    re.IGNORECASE,
+)
+
 
 def _gender(match_groups, default='*'):
     for g in match_groups:
@@ -231,6 +242,25 @@ def normalize_category_text(text: str) -> Optional[PlayerCategory]:
     m = _SIMPLES_FEM_RE.search(raw)
     if m:
         cat = _find_age_cat(int(m.group(1)), 'F')
+        if cat:
+            return cat
+
+    # --- FPT "N Anos Masculino/Feminino [Simples/Duplas]" ---
+    # e.g. "14 Anos Masculino Simples", "12 Anos Feminino Duplas"
+    m = _FPT_AGE_GENDER_RE.match(raw)
+    if m:
+        age = int(m.group(1))
+        gender = 'M' if m.group(2)[0].lower() == 'm' else 'F'
+        cat = _find_age_cat(age, gender)
+        if cat:
+            return cat
+
+    # --- Bare "N Masculino" / "N Feminino" group labels ---
+    m = _BARE_AGE_GENDER_RE.match(raw)
+    if m:
+        age = int(m.group(1))
+        gender = 'M' if m.group(2)[0].lower() == 'm' else 'F'
+        cat = _find_age_cat(age, gender)
         if cat:
             return cat
 

@@ -552,7 +552,6 @@ const ProfileCard: React.FC<{
           <div className="flex items-center gap-2 text-xs text-text-secondary">
             <MapPin className="w-3.5 h-3.5 text-text-muted shrink-0" />
             <span>{[p.home_city, p.home_state].filter(Boolean).join(' / ')}</span>
-            {p.travel_radius_km && <span className="text-text-muted">• raio {p.travel_radius_km} km</span>}
           </div>
         )}
         <div className="flex items-center gap-2 text-xs text-text-secondary">

@@ -24,7 +24,7 @@ from .serializers import (
 )
 
 _COMPATIBLE_CACHE_TTL = 300   # 5 minutes
-_COMPATIBLE_CACHE_VERSION = 4
+_COMPATIBLE_CACHE_VERSION = 5
 _LIST_CACHE_TTL       = 120   # 2 minutes for public tournament list
 _CALENDAR_CACHE_TTL   = 600   # 10 minutes for calendar (changes less often)
 

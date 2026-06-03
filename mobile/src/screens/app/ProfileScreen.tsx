@@ -496,14 +496,14 @@ export function ProfileScreen(_: Props) {
                 {isManagedChild ? 'Seu perfil esportivo' : 'Gerencie seu perfil de jogador'}
               </AppText>
             </View>
-            {!isManagedChild ? (
+            {!isManagedChild && profiles.length === 0 ? (
               <Pressable
                 onPress={() => navigation.navigate('Onboarding')}
                 style={{ backgroundColor: `${colors.accentNeon}20`, borderWidth: 1, borderColor: `${colors.accentNeon}55`, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 6, flexDirection: 'row', gap: 6, alignItems: 'center', marginLeft: 8 }}
               >
                 <Ionicons name="add" size={16} color={colors.accentNeon} />
                 <AppText variant="caption" style={{ color: colors.accentNeon, fontWeight: '700' }}>
-                  {profiles.length === 0 ? 'Criar' : 'Novo'}
+                  Criar
                 </AppText>
               </Pressable>
             ) : null}

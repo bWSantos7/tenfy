@@ -299,12 +299,12 @@ export const ProfilePage: React.FC = () => {
               {user?.managed_by_parent ? 'Seu perfil de jogador (gerenciado pelo responsável)' : 'Gerencie seu perfil de jogador'}
             </p>
           </div>
-          {(!user?.managed_by_parent || profiles.length === 0) && (
+          {!user?.managed_by_parent && profiles.length === 0 && (
             <Link
               to="/onboarding"
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-accent-neon bg-accent-neon/10 border border-accent-neon/30 hover:bg-accent-neon/20 transition-colors"
             >
-              + {profiles.length === 0 ? 'Criar' : 'Novo'}
+              + Criar
             </Link>
           )}
         </div>

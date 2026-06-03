@@ -62,13 +62,12 @@ class PlayerProfileViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         if self._is_managed_child():
-            already_has_profile = PlayerProfile.objects.filter(user=request.user).exists()
-            if already_has_profile:
+            if PlayerProfile.objects.filter(user=request.user).exists():
                 return Response(
                     {'detail': 'Contas de filho não podem criar perfis esportivos adicionais. Peça ao responsável para gerenciar seus perfis.'},
                     status=status.HTTP_403_FORBIDDEN,
                 )
-        if request.user.role == 'parent':
+        elif request.user.role == 'parent':
             from apps.billing.models import Subscription
             current_count = PlayerProfile.objects.filter(user=request.user).count()
             try:
@@ -80,6 +79,13 @@ class PlayerProfileViewSet(viewsets.ModelViewSet):
                 return Response(
                     {'detail': f'Limite de {max_dependent_profiles} perfil(is) de dependentes atingido para o seu plano.'},
                     status=status.HTTP_400_BAD_REQUEST,
+                )
+        else:
+            # Jogador individual: máximo 1 perfil esportivo próprio.
+            if PlayerProfile.objects.filter(user=request.user).exists():
+                return Response(
+                    {'detail': 'Jogadores individuais só podem ter um perfil esportivo.'},
+                    status=status.HTTP_403_FORBIDDEN,
                 )
         return super().create(request, *args, **kwargs)
 

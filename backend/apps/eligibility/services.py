@@ -215,7 +215,7 @@ def allowed_youth_category_ages(
 class EligibilityEngine:
     """Evaluate a player profile against tournament categories."""
 
-    def __init__(self, profile: PlayerProfile, include_category_up: bool = True):
+    def __init__(self, profile: PlayerProfile, include_category_up: bool = False):
         self.profile = profile
         self.include_category_up = include_category_up
         self._current_year = timezone.now().year
@@ -626,8 +626,9 @@ class EligibilityEngine:
         return STATUS_INCOMPATIBLE
 
     def _check_exact_age(self, cat: PlayerCategory, reasons: list) -> str:
-        # Rule: "14 anos" means "up to 14 years old" — any player aged <= max_age is compatible.
-        # A 12-year-old may enter 12, 14, 16-year-old categories.
+        # Base age rule: player must be <= max_age (e.g. "14 anos" = up to 14 years old).
+        # This is a PRE-CHECK only. _apply_tournament_youth_policy() always runs after and
+        # restricts to official_age in default mode, or per-circuit limits in advanced mode.
         # min_age on age categories is metadata only — does not restrict entry downward.
         age = self.sporting_age
         if age is None:

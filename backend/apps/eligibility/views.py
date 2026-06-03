@@ -76,5 +76,8 @@ def evaluate_edition(request, edition_id):
         TournamentEdition.objects.prefetch_related('categories__normalized_category'),
         pk=edition_id,
     )
-    engine = EligibilityEngine(profile)
+    include_category_up = request.query_params.get('include_category_up', '').lower() in (
+        '1', 'true', 'yes', 'sim'
+    )
+    engine = EligibilityEngine(profile, include_category_up=include_category_up)
     return Response(engine.evaluate_edition(edition))

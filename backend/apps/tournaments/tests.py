@@ -498,6 +498,277 @@ class YouthCategoryPromotionCompatibilityTestCase(TestCase):
         self.assertIn(cosat.id, ids)
         self.assertIn(itf.id, ids)
 
+    # ── Sub-12 explicit tests ──────────────────────────────────────────────────
+
+    def test_sub12_default_listing_shows_only_sub12(self):
+        """Sub-12 player sees only Sub-12 in default listing — never Sub-14/16/18."""
+        profile = self._profile(12)
+        sub12 = self._edition('CBT', 'cbt-12-12', 'CBT Sub-12', '12M', 12)
+        sub14 = self._edition('CBT', 'cbt-12-14', 'CBT Sub-14', '14M', 14)
+        sub16 = self._edition('CBT', 'cbt-12-16', 'CBT Sub-16', '16M', 16)
+        sub18 = self._edition('CBT', 'cbt-12-18', 'CBT Sub-18', '18M', 18)
+
+        ids = self._compatible_ids(profile)
+
+        self.assertIn(sub12.id, ids)
+        self.assertNotIn(sub14.id, ids)
+        self.assertNotIn(sub16.id, ids)
+        self.assertNotIn(sub18.id, ids)
+
+    def test_sub12_brasileiro_advanced_only_one_above(self):
+        """Sub-12 via Brasileiro advanced filter: sees Sub-12 and Sub-14 only."""
+        profile = self._profile(12)
+        sub12 = self._edition('CBT', 'bra-12-12', 'Brasileiro Sub-12', '12M', 12)
+        sub14 = self._edition('CBT', 'bra-12-14', 'Brasileiro Sub-14', '14M', 14)
+        sub16 = self._edition('CBT', 'bra-12-16', 'Brasileiro Sub-16', '16M', 16)
+
+        ids = self._compatible_ids(profile, include_category_up='true')
+
+        self.assertIn(sub12.id, ids)
+        self.assertIn(sub14.id, ids)
+        self.assertNotIn(sub16.id, ids)
+
+    def test_sub12_paulista_advanced_up_to_two_above(self):
+        """Sub-12 via Paulista advanced filter: sees Sub-12, Sub-14 and Sub-16 only."""
+        profile = self._profile(12)
+        sub14 = self._edition('FPT', 'pau-12-14', 'Paulista Sub-14', '14M', 14)
+        sub16 = self._edition('FPT', 'pau-12-16', 'Paulista Sub-16', '16M', 16)
+        sub18 = self._edition('FPT', 'pau-12-18', 'Paulista Sub-18', '18M', 18)
+
+        ids = self._compatible_ids(profile, include_category_up='true')
+
+        self.assertIn(sub14.id, ids)
+        self.assertIn(sub16.id, ids)
+        self.assertNotIn(sub18.id, ids)
+
+    # ── Gender filter tests ────────────────────────────────────────────────────
+
+    def _profile_gendered(self, age, gender, modality='tennis'):
+        return PlayerProfile.objects.create(
+            user=self.user,
+            display_name=f'Atleta {age} {gender}',
+            birth_year=timezone.now().year - age,
+            gender=gender,
+            preferred_modality=modality,
+            competitive_level=PlayerProfile.LEVEL_YOUTH,
+        )
+
+    def _edition_gendered(self, org_key, slug, title, category_text, normalized_age=None, gender_scope='M'):
+        org = self.orgs[org_key]
+        normalized_cat = None
+        if normalized_age is not None:
+            normalized_cat, _ = PlayerCategory.objects.get_or_create(
+                taxonomy=PlayerCategory.TAXONOMY_CBT_AGE,
+                code=f'{normalized_age}{gender_scope}',
+                gender_scope=gender_scope,
+                defaults={
+                    'label_ptbr': f'Sub-{normalized_age} {gender_scope}',
+                    'min_age': normalized_age,
+                    'max_age': normalized_age,
+                },
+            )
+        tournament = Tournament.objects.create(
+            canonical_name=title,
+            canonical_slug=slug,
+            organization=org,
+            circuit=org_key,
+            modality='tennis',
+        )
+        edition = TournamentEdition.objects.create(
+            tournament=tournament,
+            external_id=f'{org_key.lower()}:{slug}',
+            title=title,
+            season_year=2026,
+            status=TournamentEdition.STATUS_OPEN,
+            start_date='2026-07-10',
+            is_youth=True,
+            is_published=True,
+        )
+        TournamentCategory.objects.create(
+            edition=edition,
+            source_category_text=category_text,
+            normalized_category=normalized_cat,
+        )
+        return edition
+
+    def test_male_profile_does_not_see_female_categories(self):
+        """Male athlete must not receive female-only tournament categories."""
+        profile = self._profile_gendered(14, 'M')
+        female_ed = self._edition_gendered('CBT', 'gender-14f', 'CBT Sub-14 Fem', '14F', 14, 'F')
+        male_ed = self._edition_gendered('CBT', 'gender-14m', 'CBT Sub-14 Masc', '14M', 14, 'M')
+
+        ids = self._compatible_ids(profile)
+
+        self.assertIn(male_ed.id, ids)
+        self.assertNotIn(female_ed.id, ids)
+
+    def test_female_profile_does_not_see_male_categories(self):
+        """Female athlete must not receive male-only tournament categories."""
+        profile = self._profile_gendered(14, 'F')
+        female_ed = self._edition_gendered('CBT', 'gender-f14', 'CBT Sub-14 Fem-v2', '14F', 14, 'F')
+        male_ed = self._edition_gendered('CBT', 'gender-m14', 'CBT Sub-14 Masc-v2', '14M', 14, 'M')
+
+        ids = self._compatible_ids(profile)
+
+        self.assertIn(female_ed.id, ids)
+        self.assertNotIn(male_ed.id, ids)
+
+    def test_mixed_category_visible_to_both_genders(self):
+        """Mixed-gender category (gender_scope='X') must appear for both M and F."""
+        male_profile = self._profile_gendered(14, 'M')
+        female_profile = self._profile_gendered(14, 'F')
+        mixed_cat, _ = PlayerCategory.objects.get_or_create(
+            taxonomy=PlayerCategory.TAXONOMY_CBT_AGE,
+            code='14X',
+            gender_scope='X',
+            defaults={'label_ptbr': 'Sub-14 Misto', 'min_age': 14, 'max_age': 14},
+        )
+        org = self.orgs['CBT']
+        tournament = Tournament.objects.create(
+            canonical_name='CBT Sub-14 Misto',
+            canonical_slug='cbt-sub14-misto-x',
+            organization=org,
+            circuit='CBT',
+            modality='tennis',
+        )
+        edition = TournamentEdition.objects.create(
+            tournament=tournament,
+            external_id='cbt:sub14-misto-x',
+            title='CBT Sub-14 Misto',
+            season_year=2026,
+            status=TournamentEdition.STATUS_OPEN,
+            start_date='2026-07-10',
+            is_youth=True,
+            is_published=True,
+        )
+        TournamentCategory.objects.create(
+            edition=edition,
+            source_category_text='14X',
+            normalized_category=mixed_cat,
+        )
+
+        male_ids = self._compatible_ids(male_profile)
+        female_ids = self._compatible_ids(female_profile)
+
+        self.assertIn(edition.id, male_ids, 'Mixed category must appear for male profile')
+        self.assertIn(edition.id, female_ids, 'Mixed category must appear for female profile')
+
+    # ── State / location filter tests ──────────────────────────────────────────
+
+    def test_tournament_outside_accepted_states_not_shown(self):
+        """If athlete only plays in SP, tournaments in other states must not appear."""
+        profile = self._profile(14)
+        profile.travel_states = ['SP']
+        profile.home_state = 'SP'
+        profile.save(update_fields=['travel_states', 'home_state'])
+
+        sp_venue = Venue.objects.create(name='Arena SP Loc', city='Sao Paulo', state='SP')
+        rj_venue = Venue.objects.create(name='Arena RJ Loc', city='Rio de Janeiro', state='RJ')
+
+        sp_edition = self._edition('CBT', 'state-sp-14', 'CBT SP', '14M', 14)
+        sp_edition.venue = sp_venue
+        sp_edition.save(update_fields=['venue'])
+
+        rj_edition = self._edition('CBT', 'state-rj-14', 'CBT RJ', '14M', 14)
+        rj_edition.venue = rj_venue
+        rj_edition.save(update_fields=['venue'])
+
+        ids = self._compatible_ids(profile)
+
+        self.assertIn(sp_edition.id, ids, 'SP tournament must appear for SP-only athlete')
+        self.assertNotIn(rj_edition.id, ids, 'RJ tournament must not appear for SP-only athlete')
+
+    def test_tournament_in_accepted_state_shown_when_multiple_states(self):
+        """Athlete accepting SP and SC must see tournaments in both states."""
+        profile = self._profile(14)
+        profile.travel_states = ['SP', 'SC']
+        profile.save(update_fields=['travel_states'])
+
+        sc_venue = Venue.objects.create(name='Arena SC Loc', city='Florianopolis', state='SC')
+        sc_edition = self._edition('CBT', 'state-sc-14', 'CBT SC', '14M', 14)
+        sc_edition.venue = sc_venue
+        sc_edition.save(update_fields=['venue'])
+
+        ids = self._compatible_ids(profile)
+        self.assertIn(sc_edition.id, ids, 'SC tournament must appear when SC is in travel_states')
+
+    # ── Profile switching test ─────────────────────────────────────────────────
+
+    def test_different_profiles_return_different_results(self):
+        """Switching to a different profile immediately changes compatible results."""
+        sub12_profile = self._profile(12)
+        sub16_profile = self._profile(16)
+
+        sub12_ed = self._edition('CBT', 'switch-12', 'CBT Switch Sub-12', '12M', 12)
+        sub16_ed = self._edition('CBT', 'switch-16', 'CBT Switch Sub-16', '16M', 16)
+
+        ids_sub12 = self._compatible_ids(sub12_profile)
+        ids_sub16 = self._compatible_ids(sub16_profile)
+
+        self.assertIn(sub12_ed.id, ids_sub12)
+        self.assertNotIn(sub16_ed.id, ids_sub12,
+                         'Sub-16 tournament must not appear for Sub-12 profile')
+        self.assertIn(sub16_ed.id, ids_sub16)
+        self.assertNotIn(sub12_ed.id, ids_sub16,
+                         'Sub-12 tournament must not appear for Sub-16 profile')
+
+    def test_cache_is_profile_specific(self):
+        """Compatible results are cached per profile — switching profiles bypasses wrong cache."""
+        cache.clear()
+        sub12_profile = self._profile(12)
+        sub16_profile = self._profile(16)
+
+        sub12_ed = self._edition('CBT', 'cache-12', 'CBT Cache Sub-12', '12M', 12)
+        sub16_ed = self._edition('CBT', 'cache-16', 'CBT Cache Sub-16', '16M', 16)
+
+        # Warm cache for Sub-12
+        ids_sub12_first = self._compatible_ids(sub12_profile)
+        # Warm cache for Sub-16
+        ids_sub16_first = self._compatible_ids(sub16_profile)
+
+        # Second call must return same profile-specific results (not bleed between caches)
+        ids_sub12_second = self._compatible_ids(sub12_profile)
+        ids_sub16_second = self._compatible_ids(sub16_profile)
+
+        self.assertEqual(set(ids_sub12_first), set(ids_sub12_second))
+        self.assertEqual(set(ids_sub16_first), set(ids_sub16_second))
+        self.assertNotIn(sub16_ed.id, ids_sub12_second,
+                         'Sub-16 tournament must never appear in Sub-12 profile results')
+        self.assertNotIn(sub12_ed.id, ids_sub16_second,
+                         'Sub-12 tournament must never appear in Sub-16 profile results')
+
+    def test_clearing_filters_does_not_break_modality_isolation(self):
+        """Even after clearing all filters, modality must remain mandatory."""
+        tennis_profile = self._profile(14)
+
+        org = self.orgs['CBT']
+        bt_tournament = Tournament.objects.create(
+            canonical_name='Beach Tennis CBT',
+            canonical_slug='beach-tennis-cbt-clear',
+            organization=org,
+            circuit='CBT',
+            modality='beach_tennis',
+        )
+        bt_edition = TournamentEdition.objects.create(
+            tournament=bt_tournament,
+            external_id='cbt:beach-tennis-clear',
+            title='Beach Tennis CBT',
+            season_year=2026,
+            status=TournamentEdition.STATUS_OPEN,
+            start_date='2026-07-10',
+            is_youth=True,
+            is_published=True,
+        )
+        TournamentCategory.objects.create(
+            edition=bt_edition,
+            source_category_text='14M',
+            normalized_category=self.categories[14],
+        )
+
+        ids = self._compatible_ids(tennis_profile)
+        self.assertNotIn(bt_edition.id, ids,
+                         'Beach tennis edition must never appear for tennis profile even with cleared filters')
+
 
 class ModalityUtilsTestCase(TestCase):
     """Unit tests for apps.ingestion.modality_utils.infer_modality."""

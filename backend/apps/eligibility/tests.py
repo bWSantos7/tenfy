@@ -165,6 +165,136 @@ class EligibilityAPITestCase(TestCase):
         self.assertIn(res.status_code, [400, 404])
 
 
+# ─── EligibilityEngine default behaviour ──────────────────────────────────────
+
+class EligibilityEngineDefaultsTestCase(TestCase):
+    """EligibilityEngine must default to include_category_up=False (official category only)."""
+
+    def _profile(self, age):
+        from apps.players.models import PlayerProfile
+        from django.utils import timezone
+        p = MagicMock(spec=PlayerProfile)
+        p.birth_year = timezone.now().year - age
+        p.gender = 'M'
+        p.tennis_class = ''
+        p.external_ids = {}
+        p.sporting_age = age
+        return p
+
+    def test_default_is_include_category_up_false(self):
+        from apps.eligibility.services import EligibilityEngine
+        engine = EligibilityEngine.__new__(EligibilityEngine)
+        engine.__init__(self._profile(14))
+        self.assertFalse(engine.include_category_up)
+
+    def test_explicit_true_overrides_default(self):
+        from apps.eligibility.services import EligibilityEngine
+        engine = EligibilityEngine(self._profile(14), include_category_up=True)
+        self.assertTrue(engine.include_category_up)
+
+
+# ─── _apply_tournament_youth_policy: default listing ─────────────────────────
+
+class TournamentYouthPolicyDefaultTestCase(TestCase):
+    """
+    _apply_tournament_youth_policy must block superior categories in default mode
+    and allow them only in advanced mode within circuit-specific limits.
+    """
+
+    def _profile(self, age):
+        from apps.players.models import PlayerProfile
+        from django.utils import timezone
+        p = MagicMock(spec=PlayerProfile)
+        p.birth_year = timezone.now().year - age
+        p.gender = 'M'
+        p.tennis_class = ''
+        p.external_ids = {}
+        return p
+
+    def _make_tc(self, source_text, max_age, circuit_org_short):
+        """Build a TournamentCategory mock with normalized_category and circuit info."""
+        from apps.players.models import PlayerCategory
+        norm = MagicMock(spec=PlayerCategory)
+        norm.taxonomy = PlayerCategory.TAXONOMY_CBT_AGE
+        norm.max_age = max_age
+        norm.min_age = max_age
+        norm.class_level = None
+        norm.gender_scope = 'M'
+        norm.code = f'{max_age}M'
+        norm.label_ptbr = f'Sub-{max_age} M'
+
+        org = MagicMock()
+        org.short_name = circuit_org_short
+        org.name = ''
+
+        tournament = MagicMock()
+        tournament.organization = org
+        tournament.circuit = circuit_org_short
+        tournament.modality = 'tennis'
+
+        edition = MagicMock()
+        edition.tournament = tournament
+        edition.title = ''
+        edition.external_id = ''
+
+        tc = MagicMock()
+        tc.normalized_category = norm
+        tc.source_category_text = source_text
+        tc.edition = edition
+        tc.max_participants = None
+        tc.edition_id = 1
+        return tc
+
+    def test_sub14_default_sees_own_category(self):
+        from apps.eligibility.services import EligibilityEngine, STATUS_COMPATIBLE
+        engine = EligibilityEngine(self._profile(14), include_category_up=False)
+        tc = self._make_tc('14M', 14, 'CBT')
+        result = engine.evaluate_category(tc)
+        self.assertEqual(result.status, STATUS_COMPATIBLE)
+
+    def test_sub14_default_blocks_sub16(self):
+        from apps.eligibility.services import EligibilityEngine, STATUS_INCOMPATIBLE
+        engine = EligibilityEngine(self._profile(14), include_category_up=False)
+        tc = self._make_tc('16M', 16, 'CBT')
+        result = engine.evaluate_category(tc)
+        self.assertEqual(result.status, STATUS_INCOMPATIBLE)
+
+    def test_sub12_default_blocks_sub18(self):
+        from apps.eligibility.services import EligibilityEngine, STATUS_INCOMPATIBLE
+        engine = EligibilityEngine(self._profile(12), include_category_up=False)
+        tc = self._make_tc('18M', 18, 'CBT')
+        result = engine.evaluate_category(tc)
+        self.assertEqual(result.status, STATUS_INCOMPATIBLE)
+
+    def test_sub12_paulista_advanced_allows_sub16(self):
+        from apps.eligibility.services import EligibilityEngine, STATUS_COMPATIBLE
+        engine = EligibilityEngine(self._profile(12), include_category_up=True)
+        tc = self._make_tc('16M', 16, 'FPT')
+        result = engine.evaluate_category(tc)
+        self.assertEqual(result.status, STATUS_COMPATIBLE)
+
+    def test_sub12_paulista_advanced_blocks_sub18(self):
+        from apps.eligibility.services import EligibilityEngine, STATUS_INCOMPATIBLE
+        engine = EligibilityEngine(self._profile(12), include_category_up=True)
+        tc = self._make_tc('18M', 18, 'FPT')
+        result = engine.evaluate_category(tc)
+        self.assertEqual(result.status, STATUS_INCOMPATIBLE)
+
+    def test_sub12_brasileiro_advanced_allows_sub14(self):
+        from apps.eligibility.services import EligibilityEngine, STATUS_COMPATIBLE
+        engine = EligibilityEngine(self._profile(12), include_category_up=True)
+        tc = self._make_tc('14M', 14, 'CBT')
+        result = engine.evaluate_category(tc)
+        self.assertEqual(result.status, STATUS_COMPATIBLE)
+
+    def test_sub12_brasileiro_advanced_blocks_sub16(self):
+        from apps.eligibility.services import EligibilityEngine, STATUS_INCOMPATIBLE
+        engine = EligibilityEngine(self._profile(12), include_category_up=True)
+        tc = self._make_tc('16M', 16, 'CBT')
+        result = engine.evaluate_category(tc)
+        self.assertEqual(result.status, STATUS_INCOMPATIBLE)
+
+
 # ─── Travel states tests ──────────────────────────────────────────────────────
 
 class TravelStatesTestCase(TestCase):

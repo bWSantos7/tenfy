@@ -390,6 +390,22 @@ class YouthCategoryPromotionCompatibilityTestCase(TestCase):
         self.assertIn(official.id, ids)
         self.assertNotIn(superior.id, ids)
 
+    def test_default_listing_uses_home_state_when_travel_states_empty(self):
+        profile = self._profile(14)
+        profile.home_city = 'Sao Jose do Rio Preto'
+        profile.home_state = 'SP'
+        profile.travel_radius_km = 100
+        profile.travel_states = []
+        profile.save(update_fields=['home_city', 'home_state', 'travel_radius_km', 'travel_states'])
+        venue = Venue.objects.create(name='Arena Ribeirao', city='Ribeirao Preto', state='SP')
+        official = self._edition('FPT', 'same-state-14', 'FPT Sub-14 SP', '14M', 14)
+        official.venue = venue
+        official.save(update_fields=['venue'])
+
+        ids = self._compatible_ids(profile)
+
+        self.assertIn(official.id, ids)
+
     def test_advanced_filter_allows_paulista_up_to_two_categories(self):
         profile = self._profile(12)
         sub16 = self._edition('FPT', 'fpt-16', 'Paulista Sub-16', '16M', 16)

@@ -35,8 +35,14 @@ def within_profile_states(profile, edition) -> bool:
     states = list(profile.travel_states or [])
 
     if not states:
-        # No states set — fall back to legacy radius so existing profiles keep
-        # their previous filtering behaviour instead of seeing all of Brazil.
+        home_state = (getattr(profile, 'home_state', '') or '').upper()
+        venue = edition.venue
+        if home_state and venue and venue.state:
+            return venue.state.upper() == home_state
+        if home_state and (not venue or not venue.state):
+            return True
+        # No state data at all — fall back to legacy radius so old incomplete
+        # profiles keep their previous optimistic behaviour.
         return within_profile_radius(profile, edition)
 
     # "Todo o Brasil" shortcut: all 27 UFs selected
@@ -60,8 +66,23 @@ def profile_state_result(profile, edition) -> dict:
     states = list(profile.travel_states or [])
 
     if not states:
-        # No states set — fall back to radius check; flag as unknown so the UI
-        # prompts the user to configure states.
+        home_state = (getattr(profile, 'home_state', '') or '').upper()
+        venue = edition.venue
+        if home_state and venue and venue.state:
+            included = venue.state.upper() == home_state
+            return {
+                'included': included,
+                'status': DISTANCE_WITHIN if included else DISTANCE_OUTSIDE,
+                'message': None if included else 'Torneio fora da UF do perfil.',
+            }
+        if home_state and (not venue or not venue.state):
+            return {
+                'included': True,
+                'status': DISTANCE_UNKNOWN,
+                'message': 'Estado do torneio não identificado. Verifique o regulamento oficial.',
+            }
+        # No state data at all — fall back to radius check; flag as unknown so
+        # the UI prompts the user to configure states.
         included = within_profile_radius(profile, edition)
         return {
             'included': included,

@@ -24,6 +24,7 @@ from .serializers import (
 )
 
 _COMPATIBLE_CACHE_TTL = 300   # 5 minutes
+_COMPATIBLE_CACHE_VERSION = 2
 _LIST_CACHE_TTL       = 120   # 2 minutes for public tournament list
 _CALENDAR_CACHE_TTL   = 600   # 10 minutes for calendar (changes less often)
 
@@ -278,7 +279,8 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        cache_key = 'compatible:{}:{}:{}'.format(
+        cache_key = 'compatible:v{}:{}:{}:{}'.format(
+            _COMPATIBLE_CACHE_VERSION,
             request.user.id,
             profile.id,
             hashlib.sha256(request.get_full_path().encode()).hexdigest()[:16],

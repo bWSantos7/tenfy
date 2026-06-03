@@ -209,6 +209,14 @@ class TravelStatesTestCase(TestCase):
         p = self._make_profile([])
         self.assertTrue(within_profile_states(p, self._make_edition('AM')))
 
+    def test_empty_states_uses_home_state_when_available(self):
+        from apps.eligibility.location import within_profile_states
+        p = self._make_profile([])
+        p.home_state = 'SP'
+
+        self.assertTrue(within_profile_states(p, self._make_edition('SP')))
+        self.assertFalse(within_profile_states(p, self._make_edition('RJ')))
+
     def test_all_states_todo_brasil(self):
         from apps.eligibility.location import within_profile_states, ALL_BR_STATES
         p = self._make_profile(list(ALL_BR_STATES))

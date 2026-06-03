@@ -1856,3 +1856,102 @@ class CosatPaymentStatusTestCase(TestCase):
         entry = self._make_entry(source='cosat', payment='paid', ext_id='cosat:p-paid-001')
         data = FederationEntrySerializer(entry).data
         self.assertEqual(data['status'], 'confirmed')
+
+
+class WithdrawalSyncTestCase(TestCase):
+    """
+    Desistência deve manter um único status entre Agenda (watchlist), Minhas
+    inscrições (registration) e Detalhe do Torneio. Cobre os dois sentidos do sync.
+    """
+
+    def setUp(self):
+        from apps.sources.models import Organization
+        from apps.tournaments.models import Tournament, TournamentEdition, TournamentCategory
+        from apps.players.models import PlayerProfile
+        from apps.registrations.models import TournamentRegistration
+        from apps.watchlist.models import WatchlistItem
+
+        self.client = APIClient()
+        self.user = User.objects.create_user(email='withdraw_sync@test.com', password='pass')
+        self.client.force_authenticate(user=self.user)
+        self.profile = PlayerProfile.objects.create(
+            user=self.user, display_name='Atleta Sync', birth_year=2010,
+            gender='M', preferred_modality='tennis',
+        )
+        org, _ = Organization.objects.get_or_create(
+            short_name='WSORG', defaults={'name': 'Withdraw Sync Org', 'type': 'federation'},
+        )
+        t = Tournament.objects.create(
+            canonical_name='Sync Cup', canonical_slug='sync-cup',
+            organization=org, circuit='FPT', modality='tennis',
+        )
+        self.edition = TournamentEdition.objects.create(
+            tournament=t, external_id='fpt:sync-cup', title='Sync Cup 2026',
+            season_year=2026, status='open', is_published=True,
+        )
+        self.category = TournamentCategory.objects.create(
+            edition=self.edition, source_category_text='14M',
+        )
+
+    def _registration(self):
+        from apps.registrations.models import TournamentRegistration
+        return TournamentRegistration.objects.create(
+            profile=self.profile, edition=self.edition, category=self.category,
+        )
+
+    def _watchlist(self, status):
+        from apps.watchlist.models import WatchlistItem
+        return WatchlistItem.objects.create(
+            user=self.user, profile=self.profile, edition=self.edition, user_status=status,
+        )
+
+    def test_official_withdraw_marks_watchlist_withdrawn(self):
+        from apps.watchlist.models import WatchlistItem
+        reg = self._registration()
+        wl = self._watchlist(WatchlistItem.STATUS_REGISTERED)
+
+        res = self.client.delete(f'/api/registrations/{reg.id}/withdraw/')
+        self.assertEqual(res.status_code, 200, res.data)
+
+        reg.refresh_from_db()
+        wl.refresh_from_db()
+        self.assertTrue(reg.is_withdrawn)
+        self.assertEqual(wl.user_status, WatchlistItem.STATUS_WITHDRAWN)
+
+    def test_watchlist_withdraw_marks_registration_withdrawn(self):
+        from apps.watchlist.models import WatchlistItem
+        reg = self._registration()
+        wl = self._watchlist(WatchlistItem.STATUS_REGISTERED)
+
+        res = self.client.patch(
+            f'/api/watchlist/{wl.id}/', {'user_status': WatchlistItem.STATUS_WITHDRAWN}, format='json',
+        )
+        self.assertEqual(res.status_code, 200, res.data)
+
+        reg.refresh_from_db()
+        wl.refresh_from_db()
+        self.assertEqual(wl.user_status, WatchlistItem.STATUS_WITHDRAWN)
+        self.assertTrue(reg.is_withdrawn)
+
+    def test_my_registrations_reports_withdrawn_status(self):
+        reg = self._registration()
+        self.client.delete(f'/api/registrations/{reg.id}/withdraw/')
+
+        res = self.client.get('/api/registrations/my/')
+        self.assertEqual(res.status_code, 200)
+        row = next(r for r in res.data if r['id'] == reg.id)
+        self.assertTrue(row['is_withdrawn'])
+        self.assertEqual(row['registration_status'], 'withdrawn')
+
+    def test_non_withdraw_status_change_does_not_touch_registration(self):
+        """Marking 'inscrito' must NOT withdraw the official registration."""
+        from apps.watchlist.models import WatchlistItem
+        reg = self._registration()
+        wl = self._watchlist(WatchlistItem.STATUS_INTENDED)
+
+        res = self.client.patch(
+            f'/api/watchlist/{wl.id}/', {'user_status': WatchlistItem.STATUS_REGISTERED}, format='json',
+        )
+        self.assertEqual(res.status_code, 200, res.data)
+        reg.refresh_from_db()
+        self.assertFalse(reg.is_withdrawn)

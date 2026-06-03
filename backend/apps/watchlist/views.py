@@ -25,6 +25,31 @@ def _audit(user, action_name: str, resource_id: str, detail: str = ''):
         logger.warning('Audit log failed: %s', exc)
 
 
+def _sync_registration_withdrawn(user, edition_id):
+    """
+    Mirror a self-declared withdrawal onto official registrations of the same user
+    for this edition, keeping a single source of truth across screens.
+
+    Best-effort: never raises so a sync failure cannot break the status update.
+    """
+    try:
+        from apps.registrations.models import TournamentRegistration
+        from apps.players.models import PlayerProfile
+        profile_ids = list(
+            PlayerProfile.objects.filter(user=user).values_list('id', flat=True)
+        )
+        if not profile_ids:
+            return
+        TournamentRegistration.objects.filter(
+            profile_id__in=profile_ids, edition_id=edition_id, is_withdrawn=False,
+        ).update(is_withdrawn=True, withdrawn_at=timezone.now())
+    except Exception:  # pragma: no cover - defensive
+        logger.exception(
+            '_sync_registration_withdrawn failed user=%s edition=%s',
+            getattr(user, 'id', None), edition_id,
+        )
+
+
 class WatchlistViewSet(viewsets.ModelViewSet):
     serializer_class = WatchlistItemSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -191,3 +216,8 @@ class WatchlistViewSet(viewsets.ModelViewSet):
         if saved.user_status != old_status:
             _audit(self.request.user, 'watchlist.status_change', str(saved.edition_id),
                    f'Status changed: {old_status} → {saved.user_status}')
+            # Source of truth: when the player declares a withdrawal on the Agenda,
+            # mirror it onto any official registration so Minhas inscrições, Detalhe
+            # do Torneio e Resultados mostrem o mesmo status.
+            if saved.user_status == WatchlistItem.STATUS_WITHDRAWN:
+                _sync_registration_withdrawn(saved.user, saved.edition_id)

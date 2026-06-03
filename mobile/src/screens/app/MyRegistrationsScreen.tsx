@@ -51,8 +51,14 @@ export function MyRegistrationsScreen({ navigation }: Props) {
   const [registrations, setRegistrations] = useState<TournamentRegistration[]>([]);
   const [withdrawing, setWithdrawing] = useState<number | null>(null);
   const [childGroups, setChildGroups] = useState<ChildInscriptionGroup[]>([]);
+  // Watchlist-only desistências — exibidas no Histórico para o mesmo status da Agenda.
+  const [declaredWithdrawn, setDeclaredWithdrawn] = useState<WatchlistItem[]>([]);
 
-  async function buildGroups(): Promise<{ regs: TournamentRegistration[]; groups: ChildInscriptionGroup[] }> {
+  async function buildGroups(): Promise<{
+    regs: TournamentRegistration[];
+    groups: ChildInscriptionGroup[];
+    withdrawn: WatchlistItem[];
+  }> {
     const regs = await myRegistrations();
     if (user?.role === 'parent') {
       const children = await listChildren().catch(() => [] as ParentChild[]);
@@ -67,23 +73,26 @@ export function MyRegistrationsScreen({ navigation }: Props) {
           items: (childWatchlists[i] as WatchlistItem[]).filter((it) => it.user_status === 'registered_declared'),
         }))
         .filter((g) => g.items.length > 0);
-      return { regs, groups };
+      const withdrawn = childWatchlists.flat().filter((it) => it.user_status === 'withdrawn');
+      return { regs, groups, withdrawn };
     }
     const wl = await listWatchlist();
     const inscribed = (wl as WatchlistItem[]).filter((i) => i.user_status === 'registered_declared');
     const groups: ChildInscriptionGroup[] = inscribed.length > 0
       ? [{ childName: '', childId: 0, items: inscribed }]
       : [];
-    return { regs, groups };
+    const withdrawn = (wl as WatchlistItem[]).filter((i) => i.user_status === 'withdrawn');
+    return { regs, groups, withdrawn };
   }
 
   async function load() {
     setLoading(true);
     setError(null);
     try {
-      const { regs, groups } = await buildGroups();
+      const { regs, groups, withdrawn } = await buildGroups();
       setRegistrations(regs);
       setChildGroups(groups);
+      setDeclaredWithdrawn(withdrawn);
     } catch (err) {
       setError(extractApiError(err));
     } finally {
@@ -95,9 +104,10 @@ export function MyRegistrationsScreen({ navigation }: Props) {
     setRefreshing(true);
     setError(null);
     try {
-      const { regs, groups } = await buildGroups();
+      const { regs, groups, withdrawn } = await buildGroups();
       setRegistrations(regs);
       setChildGroups(groups);
+      setDeclaredWithdrawn(withdrawn);
     } catch (err) {
       setError(extractApiError(err));
     } finally {
@@ -125,6 +135,10 @@ export function MyRegistrationsScreen({ navigation }: Props) {
   const active = registrations.filter((r) => !r.is_withdrawn);
   const withdrawn = registrations.filter((r) => r.is_withdrawn);
   const totalWatchlistInscribed = childGroups.reduce((acc, g) => acc + g.items.length, 0);
+  const withdrawnRegEditionIds = new Set(withdrawn.map((r) => r.edition_id));
+  const declaredWithdrawnOnly = declaredWithdrawn.filter(
+    (it) => !withdrawnRegEditionIds.has(it.edition_detail?.id),
+  );
 
   return (
     <Screen onRefresh={onRefresh} refreshing={refreshing}>
@@ -144,7 +158,7 @@ export function MyRegistrationsScreen({ navigation }: Props) {
           subtitle={error}
           action={<Button title="Tentar novamente" variant="ghost" onPress={load} />}
         />
-      ) : active.length === 0 && withdrawn.length === 0 && totalWatchlistInscribed === 0 ? (
+      ) : active.length === 0 && withdrawn.length === 0 && totalWatchlistInscribed === 0 && declaredWithdrawnOnly.length === 0 ? (
         <EmptyState
           icon="ticket-outline"
           title="Você ainda não tem inscrições"
@@ -215,7 +229,7 @@ export function MyRegistrationsScreen({ navigation }: Props) {
               ))}
             </View>
           )}
-          {withdrawn.length > 0 && (
+          {(withdrawn.length > 0 || declaredWithdrawnOnly.length > 0) && (
             <View>
               <SectionHeader title="Histórico" subtitle="Inscrições canceladas" />
               {withdrawn.map((reg) => (
@@ -226,6 +240,35 @@ export function MyRegistrationsScreen({ navigation }: Props) {
                   onPress={() => navigation.navigate('TournamentDetail', { id: reg.edition_id })}
                 />
               ))}
+              {declaredWithdrawnOnly.map((item) => {
+                const ed = item.edition_detail;
+                return (
+                  <Pressable
+                    key={`wlw-${item.id}`}
+                    onPress={() => navigation.navigate('TournamentDetail', { id: ed.id, edition: ed })}
+                    style={{ marginBottom: 10 }}
+                  >
+                    <Card>
+                      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
+                        <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: `${colors.statusClosed}20`, alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <Ionicons name="close-circle" size={20} color={colors.statusClosed} />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <AppText variant="body" style={{ fontWeight: '700', fontSize: 14 }} numberOfLines={2}>{ed.title}</AppText>
+                          {ed.start_date ? (
+                            <AppText variant="caption" style={{ color: colors.textMuted, marginTop: 2 }}>
+                              {fmtDateRange(ed.start_date, ed.end_date)}
+                            </AppText>
+                          ) : null}
+                          <View style={{ marginTop: 4, backgroundColor: `${colors.statusClosed}18`, alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}>
+                            <AppText variant="caption" style={{ color: colors.statusClosed, fontWeight: '700', fontSize: 10 }}>Desistiu</AppText>
+                          </View>
+                        </View>
+                      </View>
+                    </Card>
+                  </Pressable>
+                );
+              })}
             </View>
           )}
         </>

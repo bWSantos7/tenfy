@@ -37,6 +37,9 @@ export const InscricoesPage: React.FC = () => {
   const [childGroups, setChildGroups] = useState<ChildGroup[]>([]);
   const [withdrawing, setWithdrawing] = useState<number | null>(null);
   const [confirmWithdraw, setConfirmWithdraw] = useState<number | null>(null);
+  // Watchlist-only desistências (sem inscrição oficial) — exibidas no Histórico
+  // para manter o mesmo status da Agenda e do Detalhe do Torneio.
+  const [declaredWithdrawn, setDeclaredWithdrawn] = useState<WatchlistItem[]>([]);
 
   async function load() {
     setLoading(true);
@@ -58,11 +61,13 @@ export const InscricoesPage: React.FC = () => {
           }))
           .filter((g) => g.items.length > 0);
         setChildGroups(groups);
+        setDeclaredWithdrawn(childWatchlists.flat().filter((it) => it.user_status === 'withdrawn'));
       } else {
         const wl = await listWatchlist().catch(() => [] as WatchlistItem[]);
         // Include 'completed' — backend sets this automatically when a result is saved
         const inscribed = wl.filter((i) => i.user_status === 'registered_declared' || i.user_status === 'completed');
         setChildGroups(inscribed.length > 0 ? [{ childName: '', childId: 0, items: inscribed }] : []);
+        setDeclaredWithdrawn(wl.filter((i) => i.user_status === 'withdrawn'));
       }
     } catch (err) {
       toast.error(extractApiError(err));
@@ -72,6 +77,11 @@ export const InscricoesPage: React.FC = () => {
   }
 
   useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    window.addEventListener('registration-withdrawn', load);
+    return () => window.removeEventListener('registration-withdrawn', load);
+  }, [user?.role]);
 
   async function handleWithdraw(regId: number) {
     setWithdrawing(regId);
@@ -90,7 +100,14 @@ export const InscricoesPage: React.FC = () => {
   const activeRegs = registrations.filter((r) => !r.is_withdrawn);
   const withdrawnRegs = registrations.filter((r) => r.is_withdrawn);
   const totalDeclared = childGroups.reduce((acc, g) => acc + g.items.length, 0);
-  const hasAnything = totalDeclared > 0 || activeRegs.length > 0 || withdrawnRegs.length > 0;
+  // Avoid showing a desistência twice when both an official registration and a
+  // watchlist declaration exist for the same edition.
+  const withdrawnRegEditionIds = new Set(withdrawnRegs.map((r) => r.edition_id));
+  const declaredWithdrawnOnly = declaredWithdrawn.filter(
+    (it) => !withdrawnRegEditionIds.has(it.edition_detail?.id),
+  );
+  const hasAnything =
+    totalDeclared > 0 || activeRegs.length > 0 || withdrawnRegs.length > 0 || declaredWithdrawnOnly.length > 0;
 
   if (loading) {
     return (
@@ -203,7 +220,7 @@ export const InscricoesPage: React.FC = () => {
           )}
 
           {/* ─── Histórico ───────────────────────────────────────────────── */}
-          {withdrawnRegs.length > 0 && (
+          {(withdrawnRegs.length > 0 || declaredWithdrawnOnly.length > 0) && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <h2 className="font-bold text-sm text-text-muted">Histórico</h2>
@@ -212,6 +229,24 @@ export const InscricoesPage: React.FC = () => {
               {withdrawnRegs.map((reg) => (
                 <RegistrationCard key={reg.id} reg={reg} confirmWithdraw={null} withdrawing={null} />
               ))}
+              {declaredWithdrawnOnly.map((item) => {
+                const ed = item.edition_detail;
+                return (
+                  <Link key={`wlw-${item.id}`} to={`/torneios/${ed.id}`} className="card flex items-center gap-3 hover:border-status-canceled/30 transition-colors no-underline opacity-80">
+                    <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 bg-status-canceled/15">
+                      <XCircle className="w-5 h-5 text-status-canceled" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-bold text-sm line-clamp-1">{ed.title}</div>
+                      {ed.start_date && (
+                        <div className="text-xs text-text-muted mt-0.5">{fmtDateRange(ed.start_date, ed.end_date)}</div>
+                      )}
+                      <span className="inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-status-canceled/15 text-status-canceled">Desistiu</span>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-text-muted shrink-0" />
+                  </Link>
+                );
+              })}
             </div>
           )}
         </>

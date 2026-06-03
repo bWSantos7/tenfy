@@ -27,6 +27,29 @@ from .serializers import (
 
 logger = logging.getLogger('apps.registrations')
 
+
+def sync_watchlist_withdrawn(user, edition_id):
+    """
+    Keep the self-declared watchlist status in sync with an official withdrawal so
+    Agenda, Detalhe do Torneio e Minhas inscrições mostrem o mesmo status.
+
+    Best-effort: only flips an active declaration (intended / registered_declared)
+    to 'withdrawn'. Never raises — a sync failure must not break the withdrawal.
+    """
+    try:
+        from apps.watchlist.models import WatchlistItem
+        WatchlistItem.objects.filter(
+            user=user,
+            edition_id=edition_id,
+            user_status__in=[WatchlistItem.STATUS_INTENDED, WatchlistItem.STATUS_REGISTERED],
+        ).update(user_status=WatchlistItem.STATUS_WITHDRAWN, updated_at=timezone.now())
+    except Exception:  # pragma: no cover - defensive
+        logger.exception(
+            'sync_watchlist_withdrawn failed user=%s edition=%s',
+            getattr(user, 'id', None), edition_id,
+        )
+
+
 # ── Import token auth helper ───────────────────────────────────────────────────
 
 def _check_import_auth(request) -> bool:
@@ -126,7 +149,14 @@ class RegistrationViewSet(viewsets.GenericViewSet):
         if reg.is_withdrawn:
             return Response({'detail': 'Inscrição já foi cancelada.'}, status=status.HTTP_400_BAD_REQUEST)
         reg.withdraw()
-        return Response({'detail': 'Inscrição cancelada com sucesso.'})
+        # Source of truth: mirror the withdrawal onto the self-declared watchlist status.
+        sync_watchlist_withdrawn(request.user, reg.edition_id)
+        qs = _annotate_slot_positions(
+            TournamentRegistration.objects.filter(pk=reg.pk).select_related(
+                'edition', 'category', 'profile'
+            )
+        )
+        return Response(MyRegistrationSerializer(qs.first()).data)
 
     # ── Admin endpoints ─────────────────────────────────────────────────────
 

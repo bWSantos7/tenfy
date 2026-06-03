@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  Settings, ExternalLink, Trophy, MapPin, Calendar, User,
+  Settings, ExternalLink, Trophy, MapPin, Calendar, User, Users, Plus,
   Link as LinkIcon, Loader2, ChevronRight, Ticket, RefreshCw,
   Unlink, X, Search,
 } from 'lucide-react';
+import { AddChildForm, LinkPlayerModal } from './ProfilePage';
 import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
 import { ParentChild, PlayerProfile, TiData, TiRankingEntry, TournamentRegistration, UtrCandidate, WatchlistItem } from '../types';
@@ -58,6 +59,10 @@ export const PlayerProfilePage: React.FC = () => {
   const [tiData, setTiData] = useState<TiData | null>(null);
   const [tiLoading, setTiLoading] = useState(false);
   const [tiSyncing, setTiSyncing] = useState(false);
+
+  // Dependent management state (parent role)
+  const [showAddChild, setShowAddChild] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
 
   // UTR modal state
   const [utrModalOpen, setUtrModalOpen] = useState(false);
@@ -342,14 +347,63 @@ export const PlayerProfilePage: React.FC = () => {
         <>
           {/* ── Sem perfil ───────────────────────────────────────────── */}
           {!primary ? (
-            <div className="card text-center py-8 space-y-3">
-              <User className="w-10 h-10 text-text-muted mx-auto" />
-              <p className="font-semibold text-sm">Perfil esportivo não configurado</p>
-              <p className="text-xs text-text-muted">Complete seu perfil para ver torneios compatíveis.</p>
-              <button className="btn-primary !text-sm" onClick={() => navigate('/onboarding')}>
-                Completar perfil
-              </button>
-            </div>
+            isParent ? (
+              <div className="space-y-3">
+                {showAddChild && (
+                  <AddChildForm
+                    onAdded={() => {
+                      setShowAddChild(false);
+                      listChildren().then((kids) => {
+                        setChildren(kids);
+                        if (kids[0]) setSelectedChildId(kids[0].child);
+                      });
+                    }}
+                    onCancel={() => setShowAddChild(false)}
+                  />
+                )}
+                {showInviteModal && (
+                  <LinkPlayerModal
+                    onClose={() => setShowInviteModal(false)}
+                    onInviteSent={(_inv) => {
+                      setShowInviteModal(false);
+                      listChildren().then(setChildren);
+                    }}
+                  />
+                )}
+                {!showAddChild && (
+                  <div className="card text-center py-8 space-y-3">
+                    <Users className="w-10 h-10 text-text-muted mx-auto" />
+                    <p className="font-semibold text-sm">Nenhum dependente cadastrado</p>
+                    <p className="text-xs text-text-muted">
+                      Cadastre o perfil esportivo do seu atleta para gerenciar torneios compatíveis.
+                    </p>
+                    <div className="flex gap-2 justify-center">
+                      <button
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-blue-400 bg-blue-400/10 border border-blue-400/30 hover:bg-blue-400/20 transition-colors"
+                        onClick={() => setShowInviteModal(true)}
+                      >
+                        <Users className="w-3.5 h-3.5" /> Vincular existente
+                      </button>
+                      <button
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-accent-neon bg-accent-neon/10 border border-accent-neon/30 hover:bg-accent-neon/20 transition-colors"
+                        onClick={() => setShowAddChild(true)}
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Novo dependente
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="card text-center py-8 space-y-3">
+                <User className="w-10 h-10 text-text-muted mx-auto" />
+                <p className="font-semibold text-sm">Perfil esportivo não configurado</p>
+                <p className="text-xs text-text-muted">Complete seu perfil para ver torneios compatíveis.</p>
+                <button className="btn-primary !text-sm" onClick={() => navigate('/onboarding')}>
+                  Completar perfil
+                </button>
+              </div>
+            )
           ) : (
             <>
               {/* ── Perfil esportivo ─────────────────────────────────── */}

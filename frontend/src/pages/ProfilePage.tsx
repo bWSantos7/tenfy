@@ -728,7 +728,7 @@ const ProfileEditor: React.FC<{
 
 const UF_OPTIONS = ALL_UFS;
 
-const AddChildForm: React.FC<{
+export const AddChildForm: React.FC<{
   onAdded: () => void;
   onCancel: () => void;
 }> = ({ onAdded, onCancel }) => {
@@ -1352,7 +1352,7 @@ const ChildProfileEditor: React.FC<{
 
 // ─── LinkPlayerModal ─────────────────────────────────────────────────────────
 
-const LinkPlayerModal: React.FC<{
+export const LinkPlayerModal: React.FC<{
   onClose: () => void;
   onInviteSent: (invite: DependentInvite) => void;
 }> = ({ onClose, onInviteSent }) => {

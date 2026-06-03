@@ -269,19 +269,35 @@ export const HomePage: React.FC = () => {
         )}
       </section>
 
-      {/* ── Complete profile CTA (only shown if no profile) ── */}
+      {/* ── Complete profile / Add dependent CTA ── */}
       {!hasProfile && (
         <div className="card flex items-start gap-3 border border-accent-neon/30 bg-accent-neon/5">
           <Sparkles className="w-5 h-5 text-accent-neon shrink-0 mt-0.5" />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium">Complete seu perfil</p>
-            <p className="text-xs text-text-muted mt-0.5">
-              Informe sua categoria, idade e localização para ver torneios compatíveis com você.
-            </p>
-          </div>
-          <Link to="/onboarding" className="btn-primary !py-1.5 !px-3 text-xs shrink-0">
-            Configurar
-          </Link>
+          {user?.role === 'parent' ? (
+            <>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium">Adicione um dependente</p>
+                <p className="text-xs text-text-muted mt-0.5">
+                  Cadastre o perfil esportivo do seu atleta para ver torneios compatíveis.
+                </p>
+              </div>
+              <Link to="/perfil" className="btn-primary !py-1.5 !px-3 text-xs shrink-0">
+                Adicionar
+              </Link>
+            </>
+          ) : (
+            <>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium">Complete seu perfil</p>
+                <p className="text-xs text-text-muted mt-0.5">
+                  Informe sua categoria, idade e localização para ver torneios compatíveis com você.
+                </p>
+              </div>
+              <Link to="/onboarding" className="btn-primary !py-1.5 !px-3 text-xs shrink-0">
+                Configurar
+              </Link>
+            </>
+          )}
         </div>
       )}
 

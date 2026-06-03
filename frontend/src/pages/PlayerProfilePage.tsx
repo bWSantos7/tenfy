@@ -69,6 +69,7 @@ export const PlayerProfilePage: React.FC = () => {
   const [utrSyncing, setUtrSyncing] = useState(false);
 
   const isParent = user?.role === 'parent';
+  const canManageUtr = !isParent;
 
   // Initial load: children list (parent) or own profiles (others)
   useEffect(() => {
@@ -122,6 +123,13 @@ export const PlayerProfilePage: React.FC = () => {
 
   const activeProfiles = isParent ? childProfiles : profiles;
   const primary = activeProfiles.find((p) => p.is_primary) ?? activeProfiles[0] ?? null;
+  const hasUtrData = !!(
+    primary?.utr_player_id
+    || primary?.utr_singles
+    || primary?.utr_doubles
+    || primary?.utr_synced_at
+  );
+  const showUtrSection = !!primary && (canManageUtr || hasUtrData);
 
   async function handleTiSync() {
     if (!primary) return;
@@ -394,11 +402,11 @@ export const PlayerProfilePage: React.FC = () => {
               )}
 
               {/* ── UTR Rating ──────────────────────────────────────── */}
-              {!isParent && (
+              {showUtrSection && (
                 <section>
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-xs font-bold text-text-muted uppercase tracking-wide">UTR Rating</h3>
-                    {primary?.utr_player_id && (
+                    {canManageUtr && primary?.utr_player_id && (
                       <div className="flex items-center gap-2">
                         <button
                           onClick={handleUtrSync}
@@ -417,7 +425,7 @@ export const PlayerProfilePage: React.FC = () => {
                     )}
                   </div>
 
-                  {primary?.utr_player_id ? (
+                  {hasUtrData ? (
                     <div className="card">
                       <div className="flex items-center gap-2 mb-3 pb-3 border-b border-border-subtle">
                         <Trophy className="w-4 h-4 text-accent-neon shrink-0" />
@@ -447,7 +455,7 @@ export const PlayerProfilePage: React.FC = () => {
                       </div>
                       <div className="flex items-center justify-between">
                         <p className="text-xs text-text-muted truncate">
-                          {primary.utr_display_name || `ID: ${primary.utr_player_id}`}
+                          {primary.utr_display_name || (primary.utr_player_id ? `ID: ${primary.utr_player_id}` : primary.display_name)}
                         </p>
                         {primary.utr_profile_url && (
                           <a
@@ -461,7 +469,7 @@ export const PlayerProfilePage: React.FC = () => {
                         )}
                       </div>
                     </div>
-                  ) : (
+                  ) : canManageUtr ? (
                     <div className="card flex items-center gap-3">
                       <Trophy className="w-5 h-5 text-text-muted shrink-0" />
                       <div className="flex-1 min-w-0">
@@ -475,7 +483,7 @@ export const PlayerProfilePage: React.FC = () => {
                         Vincular
                       </button>
                     </div>
-                  )}
+                  ) : null}
                 </section>
               )}
 

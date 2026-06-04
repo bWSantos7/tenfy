@@ -1,4 +1,8 @@
 import logging
+import re
+import unicodedata
+from difflib import SequenceMatcher
+
 from celery import shared_task
 from django.utils import timezone
 
@@ -7,6 +11,169 @@ logger = logging.getLogger('apps.players')
 # Delay (seconds) between consecutive per-profile sync tasks to avoid
 # hammering tenisintegrado.com.br with concurrent requests.
 _TI_STAGGER_SECONDS = 20
+_TI_SOURCES = ('cbt', 'fpt', 'fbt', 'fct')
+
+
+def _normalize_name(value: str) -> str:
+    normalized = unicodedata.normalize('NFKD', value or '')
+    return normalized.encode('ascii', 'ignore').decode('ascii').lower().strip()
+
+
+def _extract_numeric_ti_external_id(value: str) -> str | None:
+    s = str(value or '').strip()
+    match = re.match(r'^tenisintegrado:(\d+)$', s) or re.match(r'^(\d+)$', s)
+    return match.group(1) if match else None
+
+
+def _find_ti_id_in_rankings(profile_name: str) -> tuple[str | None, str | None]:
+    """
+    Resolve a TI id from the imported ranking catalogue (ExternalPlayerRanking).
+
+    This is the higher-coverage source (every ranked athlete, not only those who
+    appeared in an imported entry list). Returns (source, 'tenisintegrado:{id}')
+    only for a *unique* high-confidence name match; ambiguous matches (more than
+    one distinct TI id) are rejected so we never auto-link the wrong athlete.
+    """
+    from .models import ExternalPlayerRanking
+
+    if not profile_name:
+        return None, None
+
+    # Exact normalized-name match first (cheap, indexed).
+    rows = list(
+        ExternalPlayerRanking.objects
+        .filter(player_name_normalized=profile_name)
+        .values('ti_player_id', 'source')
+        .distinct()
+    )
+
+    # Fall back to fuzzy scan only when no exact hit (bounded for safety).
+    if not rows:
+        candidates: dict[tuple[str, str], float] = {}
+        for r in (
+            ExternalPlayerRanking.objects
+            .exclude(player_name_normalized='')
+            .values('ti_player_id', 'source', 'player_name_normalized')
+            .distinct()[:5000]
+        ):
+            score = SequenceMatcher(None, r['player_name_normalized'], profile_name).ratio()
+            if score >= 0.985:
+                candidates[(r['source'], r['ti_player_id'])] = score
+        rows = [{'ti_player_id': tid, 'source': src} for (src, tid) in candidates]
+
+    unique_ids = {r['ti_player_id'] for r in rows}
+    if len(unique_ids) != 1:
+        if unique_ids:
+            logger.info('TI ranking match ambiguous for name=%r: ids=%s', profile_name, sorted(unique_ids))
+        return None, None
+
+    row = rows[0]
+    return row['source'], f'tenisintegrado:{row["ti_player_id"]}'
+
+
+def _find_ti_external_id_for_profile(profile) -> tuple[str | None, str | None]:
+    """
+    Resolve a TI id for a profile, preferring the ranking catalogue and falling
+    back to imported federation entry lists.
+
+    The public TI profile pages are keyed by a numeric id; both sources carry
+    that id. We only accept a unique exact/high-confidence name match to avoid
+    linking two different athletes with the same name.
+    """
+    from apps.registrations.models import FederationEntry
+
+    profile_name = _normalize_name(profile.display_name)
+    if not profile_name:
+        return None, None
+
+    # 1. Ranking catalogue (broadest coverage).
+    source, external_id = _find_ti_id_in_rankings(profile_name)
+    if external_id:
+        return source, external_id
+
+    entries = (
+        FederationEntry.objects
+        .filter(source__in=_TI_SOURCES)
+        .exclude(player_external_id='')
+        .only('player_name', 'player_external_id', 'source', 'created_at')
+        .order_by('-created_at')
+    )
+
+    candidates: dict[tuple[str, str], float] = {}
+    for entry in entries:
+        ti_id = _extract_numeric_ti_external_id(entry.player_external_id)
+        if not ti_id:
+            continue
+
+        entry_name = _normalize_name(entry.player_name)
+        if not entry_name:
+            continue
+
+        score = 1.0 if entry_name == profile_name else SequenceMatcher(None, entry_name, profile_name).ratio()
+        if score < 0.985:
+            continue
+
+        key = (entry.source, f'tenisintegrado:{ti_id}')
+        candidates[key] = max(score, candidates.get(key, 0.0))
+
+    if not candidates:
+        return None, None
+
+    unique_external_ids = {external_id for _, external_id in candidates}
+    if len(unique_external_ids) != 1:
+        logger.info(
+            'TI bootstrap skipped profile=%s name=%r: ambiguous TI ids=%s',
+            profile.pk, profile.display_name, sorted(unique_external_ids),
+        )
+        return None, None
+
+    source, external_id = max(candidates.items(), key=lambda item: item[1])[0]
+    return source, external_id
+
+
+@shared_task(name='apps.players.tasks.bootstrap_ti_profile_task', bind=True, max_retries=1, default_retry_delay=60)
+def bootstrap_ti_profile_task(self, profile_id: int):
+    """
+    Resolve a Tênis Integrado id for a new profile and enqueue the data sync.
+
+    This runs for every new PlayerProfile, including parent-created dependents.
+    If the profile already has a TI id, we skip resolution and only enqueue the
+    cache refresh.
+    """
+    from .models import PlayerProfile
+    from .parsers import extract_ti_id
+
+    try:
+        profile = PlayerProfile.objects.get(pk=profile_id)
+    except PlayerProfile.DoesNotExist:
+        logger.warning('bootstrap_ti_profile_task: profile %s not found', profile_id)
+        return {'profile_id': profile_id, 'status': 'not_found'}
+
+    ti_id, source = extract_ti_id(profile.external_ids or {})
+    resolved = False
+
+    if not ti_id:
+        source, external_id = _find_ti_external_id_for_profile(profile)
+        if not external_id:
+            logger.info('bootstrap_ti_profile_task: no TI id resolved for profile=%s', profile_id)
+            return {'profile_id': profile_id, 'status': 'no_ti_id'}
+
+        ext_ids = dict(profile.external_ids or {})
+        ext_ids[source] = external_id
+        profile.external_ids = ext_ids
+        profile.save(update_fields=['external_ids', 'updated_at'])
+        ti_id, _ = extract_ti_id(profile.external_ids or {})
+        resolved = True
+        logger.info(
+            'bootstrap_ti_profile_task: resolved profile=%s source=%s external_id=%s',
+            profile_id, source, external_id,
+        )
+
+    if ti_id:
+        sync_ti_data_task.apply_async(args=[profile_id], countdown=5 if resolved else 0)
+        return {'profile_id': profile_id, 'status': 'queued_sync', 'ti_id': ti_id, 'resolved': resolved}
+
+    return {'profile_id': profile_id, 'status': 'no_ti_id'}
 
 
 @shared_task(name='apps.players.tasks.sync_ti_data_task', bind=True, max_retries=2, default_retry_delay=120)
@@ -62,6 +229,37 @@ def sync_all_ti_profiles_task():
         dispatched += 1
 
     logger.info('sync_all_ti_profiles_task: dispatched %d profile sync(s)', dispatched)
+
+
+@shared_task(name='apps.players.tasks.sync_ti_rankings_task')
+def sync_ti_rankings_task(sources=None):
+    """
+    Periodic task: import public Tênis Integrado rankings into the local
+    ExternalPlayerRanking catalogue, then backfill profile auto-links.
+
+    Scheduled daily. Heavy/rate-limited work runs inside the management command,
+    which already throttles its own HTTP requests.
+    """
+    from django.core.management import call_command
+
+    try:
+        if sources:
+            for src in sources:
+                call_command('sync_ti_rankings', source=src, verbosity=0)
+        else:
+            call_command('sync_ti_rankings', all=True, verbosity=0)
+    except Exception as exc:
+        logger.error('sync_ti_rankings_task: import error: %s', exc)
+        raise
+
+    # After importing, try to link any still-unlinked profiles (no re-sync here;
+    # the hourly sync_all_ti_profiles_task will pick up newly-linked profiles).
+    try:
+        call_command('match_profiles_to_ti_rankings', no_sync=True, verbosity=0)
+    except Exception as exc:
+        logger.warning('sync_ti_rankings_task: backfill matching error: %s', exc)
+
+    return {'status': 'done'}
 
 
 _UTR_STAGGER_SECONDS = 30

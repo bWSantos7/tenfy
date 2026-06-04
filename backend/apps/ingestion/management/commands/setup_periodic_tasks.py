@@ -71,6 +71,12 @@ TASKS = [
         'cron': {'minute': '40', 'hour': '*', 'day_of_week': '*', 'day_of_month': '*', 'month_of_year': '*'},
         'description': 'Refresh UTR rating for profiles with a confirmed UTR id (stale only) every hour at :40',
     },
+    {
+        'name': 'sync-ti-rankings-daily',
+        'task': 'apps.players.tasks.sync_ti_rankings_task',
+        'cron': {'minute': '0', 'hour': '2', 'day_of_week': '*', 'day_of_month': '*', 'month_of_year': '*'},
+        'description': 'Import public TI ranking catalogue (ExternalPlayerRanking) and backfill profile auto-links daily at 02:00 UTC',
+    },
 ]
 
 # Periodic tasks that were renamed/retired — removed so a previous deploy's

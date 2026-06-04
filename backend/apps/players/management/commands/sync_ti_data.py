@@ -5,6 +5,7 @@ Usage:
   python manage.py sync_ti_data                   # sync all profiles with a TI ID
   python manage.py sync_ti_data --profile-id 5    # sync a specific profile
   python manage.py sync_ti_data --reset-empty     # only sync profiles with empty cache
+  python manage.py sync_ti_data --bootstrap-missing  # resolve missing TI IDs from imported entries first
   python manage.py sync_ti_data --dry-run         # list targets without syncing
 """
 import logging
@@ -13,6 +14,7 @@ from django.core.management.base import BaseCommand
 
 from apps.players.models import PlayerProfile
 from apps.players.parsers import extract_ti_id, TenisScrapeError
+from apps.players.tasks import _find_ti_external_id_for_profile
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +25,11 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument('--profile-id', type=int, help='Sync a single profile by ID.')
         parser.add_argument('--reset-empty', action='store_true', help='Only sync profiles with empty cache.')
+        parser.add_argument(
+            '--bootstrap-missing',
+            action='store_true',
+            help='Before syncing, resolve missing TI IDs from imported FederationEntry records.',
+        )
         parser.add_argument('--dry-run', action='store_true', help='List targets without syncing.')
 
     def handle(self, *args, **options):
@@ -30,6 +37,7 @@ class Command(BaseCommand):
 
         profile_id = options.get('profile_id')
         reset_empty = options.get('reset_empty')
+        bootstrap_missing = options.get('bootstrap_missing')
         dry_run = options.get('dry_run')
 
         qs = PlayerProfile.objects.all()
@@ -37,13 +45,33 @@ class Command(BaseCommand):
             qs = qs.filter(pk=profile_id)
 
         targets = []
+        bootstrapped = []
         for profile in qs:
             ti_id, source = extract_ti_id(profile.external_ids or {})
+            if not ti_id and bootstrap_missing:
+                resolved_source, external_id = _find_ti_external_id_for_profile(profile)
+                if external_id:
+                    bootstrapped.append((profile, resolved_source, external_id))
+                    if not dry_run:
+                        ext_ids = dict(profile.external_ids or {})
+                        ext_ids[resolved_source] = external_id
+                        profile.external_ids = ext_ids
+                        profile.save(update_fields=['external_ids', 'updated_at'])
+                    ti_id, source = extract_ti_id({resolved_source: external_id})
             if not ti_id:
                 continue
             if reset_empty and (profile.ti_results_cache or profile.ti_rankings_cache):
                 continue
             targets.append((profile, ti_id, source))
+
+        if bootstrapped:
+            self.stdout.write(f'Resolved {len(bootstrapped)} missing TI id(s).')
+            if dry_run:
+                for profile, source, external_id in bootstrapped:
+                    self.stdout.write(
+                        f'  Would link Profile #{profile.pk} {profile.display_name!r}: '
+                        f'{source}={external_id}'
+                    )
 
         self.stdout.write(f'Found {len(targets)} profile(s) to sync.')
 

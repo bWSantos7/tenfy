@@ -43,6 +43,10 @@ app.conf.beat_schedule = {
         'task': 'apps.players.tasks.sync_all_utr_profiles_task',
         'schedule': crontab(minute=40),  # every hour at :40 (rating UTR de perfis vinculados)
     },
+    'sync-ti-rankings-daily': {
+        'task': 'apps.players.tasks.sync_ti_rankings_task',
+        'schedule': crontab(hour=2, minute=0),  # 02:00 UTC daily (import ranking catalogue + backfill links)
+    },
     'sync-fpt-sp-entries-hourly': {
         'task': 'apps.registrations.tasks.sync_fpt_sp_entries_task',
         'schedule': crontab(minute=10),  # X:10 every hour

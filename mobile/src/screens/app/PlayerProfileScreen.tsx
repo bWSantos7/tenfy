@@ -11,7 +11,7 @@ import Toast from 'react-native-toast-message';
 import { fetchTiData, linkUtr, listProfiles, searchUtr, syncTiData, syncUtr, unlinkUtr } from '../../services/data';
 import { myRegistrations } from '../../services/registrations';
 import { extractApiError, mediaUrl } from '../../services/api';
-import { PlayerProfile, TiData, TiRankingEntry, TournamentRegistration, UtrCandidate } from '../../types';
+import { CatalogRanking, PlayerProfile, TiData, TiRankingEntry, TournamentRegistration, UtrCandidate } from '../../types';
 import { GENDER_LABELS, LEVEL_LABELS, ROLE_LABELS } from '../../utils/format';
 import { AppText, Button, Card, EmptyState, LoadingBlock, Screen, SectionHeader } from '../../components/ui';
 
@@ -278,8 +278,13 @@ export function PlayerProfileScreen(_: Props) {
                     <Card style={{ marginBottom: 12 }}>
                       <AppText variant="muted" style={{ textAlign: 'center', paddingVertical: 8 }}>Carregando rankings...</AppText>
                     </Card>
-                  ) : tiData?.rankings && tiData.rankings.length > 0 ? (
-                    <RankingsMobile rankings={tiData.rankings} isStale={!!tiData.is_stale} colors={colors} />
+                  ) : (tiData?.rankings && tiData.rankings.length > 0) || (tiData?.catalog_rankings && tiData.catalog_rankings.length > 0) ? (
+                    <>
+                      {tiData?.rankings && tiData.rankings.length > 0 ? (
+                        <RankingsMobile rankings={tiData.rankings} isStale={!!tiData.is_stale} colors={colors} />
+                      ) : null}
+                      <CatalogRankingsMobile rankings={tiData?.catalog_rankings ?? []} colors={colors} />
+                    </>
                   ) : tiData?.has_ti_id ? (
                     <Card style={{ marginBottom: 12 }}>
                       <AppText variant="muted" style={{ textAlign: 'center', paddingVertical: 8 }}>Nenhum ranking encontrado para este perfil.</AppText>
@@ -638,6 +643,67 @@ function RankingsMobile({ rankings, isStale, colors }: { rankings: TiRankingEntr
       {isStale && (
         <AppText variant="muted" style={{ fontSize: 10, textAlign: 'center' }}>Dados podem estar desatualizados. Toque em ↻ para atualizar.</AppText>
       )}
+    </View>
+  );
+}
+
+// ── CatalogRankingsMobile ──────────────────────────────────────────────────────
+// Structured rankings imported into Tenfy's local catalogue (CBT / state
+// federations via Tênis Integrado). Purely additive — does not touch UTR.
+
+function CatalogRankingsMobile({ rankings, colors }: { rankings: CatalogRanking[]; colors: any }) {
+  if (!rankings || rankings.length === 0) return null;
+
+  return (
+    <View style={{ backgroundColor: colors.bgCard, borderRadius: 16, borderWidth: 1, borderColor: colors.borderSubtle, overflow: 'hidden', marginBottom: 12 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: `${colors.bgElevated}CC`, borderBottomWidth: 1, borderBottomColor: colors.borderSubtle }}>
+        <Ionicons name="trophy-outline" size={13} color={colors.accentBlue} />
+        <AppText variant="caption" style={{ color: colors.accentBlue, fontWeight: '700', fontSize: 12 }}>Rankings CBT / Federações</AppText>
+      </View>
+
+      {rankings.map((r, i) => {
+        const pos = r.position ?? null;
+        const posColor = pos === 1 ? '#FFD700' : pos === 2 ? '#C0C0C0' : pos === 3 ? '#CD7F32' : colors.accentNeon;
+        return (
+          <View
+            key={r.id ?? i}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 12, borderTopWidth: i === 0 ? 0 : 1, borderTopColor: colors.borderSubtle }}
+          >
+            {/* Position box */}
+            <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: pos ? `${posColor}18` : colors.bgElevated, borderWidth: 1, borderColor: pos ? `${posColor}40` : colors.borderSubtle, alignItems: 'center', justifyContent: 'center' }}>
+              {pos ? (
+                <AppText style={{ fontSize: 14, fontWeight: '900', color: posColor }}>{pos}º</AppText>
+              ) : (
+                <AppText variant="muted" style={{ fontSize: 12 }}>—</AppText>
+              )}
+            </View>
+
+            {/* Ranking name + category + federation */}
+            <View style={{ flex: 1 }}>
+              <AppText variant="caption" style={{ fontWeight: '600', fontSize: 13, lineHeight: 18 }} numberOfLines={2}>
+                {r.ranking_name || r.category || '—'}
+              </AppText>
+              <View style={{ flexDirection: 'row', gap: 6, marginTop: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+                {r.federation ? (
+                  <View style={{ paddingHorizontal: 6, paddingVertical: 1, borderRadius: 20, backgroundColor: `${colors.accentBlue}20` }}>
+                    <AppText variant="muted" style={{ fontSize: 10, color: colors.accentBlue, fontWeight: '600' }}>{r.federation}</AppText>
+                  </View>
+                ) : null}
+                {r.category ? <AppText variant="muted" style={{ fontSize: 10 }}>{r.category}</AppText> : null}
+                {r.season ? <AppText variant="muted" style={{ fontSize: 10 }}>· {r.season}</AppText> : null}
+              </View>
+            </View>
+
+            {/* Points */}
+            {r.points ? (
+              <View style={{ alignItems: 'flex-end' }}>
+                <AppText style={{ fontSize: 16, fontWeight: '900', color: colors.textPrimary }}>{r.points}</AppText>
+                <AppText variant="muted" style={{ fontSize: 9 }}>pontos</AppText>
+              </View>
+            ) : null}
+          </View>
+        );
+      })}
     </View>
   );
 }

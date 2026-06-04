@@ -6,6 +6,7 @@ This avoids Nominatim calls at query time in within_profile_radius().
 import logging
 
 from django.db.models.signals import post_save
+from django.db import transaction
 from django.dispatch import receiver
 
 from .models import PlayerProfile
@@ -28,3 +29,18 @@ def geocode_profile_home(sender, instance: PlayerProfile, created: bool, **kwarg
             logger.info('Geocoded profile %s: (%.4f, %.4f)', instance.pk, instance.home_lat, instance.home_lng)
     except Exception as exc:
         logger.warning('Geocoding failed for profile %s: %s', instance.pk, exc)
+
+
+@receiver(post_save, sender=PlayerProfile)
+def bootstrap_ti_profile(sender, instance: PlayerProfile, created: bool, **kwargs):
+    if not created:
+        return
+
+    def enqueue():
+        try:
+            from .tasks import bootstrap_ti_profile_task
+            bootstrap_ti_profile_task.delay(instance.pk)
+        except Exception as exc:
+            logger.warning('Could not enqueue TI bootstrap for profile %s: %s', instance.pk, exc)
+
+    transaction.on_commit(enqueue)

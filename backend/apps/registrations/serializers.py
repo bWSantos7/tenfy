@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from apps.tournaments.models import TournamentEdition
 from .models import FederationEntry, TournamentRegistration
 
 
@@ -61,6 +62,7 @@ class MyRegistrationSerializer(serializers.ModelSerializer):
     edition_start_date = serializers.DateField(source='edition.start_date', read_only=True)
     edition_end_date = serializers.DateField(source='edition.end_date', read_only=True)
     edition_status = serializers.SerializerMethodField()
+    is_past = serializers.SerializerMethodField()
     category_text = serializers.SerializerMethodField()
     max_participants = serializers.SerializerMethodField()
     slot_position = serializers.SerializerMethodField()
@@ -73,7 +75,7 @@ class MyRegistrationSerializer(serializers.ModelSerializer):
         model = TournamentRegistration
         fields = (
             'id', 'edition_id', 'edition_title', 'edition_start_date', 'edition_end_date',
-            'edition_status', 'category_text', 'max_participants',
+            'edition_status', 'is_past', 'category_text', 'max_participants',
             'registered_at', 'ranking_position',
             'payment_status', 'payment_status_label', 'payment_confirmed_at',
             'is_withdrawn', 'withdrawn_at',
@@ -83,6 +85,18 @@ class MyRegistrationSerializer(serializers.ModelSerializer):
 
     def get_edition_status(self, obj):
         return obj.edition.compute_dynamic_status()
+
+    def get_is_past(self, obj):
+        """True quando o torneio já terminou ou foi cancelado.
+
+        Fonte da verdade para 'Inscrições ativas': uma inscrição em torneio
+        passado/cancelado nunca deve ser exibida como ativa, mesmo que esteja
+        paga/confirmada.
+        """
+        return obj.edition.compute_dynamic_status() in (
+            TournamentEdition.STATUS_FINISHED,
+            TournamentEdition.STATUS_CANCELED,
+        )
 
     def get_category_text(self, obj):
         return obj.category.source_category_text if obj.category else None

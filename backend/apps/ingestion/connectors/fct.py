@@ -164,7 +164,12 @@ class FCTPublicConnector(BaseConnector):
 
         return {
             'status_text': self._find_text(text, [r'\b(Finalizado|Iniciado|Confirmado|Planejado|Cancelado)\b']),
-            'deadline': self._find_text(text, [r'Inscric(?:oes|ões) abertas at[eé] \d{2}/\d{2}/\d{4}']),
+            # "Inscrições abertas até DD/MM/YYYY". The word carries a cedilla
+            # (Inscri-ç-ões) — the old pattern used a plain 'c' (Inscric...) and
+            # never matched, so FCT editions came in without entry_close_at.
+            # [cç] tolerates accented/unaccented forms; \s* absorbs the spacing
+            # left when the date sits in its own <span> (get_text inlines it).
+            'deadline': self._find_text(text, [r'Inscri[cç][õo]es abertas at[eé]\s*\d{2}/\d{2}/\d{4}']),
             'price_text': self._find_text(text, [r'R\$ [\d\.,]+']),
             'surface': surface,
             'venue_name': venue_name,

@@ -765,14 +765,34 @@ class ParentChildViewSet(viewsets.ModelViewSet):
 
     @viewset_action(detail=False, methods=['get'], url_path='search-players')
     def search_players(self, request):
-        """Search existing players by name so the parent can choose who to invite."""
+        """
+        Busca jogadores existentes para o responsável escolher quem convidar.
+
+        Busca tolerante: ignora acentos e maiúsculas/minúsculas (via extensão
+        unaccent do Postgres) e procura tanto no nome quanto no e-mail. Assim
+        "joao", "JOÃO" e "joão" encontram o mesmo atleta.
+        """
+        import unicodedata
+        from django.db.models import Func, Q
+
         q = (request.data.get('q') or request.query_params.get('q') or '').strip()
         if len(q) < 2:
             return Response({'detail': 'Digite ao menos 2 caracteres.'}, status=status.HTTP_400_BAD_REQUEST)
 
+        class Unaccent(Func):
+            function = 'unaccent'
+            arity = 1
+
+        # Dobra a query para ASCII (joão -> joao) para casar com a coluna sem acento.
+        q_norm = unicodedata.normalize('NFKD', q).encode('ascii', 'ignore').decode() or q
+
         qs = (
             User.objects
-            .filter(full_name__icontains=q, is_active=True, role=User.ROLE_PLAYER)
+            .annotate(uname=Unaccent('full_name'), uemail=Unaccent('email'))
+            .filter(
+                Q(uname__icontains=q_norm) | Q(uemail__icontains=q_norm),
+                is_active=True, role=User.ROLE_PLAYER,
+            )
             .exclude(pk=request.user.pk)
             .order_by('full_name')[:20]
         )

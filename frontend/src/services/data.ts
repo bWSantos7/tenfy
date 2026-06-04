@@ -2,22 +2,44 @@ import api from './api';
 import { Alert, CoachAthlete, DependentInvite, Paginated, ParentChild, PlayerCategory, PlayerProfile, PlayerSearchResult, TiData, WatchlistItem } from '../types';
 
 // ----- Players -----
-// In-flight dedup: listProfiles() is called from several pages/components that
-// often mount together (Home chama 2x). Sharing the pending promise collapses
-// concurrent identical GETs into one request. Only merges in-flight calls, so it
-// never serves stale data — the next call after resolution fetches fresh.
+// Shared profiles cache. listProfiles() is called from several pages/components
+// (Home, Perfil, Resultados, Torneios, Detalhe...) as the user navigates.
+//
+// Two layers, both safe:
+//   1. In-flight dedup — collapses concurrent identical GETs into one request.
+//   2. Short TTL cache — serves the same profiles across quick navigations
+//      without re-fetching. Invalidated on every profile mutation, so it never
+//      hides a change the user just made.
+//
+// Pass { force: true } to bypass the cache when fresh data is mandatory (e.g.
+// after a UTR/TI sync that mutates the profile out-of-band).
+const PROFILES_TTL_MS = 30_000;
 let _profilesInFlight: Promise<PlayerProfile[]> | null = null;
-export async function listProfiles() {
-  if (_profilesInFlight) return _profilesInFlight;
-  _profilesInFlight = (async () => {
+let _profilesCache: { data: PlayerProfile[]; at: number } | null = null;
+
+/** Drop the cached profiles so the next listProfiles() re-fetches. */
+export function invalidateProfilesCache() {
+  _profilesCache = null;
+}
+
+export async function listProfiles(opts?: { force?: boolean }): Promise<PlayerProfile[]> {
+  const force = opts?.force === true;
+  if (!force && _profilesCache && Date.now() - _profilesCache.at < PROFILES_TTL_MS) {
+    return _profilesCache.data;
+  }
+  if (!force && _profilesInFlight) return _profilesInFlight;
+  const pending = (async () => {
     const res = await api.get<Paginated<PlayerProfile> | PlayerProfile[]>('/api/players/profiles/');
     const d = res.data as Paginated<PlayerProfile>;
     return d.results ?? (res.data as PlayerProfile[]);
   })();
+  if (!force) _profilesInFlight = pending;
   try {
-    return await _profilesInFlight;
+    const data = await pending;
+    _profilesCache = { data, at: Date.now() };
+    return data;
   } finally {
-    _profilesInFlight = null;
+    if (!force) _profilesInFlight = null;
   }
 }
 export async function getProfile(id: number) {
@@ -26,17 +48,23 @@ export async function getProfile(id: number) {
 }
 export async function createProfile(data: Partial<PlayerProfile>) {
   const res = await api.post<PlayerProfile>('/api/players/profiles/', data);
+  invalidateProfilesCache();
   return res.data;
 }
 export async function updateProfile(id: number, data: Partial<PlayerProfile>) {
   const res = await api.patch<PlayerProfile>(`/api/players/profiles/${id}/`, data);
+  invalidateProfilesCache();
   return res.data;
 }
 export async function deleteProfile(id: number) {
-  return api.delete(`/api/players/profiles/${id}/`);
+  const res = await api.delete(`/api/players/profiles/${id}/`);
+  invalidateProfilesCache();
+  return res;
 }
 export async function setPrimary(id: number) {
-  return api.post(`/api/players/profiles/${id}/set_primary/`);
+  const res = await api.post(`/api/players/profiles/${id}/set_primary/`);
+  invalidateProfilesCache();
+  return res;
 }
 export async function listCategories(taxonomy?: string) {
   const url = taxonomy
@@ -157,14 +185,17 @@ export async function linkUtr(profileId: number, candidate: import('../types').U
     doubles_utr: candidate.doubles_utr ?? '',
     profile_url: candidate.profile_url,
   });
+  invalidateProfilesCache();
 }
 
 export async function unlinkUtr(profileId: number): Promise<void> {
   await api.post(`/api/players/profiles/${profileId}/utr-unlink/`);
+  invalidateProfilesCache();
 }
 
 export async function syncUtr(profileId: number): Promise<void> {
   await api.post(`/api/players/profiles/${profileId}/utr-sync/`);
+  invalidateProfilesCache();
 }
 
 // ----- Tênis Integrado -----
@@ -177,6 +208,7 @@ export async function fetchTiData(profileId: number, refresh = false): Promise<T
 
 export async function syncTiData(profileId: number): Promise<{ detail: string; results_count: number; rankings_count: number }> {
   const res = await api.post(`/api/players/profiles/${profileId}/ti-sync/`);
+  invalidateProfilesCache();
   return res.data;
 }
 

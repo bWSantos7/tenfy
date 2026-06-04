@@ -65,20 +65,6 @@ export const LoginPage: React.FC = () => {
 
         <div className="relative flex flex-col h-full p-10 xl:p-14">
 
-          {/* Logo grande no topo — clara no light, escura no dark */}
-          <Link to="/" className="shrink-0 inline-block mb-auto">
-            <img
-              src="/logos/logo_clara.png"
-              alt="Tenfy"
-              className="h-16 xl:h-20 w-auto object-contain dark:hidden"
-            />
-            <img
-              src="/logos/logo_escura.png"
-              alt="Tenfy"
-              className="h-16 xl:h-20 w-auto object-contain hidden dark:block"
-            />
-          </Link>
-
           {/* Conteúdo central */}
           <div className="my-auto py-12">
             {/* Badge */}
@@ -112,12 +98,12 @@ export const LoginPage: React.FC = () => {
               ))}
             </div>
 
-            {/* Logo grande — preenche o espaço central */}
+            {/* Logo principal — centralizada no painel quadriculado */}
             <div className="mt-10 flex items-center justify-center">
               <img
                 src="/logos/logo_escura2.png"
                 alt="Tenfy"
-                className="w-full max-w-[340px] xl:max-w-[400px] h-auto object-contain drop-shadow-2xl"
+                className="w-full max-w-[400px] xl:max-w-[460px] h-auto object-contain drop-shadow-2xl"
               />
             </div>
           </div>

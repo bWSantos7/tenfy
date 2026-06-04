@@ -88,14 +88,14 @@ def _fmt_value(field_name: str, value) -> str:
     if value is None:
         return 'não informado'
     v = str(value)
-    # ISO datetime → Brazilian format
+    # ISO datetime → Brazilian format. Uses stdlib zoneinfo (Django 5 native) so it
+    # never depends on the optional pytz package being installed.
     if 'T' in v and ('+' in v or 'Z' in v or len(v) > 16):
         try:
             from datetime import datetime
-            import pytz
+            from zoneinfo import ZoneInfo
             dt = datetime.fromisoformat(v.replace('Z', '+00:00'))
-            brasilia = pytz.timezone('America/Sao_Paulo')
-            local = dt.astimezone(brasilia)
+            local = dt.astimezone(ZoneInfo('America/Sao_Paulo'))
             return local.strftime('%d/%m/%Y às %H:%M')
         except Exception:
             pass

@@ -1605,16 +1605,17 @@ class QualityGateAutoFetchTestCase(TestCase):
         self.assertFalse(qg['can_save'])
         self.assertIn('html_or_text vazio — nenhum conteúdo para parsear', qg['reasons'])
 
-    def test_fpt_supports_auto_fetch_false(self):
-        """FPT does not support auto-fetch — response field reflects this."""
+    def test_fpt_supports_auto_fetch_true(self):
+        """FPT auto-fetches via fpt.tenisintegrado.com.br (same platform as CBT).
+        With empty inputs nothing is fetched, but the capability flag is True."""
         res = self.client.post('/api/integrations/parse-entries/', {
             'source': 'fpt',
             'html_or_text': '',
             'source_url': '',
         }, format='json')
         self.assertEqual(res.status_code, 200)
-        self.assertFalse(res.data.get('supports_auto_fetch'))
-        self.assertFalse(res.data.get('auto_fetch_used'))
+        self.assertTrue(res.data.get('supports_auto_fetch'))
+        self.assertFalse(res.data.get('auto_fetch_used'))  # no source_url → nothing fetched
 
     def test_fbt_supports_auto_fetch_true(self):
         """FBT/BA TenisIntegrado flow can auto-fetch entries by category."""

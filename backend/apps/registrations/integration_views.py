@@ -102,6 +102,7 @@ _CONNECTOR_TO_SOURCE = {
 
 # URL domain → source (tenisintegrado handled separately: could be cbt/fct/fmt)
 _URL_DOMAIN_TO_SOURCE = [
+    ('fpt.com.br',                   'fpt'),
     ('fbt.com.br',                   'fbt'),
     ('cbt-tenis.com.br',             'cbt'),
     ('tennistool.tenisintegrado.com', None),   # need connector_key to distinguish

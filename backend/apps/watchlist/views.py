@@ -120,7 +120,16 @@ class WatchlistViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def summary(self, request):
-        qs = self.get_queryset()
+        # Summary is a stats overview, not a list: for a parent it aggregates their
+        # own items PLUS every managed child's (the list view excludes children only
+        # to avoid row duplication). Without this, a parent's overview ignored the
+        # dependents' watchlists entirely.
+        user = request.user
+        if user.role == 'parent':
+            user_ids = [user.id, *self._managed_child_ids()]
+        else:
+            user_ids = [user.id]
+        qs = WatchlistItem.objects.filter(user_id__in=user_ids)
         today = timezone.now().date()
         upcoming = qs.filter(edition__start_date__gte=today)
         past = qs.filter(edition__end_date__lt=today)

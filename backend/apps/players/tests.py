@@ -135,18 +135,22 @@ class PlayerProfileAPITestCase(TestCase):
         res = self.client.delete(f'/api/players/profiles/{p.id}/')
         self.assertEqual(res.status_code, 400)
 
-    def test_create_duplicate_display_name_returns_400(self):
-        # DRF returns 400 for UniqueConstraint violations via serializer validation
-        PlayerProfile.objects.create(user=self.user, display_name='Dup')
+    def test_player_cannot_create_second_profile_returns_403(self):
+        # Player accounts may keep only one sporting profile. A second create is
+        # blocked by the single-profile rule (403) before any other validation —
+        # so a duplicate display_name never reaches the unique-constraint path.
+        PlayerProfile.objects.create(user=self.user, display_name='Existing')
         res = self.client.post('/api/players/profiles/', {
-            'display_name': 'Dup',
+            'display_name': 'Another',
             'competitive_level': 'amateur',
         }, format='json')
-        self.assertEqual(res.status_code, 400)
+        self.assertEqual(res.status_code, 403)
 
 
 class PlayerProfileChildRestrictionTestCase(TestCase):
-    """Managed child accounts cannot create/delete profiles."""
+    """Managed child accounts cannot add extra profiles or delete profiles —
+    their responsável manages them. (A child's own first profile is created
+    before they are linked to a parent.)"""
 
     def setUp(self):
         self.client = APIClient()
@@ -156,9 +160,11 @@ class PlayerProfileChildRestrictionTestCase(TestCase):
         ParentChild.objects.create(parent=self.parent, child=self.child, is_active=True)
         self.client.force_authenticate(user=self.child)
 
-    def test_child_cannot_create_profile(self):
+    def test_managed_child_cannot_create_additional_profile(self):
+        # The child already has their own profile; once managed, they cannot add more.
+        PlayerProfile.objects.create(user=self.child, display_name='Existing Child Profile')
         res = self.client.post('/api/players/profiles/', {
-            'display_name': 'Child Profile',
+            'display_name': 'Child Profile 2',
         }, format='json')
         self.assertEqual(res.status_code, 403)
 

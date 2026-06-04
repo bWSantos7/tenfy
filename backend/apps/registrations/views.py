@@ -75,6 +75,56 @@ _VALID_PAYMENT = {FederationEntry.PAYMENT_PAID, FederationEntry.PAYMENT_PENDING,
 _VALID_CONFIDENCE = {FederationEntry.CONFIDENCE_HIGH, FederationEntry.CONFIDENCE_MEDIUM, FederationEntry.CONFIDENCE_LOW}
 
 
+def _edition_is_past(edition) -> bool:
+    """True quando a edição já terminou ou foi cancelada (torneio passado)."""
+    return edition.compute_dynamic_status() in (
+        TournamentEdition.STATUS_FINISHED,
+        TournamentEdition.STATUS_CANCELED,
+    )
+
+
+def _norm_title(text: str) -> str:
+    """Normaliza título para comparação: sem acento, minúsculo, espaços colapsados."""
+    import unicodedata as _ud
+    import re as _re
+    s = _ud.normalize('NFKD', text or '').encode('ascii', 'ignore').decode().lower()
+    return _re.sub(r'\s+', ' ', _re.sub(r'[^a-z0-9 ]+', ' ', s)).strip()
+
+
+def _dedup_registrations(regs):
+    """
+    Colapsa inscrições que representam o MESMO evento real visto em edições
+    duplicadas, evitando que o mesmo torneio apareça repetido em
+    'Minhas inscrições' / 'Inscrições ativas' / histórico.
+
+    A duplicidade vem de edições duplicadas (mesmo torneio importado mais de
+    uma vez). Como unique_together = (profile, edition, category) impede linhas
+    duplicadas na mesma edição, agrupamos por:
+        (título normalizado, start_date, end_date, categoria)
+
+    Preferência dentro do grupo:
+      1. inscrição ativa (não cancelada) vence a cancelada;
+      2. empate → a inscrição mais recente (registered_at).
+
+    Preserva a ordem de aparição (a lista já vem ordenada por -registered_at).
+    """
+    best = {}
+    order = []
+    for r in regs:
+        cat = r.category.source_category_text if (r.category_id and r.category) else ''
+        key = (_norm_title(r.edition.title), str(r.edition.start_date), str(r.edition.end_date), cat or '')
+        if key not in best:
+            best[key] = r
+            order.append(key)
+            continue
+        cur = best[key]
+        cur_rank = (0 if cur.is_withdrawn else 1, cur.registered_at)
+        new_rank = (0 if r.is_withdrawn else 1, r.registered_at)
+        if new_rank > cur_rank:
+            best[key] = r
+    return [best[k] for k in order]
+
+
 def _annotate_slot_positions(qs):
     """Annotate each registration with its sequential slot position within (edition, category)."""
     return qs.annotate(
@@ -124,16 +174,36 @@ class RegistrationViewSet(viewsets.GenericViewSet):
 
     @action(detail=False, methods=['get'], url_path='my')
     def my_registrations(self, request):
-        """GET /api/registrations/my/ — Minhas inscrições."""
+        """
+        GET /api/registrations/my/ — Minhas inscrições.
+
+        Query params:
+          ?scope=all|active|history  (default: all)
+            active  — não cancelada E torneio não passado/cancelado
+            history — cancelada OU torneio já passado/cancelado
+            all     — tudo (compatibilidade)
+
+        A resposta já vem deduplicada por evento (mesmo torneio em edições
+        duplicadas não aparece repetido) — a API é a fonte da verdade, o cliente
+        não precisa filtrar duplicidade.
+        """
         profile_ids = list(
             PlayerProfile.objects.filter(user=request.user).values_list('id', flat=True)
         )
         qs = TournamentRegistration.objects.filter(
             profile_id__in=profile_ids
-        ).select_related('edition', 'category', 'profile')
+        ).select_related('edition', 'edition__tournament', 'category', 'profile')
 
         qs = _annotate_slot_positions(qs).order_by('-registered_at')
-        serializer = MyRegistrationSerializer(qs, many=True)
+        regs = _dedup_registrations(list(qs))
+
+        scope = (request.query_params.get('scope') or 'all').strip().lower()
+        if scope == 'active':
+            regs = [r for r in regs if not r.is_withdrawn and not _edition_is_past(r.edition)]
+        elif scope == 'history':
+            regs = [r for r in regs if r.is_withdrawn or _edition_is_past(r.edition)]
+
+        serializer = MyRegistrationSerializer(regs, many=True)
         return Response(serializer.data)
 
     @action(detail=True, methods=['delete'], url_path='withdraw')

@@ -150,7 +150,7 @@ export const PlayerProfilePage: React.FC = () => {
       setChildProfiles(fresh);
       return fresh;
     }
-    const fresh = await listProfiles();
+    const fresh = await listProfiles({ force: true });
     setProfiles(fresh);
     return fresh;
   }, [isParent, selectedChildId]);
@@ -276,7 +276,7 @@ export const PlayerProfilePage: React.FC = () => {
   }
 
   const activeRegs = registrations
-    .filter((r) => !r.is_withdrawn && ['confirmed', 'waiting_list', 'pending_payment'].includes(r.registration_status))
+    .filter((r) => !r.is_withdrawn && !r.is_past && ['confirmed', 'waiting_list', 'pending_payment'].includes(r.registration_status))
     .slice(0, 5);
 
   return (

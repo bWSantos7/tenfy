@@ -8,6 +8,7 @@ from django.core.exceptions import ImproperlyConfigured
 from decouple import config, Csv, UndefinedValueError
 import dj_database_url
 import os
+import sys
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -273,6 +274,18 @@ CACHES = {
     }
 }
 
+# During the test suite, use a local in-memory cache. Avoids a hard dependency on
+# a running Redis for tests, keeps cache-backed tests deterministic, and prevents
+# the ~5s-per-request stall that happens when throttling hits an unreachable Redis.
+# Only active under `manage.py test` — never affects runserver/production.
+if 'test' in sys.argv:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'tenfy-test-cache',
+        }
+    }
+
 # Session in DB (safer) but allow Redis fallback
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 
@@ -289,6 +302,14 @@ CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 30 * 60       # hard kill after 30 min
 CELERY_TASK_SOFT_TIME_LIMIT = 25 * 60  # SoftTimeLimitExceeded raised at 25 min
 CELERY_WORKER_MAX_TASKS_PER_CHILD = 50  # recycle worker after 50 tasks (prevent memory leaks)
+
+# During the test suite, use an in-memory Celery broker so `.delay()` / `.apply_async()`
+# never require a running Redis. Tasks are enqueued (not executed) — same async
+# semantics as production, but with no network dependency. Tests that need a task to
+# run assert it via mocks/eager patching, as they already do. Only active under tests.
+if 'test' in sys.argv:
+    CELERY_BROKER_URL = 'memory://'
+    CELERY_RESULT_BACKEND = 'cache+memory://'
 
 # Email — uses Resend API when RESEND_API_KEY is set, falls back to console in dev
 RESEND_API_KEY = config('RESEND_API_KEY', default='')
@@ -372,6 +393,8 @@ ITF_MONGO_ENABLED = config('ITF_MONGO_ENABLED', default=False, cast=bool)
 ITF_MONGO_URL = config('ITF_MONGO_URL', default='')  # empty → use COSAT_MONGO_URL
 ITF_MONGO_DB = config('ITF_MONGO_DB', default='')    # empty → use COSAT_MONGO_DB
 ITF_MONGO_COLLECTION_TOURNAMENTS = config('ITF_MONGO_COLLECTION_TOURNAMENTS', default='itftournaments')
+# Acceptance-list players live in a separate collection (current scraper schema).
+ITF_MONGO_COLLECTION_PLAYERS = config('ITF_MONGO_COLLECTION_PLAYERS', default='itfplayers')
 ITF_MONGO_CONNECT_TIMEOUT_MS = config('ITF_MONGO_CONNECT_TIMEOUT_MS', default=5000, cast=int)
 
 # Web Push (VAPID) — generate keys with: python -c "from py_vapid import Vapid; v=Vapid(); v.generate_keys(); print(v.private_key, v.public_key)"

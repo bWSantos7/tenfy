@@ -60,6 +60,12 @@ def _bulk_update_sync_fields(updates: list):
         logger.debug('federation_sync_targets: bulk-updated %d editions', len(editions))
 
 
+# Safety cap on how many editions federation_sync_targets scans per call.
+# Set well above the current edition count so it is effectively unlimited today,
+# while still bounding work if the table grows pathologically. When hit, a
+# warning is logged so we know to push more filtering into the DB query.
+_SCAN_CAP = 20000
+
 # Statuses worth syncing (exclude finished/canceled)
 _SYNC_STATUSES = {
     TournamentEdition.STATUS_OPEN,
@@ -411,21 +417,39 @@ def federation_sync_targets(request):
 
     results = []
     _editions_to_update = []
-    for edition in qs[:limit * 3]:
-        source = _edition_source(edition)
-        dynamic_status = edition.compute_dynamic_status()
+    scanned = 0
+    matched = 0
+    # IMPORTANT: do NOT slice the queryset before filtering by source/status.
+    # The queryset is ordered by -start_date (model Meta); slicing to a window
+    # and only THEN filtering by ?source caused count:0 when a federation's
+    # syncable editions sat outside that window (bug: count:0 vs total 1060).
+    # We iterate the full filtered set and apply ?limit only to the sorted output.
+    # Cheap filters (source/status/needs_sync) run BEFORE the heavier URL
+    # derivation so we don't pay derive cost for non-matching editions.
+    for edition in qs:
+        scanned += 1
+        if scanned > _SCAN_CAP:
+            logger.warning(
+                'federation_sync_targets: scan cap %d atingido (total=%d) — '
+                'aumente _SCAN_CAP ou filtre por fonte/status no DB.',
+                _SCAN_CAP, scanned,
+            )
+            break
 
+        source = _edition_source(edition)
+        if source_filter and source != source_filter:
+            continue
+
+        dynamic_status = edition.compute_dynamic_status()
         if dynamic_status not in _SYNC_STATUSES and edition.status not in _SYNC_STATUSES:
             continue
 
         last_synced = synced_map.get(edition.id)
         needs_sync = (last_synced is None) or (last_synced < stale_threshold)
-
-        if source_filter and source != source_filter:
-            continue
         if needs_sync_only and not needs_sync:
             continue
 
+        matched += 1
         priority = _sync_priority(edition, dynamic_status, last_synced)
         entries_url, ranking_url, candidate_links = derive_entries_source_url(edition)
 
@@ -487,9 +511,18 @@ def federation_sync_targets(request):
         except Exception as exc:
             logger.warning('federation_sync_targets: bulk sync field update failed: %s', exc)
 
+    logger.info(
+        'federation_sync_targets: source=%s needs_sync_only=%s scanned=%d matched=%d returned=%d total_with_source_url=%d',
+        source_filter or 'all', needs_sync_only, scanned, matched, len(results[:limit]), scanned,
+    )
+
     return Response({
         'count': len(results[:limit]),
+        # Total de edições elegíveis (com source_url, não finalizadas/canceladas).
         'total_with_source_url': qs.count(),
+        # Observabilidade: quantas foram varridas e quantas casaram com os filtros.
+        'scanned': scanned,
+        'total_matched': matched,
         'results': results[:limit],
     })
 
@@ -697,6 +730,27 @@ def deduplicate_editions(request):
                 groups.append({'reason': 'tournament+dates', 'key': str(k), 'editions': grp})
                 already.update(ed.id for ed in grp)
 
+        # High-precision pass: mesmo título NORMALIZADO + datas idênticas, mesmo
+        # entre tournament_ids/organizações diferentes. As edições duplicadas
+        # foram criadas sob tournaments distintos, então a passada por
+        # tournament_id não as pega. Título normalizado igual + start+end
+        # idênticos é sinal fortíssimo de duplicata — seguro sem exigir venue/org.
+        # Exige start_date presente para não agrupar editions sem data pelo nome.
+        by_ntd = defaultdict(list)
+        for ed in editions:
+            if ed.id in already:
+                continue
+            if not ed.start_date:
+                continue
+            nt = _norm(ed.title)
+            if not nt:
+                continue
+            by_ntd[(nt, str(ed.start_date), str(ed.end_date))].append(ed)
+        for k, grp in by_ntd.items():
+            if len(grp) > 1:
+                groups.append({'reason': 'norm_title+dates', 'key': str(k), 'editions': grp})
+                already.update(ed.id for ed in grp)
+
         remaining = [ed for ed in editions if ed.id not in already]
         checked = set()
         for i, a in enumerate(remaining):
@@ -746,8 +800,25 @@ def deduplicate_editions(request):
                             except Exception:
                                 wi.delete()
 
-                        # 2. FederationEntries — simply delete from dup (keep already has them)
-                        FederationEntry.objects.filter(edition=dup).delete()
+                        # 2. FederationEntries — migrate the ones the keep does NOT
+                        # already have; delete only true duplicates. Blindly deleting
+                        # could lose inscritos that were imported into the duplicate
+                        # edition but not the kept one. Uniqueness key on the model:
+                        # (edition, category_text, player_external_id, source).
+                        for fe in FederationEntry.objects.filter(edition=dup):
+                            try:
+                                if FederationEntry.objects.filter(
+                                    edition=keep,
+                                    category_text=fe.category_text,
+                                    player_external_id=fe.player_external_id,
+                                    source=fe.source,
+                                ).exists():
+                                    fe.delete()
+                                else:
+                                    fe.edition = keep
+                                    fe.save(update_fields=['edition'])
+                            except Exception:
+                                fe.delete()
 
                         # 3. TournamentRegistrations — migrate or delete if conflict
                         for tr in TournamentRegistration.objects.filter(edition=dup):

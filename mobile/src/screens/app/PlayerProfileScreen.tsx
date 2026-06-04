@@ -111,7 +111,7 @@ export function PlayerProfileScreen(_: Props) {
 
   // Active/upcoming registrations (not withdrawn)
   const activeRegs = registrations
-    .filter((r) => !r.is_withdrawn && ['confirmed', 'waiting_list', 'pending_payment'].includes(r.registration_status))
+    .filter((r) => !r.is_withdrawn && !r.is_past && ['confirmed', 'waiting_list', 'pending_payment'].includes(r.registration_status))
     .slice(0, 5);
 
   return (

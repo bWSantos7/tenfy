@@ -173,6 +173,11 @@ class ItfMongoConnector:
         self._client = None
         self._db = None
         self._available: Optional[bool] = None
+        # Lazy lookup: tournament_id -> inscritos dict, built from the itfplayers
+        # collection. The current scraper stores acceptance-list players in a
+        # separate collection (itfplayers) instead of embedding them in the
+        # tournament doc, so we join them back here.
+        self._players_lookup: Optional[dict] = None
 
     def _connect(self) -> bool:
         if self._available is not None:
@@ -210,6 +215,71 @@ class ItfMongoConnector:
         name = getattr(settings, 'ITF_MONGO_COLLECTION_TOURNAMENTS', 'itftournaments')
         return self._db[name]
 
+    def _players_collection(self):
+        name = getattr(settings, 'ITF_MONGO_COLLECTION_PLAYERS', 'itfplayers')
+        return self._db[name]
+
+    def _build_players_lookup(self) -> dict:
+        """
+        Build (once per connector) a lookup tournament_id -> inscritos dict by
+        reading the whole itfplayers collection in a single pass and grouping by
+        tournament_id, gender and section.
+
+        The scraper links players to tournaments via 'tournament_id', which equals
+        the tournament's 'slug_externo'. We index under the original key plus its
+        upper/lower-case variants so a case mismatch never drops the join.
+        """
+        if self._players_lookup is not None:
+            return self._players_lookup
+
+        grouped: dict = {}
+        try:
+            cursor = self._players_collection().find({})
+        except Exception as exc:
+            logger.warning('ItfMongo: could not read itfplayers — %s', _sanitize_exc(exc))
+            self._players_lookup = {}
+            return self._players_lookup
+
+        for p in cursor:
+            tid = (str(p.get('tournament_id') or '').strip())
+            if not tid:
+                continue
+            inscritos = grouped.setdefault(tid, {})
+            gender_key = (str(p.get('genero') or '').lower().strip()) or 'masculino'
+            secao = (str(p.get('secao') or '').lower().strip()) or 'draw_principal'
+            sections = inscritos.setdefault(gender_key, [])
+            section_obj = next((s for s in sections if s['secao'] == secao), None)
+            if section_obj is None:
+                section_obj = {
+                    'secao': secao,
+                    'secao_label': p.get('secao_label') or '',
+                    'jogadores': [],
+                }
+                sections.append(section_obj)
+            section_obj['jogadores'].append({
+                'nome': p.get('nome'),
+                'pais': p.get('pais'),
+                'codigo_pais': p.get('codigo_pais'),
+                'ranking': p.get('ranking'),
+                'wtn': p.get('wtn'),
+                'prioridade': p.get('prioridade'),
+                'informacao': p.get('informacao') or '',
+                'posicao': p.get('posicao'),
+                'wtn_aceites': p.get('wtn_aceites'),
+            })
+
+        # Index case-insensitively so slug_externo casing never breaks the join.
+        lookup: dict = {}
+        for tid, inscritos in grouped.items():
+            for variant in {tid, tid.upper(), tid.lower()}:
+                lookup.setdefault(variant, inscritos)
+        self._players_lookup = lookup
+        logger.info(
+            'ItfMongo: built players lookup — %d tournaments com inscritos (de itfplayers)',
+            len(grouped),
+        )
+        return self._players_lookup
+
     def iter_tournaments(self, limit: int = 0, slug_externo: str = '') -> Iterator[dict]:
         """
         Yield normalized tournament dicts from the itftournaments collection.
@@ -231,6 +301,19 @@ class ItfMongoConnector:
 
         for doc in cursor:
             try:
+                # The current scraper stores acceptance-list players in a separate
+                # collection (itfplayers). When the tournament doc has no embedded
+                # 'inscritos', join the players back in by tournament_id/slug_externo.
+                if not (doc.get('inscritos')):
+                    tid = (
+                        str(doc.get('slug_externo') or '').strip()
+                        or str(doc.get('key') or '').strip()
+                    )
+                    if tid:
+                        lookup = self._build_players_lookup()
+                        joined = lookup.get(tid) or lookup.get(tid.upper()) or lookup.get(tid.lower())
+                        if joined:
+                            doc['inscritos'] = joined
                 normalized = _normalize_tournament(doc)
                 if normalized:
                     yield normalized

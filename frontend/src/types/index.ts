@@ -190,6 +190,7 @@ export interface TournamentRegistration {
   edition_start_date: string | null;
   edition_end_date: string | null;
   edition_status: string;
+  is_past: boolean;
   category_text: string | null;
   max_participants: number | null;
   registered_at: string;

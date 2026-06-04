@@ -97,8 +97,11 @@ export const InscricoesPage: React.FC = () => {
     }
   }
 
-  const activeRegs = registrations.filter((r) => !r.is_withdrawn);
-  const withdrawnRegs = registrations.filter((r) => r.is_withdrawn);
+  // Inscrições ativas = não cancelada E torneio não passado. Torneios já
+  // finalizados/cancelados vão para o Histórico, mesmo que a inscrição não
+  // tenha sido cancelada manualmente.
+  const activeRegs = registrations.filter((r) => !r.is_withdrawn && !r.is_past);
+  const withdrawnRegs = registrations.filter((r) => r.is_withdrawn || r.is_past);
   const totalDeclared = childGroups.reduce((acc, g) => acc + g.items.length, 0);
   // Avoid showing a desistência twice when both an official registration and a
   // watchlist declaration exist for the same edition.
@@ -224,7 +227,7 @@ export const InscricoesPage: React.FC = () => {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <h2 className="font-bold text-sm text-text-muted">Histórico</h2>
-                <span className="text-xs text-text-muted">Canceladas</span>
+                <span className="text-xs text-text-muted">Encerradas e canceladas</span>
               </div>
               {withdrawnRegs.map((reg) => (
                 <RegistrationCard key={reg.id} reg={reg} confirmWithdraw={null} withdrawing={null} />

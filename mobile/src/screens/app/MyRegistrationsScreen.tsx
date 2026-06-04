@@ -132,8 +132,10 @@ export function MyRegistrationsScreen({ navigation }: Props) {
     }
   }
 
-  const active = registrations.filter((r) => !r.is_withdrawn);
-  const withdrawn = registrations.filter((r) => r.is_withdrawn);
+  // Ativas = não cancelada E torneio não passado. Torneios já encerrados/
+  // cancelados vão para o histórico, mesmo sem cancelamento manual.
+  const active = registrations.filter((r) => !r.is_withdrawn && !r.is_past);
+  const withdrawn = registrations.filter((r) => r.is_withdrawn || r.is_past);
   const totalWatchlistInscribed = childGroups.reduce((acc, g) => acc + g.items.length, 0);
   const withdrawnRegEditionIds = new Set(withdrawn.map((r) => r.edition_id));
   const declaredWithdrawnOnly = declaredWithdrawn.filter(
@@ -231,7 +233,7 @@ export function MyRegistrationsScreen({ navigation }: Props) {
           )}
           {(withdrawn.length > 0 || declaredWithdrawnOnly.length > 0) && (
             <View>
-              <SectionHeader title="Histórico" subtitle="Inscrições canceladas" />
+              <SectionHeader title="Histórico" subtitle="Encerradas e canceladas" />
               {withdrawn.map((reg) => (
                 <RegistrationCard
                   key={reg.id}

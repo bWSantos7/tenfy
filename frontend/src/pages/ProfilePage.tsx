@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { StateMultiSelect, loadCitiesForState, ALL_UFS } from '../components/StateMultiSelect';
+import { loadCitiesForState, ALL_UFS } from '../components/StateMultiSelect';
+import { FederationSelect } from '../components/FederationSelect';
 import {
   Loader2, Trash2, Mail, Edit2, CheckCircle2, Camera, AlertTriangle,
   Sun, Moon, CreditCard, Ticket, Users, ShieldCheck, Bell, LogOut,
@@ -599,7 +600,7 @@ const ProfileEditor: React.FC<{
     gender:            profile.gender ?? '' as '' | 'M' | 'F',
     home_state:        profile.home_state ?? 'SP',
     home_city:         profile.home_city ?? '',
-    travel_states:     profile.travel_states ?? [],
+    federation:        profile.federation ?? null,
     tennis_class:      profile.tennis_class ?? '',
     competitive_level: profile.competitive_level ?? 'amateur',
   });
@@ -680,10 +681,10 @@ const ProfileEditor: React.FC<{
         </div>
       </div>
 
-      {/* Estados onde aceita jogar — sem raio de km */}
-      <StateMultiSelect
-        values={form.travel_states}
-        onChange={(vals) => setForm({ ...form, travel_states: vals })}
+      {/* Federação — substituiu a multisseleção de estados */}
+      <FederationSelect
+        value={form.federation}
+        onChange={(id) => setForm({ ...form, federation: id })}
       />
 
       <div>
@@ -744,7 +745,7 @@ export const AddChildForm: React.FC<{
     gender: '' as '' | 'M' | 'F',
     home_state: 'SP',
     home_city: '',
-    travel_states: [] as string[],
+    federation: null as number | null,
     competitive_level: 'amateur',
     tennis_class: '',
     preferred_modality: 'tennis',
@@ -794,7 +795,7 @@ export const AddChildForm: React.FC<{
             gender: profile.gender || undefined,
             home_state: profile.home_state,
             home_city: profile.home_city,
-            travel_states: profile.travel_states,
+            federation: profile.federation,
             competitive_level: profile.competitive_level as any,
             tennis_class: profile.tennis_class,
             preferred_modality: profile.preferred_modality,
@@ -986,9 +987,9 @@ export const AddChildForm: React.FC<{
           </div>
         </div>
 
-        <StateMultiSelect
-          values={profile.travel_states}
-          onChange={(vals) => setProfile({ ...profile, travel_states: vals })}
+        <FederationSelect
+          value={profile.federation}
+          onChange={(id) => setProfile({ ...profile, federation: id })}
         />
 
         <div>
@@ -1246,7 +1247,7 @@ const ChildProfileEditor: React.FC<{
     gender:            (profile?.gender ?? '') as '' | 'M' | 'F',
     home_state:        profile?.home_state ?? 'SP',
     home_city:         profile?.home_city ?? '',
-    travel_states:     profile?.travel_states ?? [] as string[],
+    federation:        profile?.federation ?? null,
     tennis_class:      profile?.tennis_class ?? '',
     competitive_level: profile?.competitive_level ?? 'amateur',
     preferred_modality: profile?.preferred_modality ?? 'tennis',
@@ -1313,6 +1314,11 @@ const ChildProfileEditor: React.FC<{
             onChange={(e) => setForm({ ...form, home_city: e.target.value })} />
         </div>
       </div>
+
+      <FederationSelect
+        value={form.federation}
+        onChange={(id) => setForm({ ...form, federation: id })}
+      />
 
       <div>
         <label className="text-xs text-text-secondary mb-0.5 block">Modalidade</label>

@@ -136,6 +136,14 @@ export interface UtrCandidate {
   profile_url: string;
 }
 
+// Federação estadual (Organization type=federation)
+export interface Federation {
+  id: number;
+  name: string;
+  short_name: string;
+  state: string;   // UF
+}
+
 export interface PlayerProfile {
   id: number;
   user_id?: number;
@@ -146,7 +154,10 @@ export interface PlayerProfile {
   home_state: string;
   home_city: string;
   travel_radius_km: number;
-  travel_states: string[];       // Array de UFs — fonte da verdade para filtros
+  travel_states: string[];       // Legacy/fallback de UFs — substituído por `federation`
+  federation: number | null;     // id da federação (Organization). Fonte da verdade p/ elegibilidade
+  federation_detail?: Federation | null;
+  federation_state?: string;     // UF da federação (read-only)
   competitive_level: 'beginner' | 'amateur' | 'federated' | 'youth' | 'pro';
   dominant_hand: 'R' | 'L' | '';
   tennis_class: string;
@@ -268,6 +279,8 @@ export interface TournamentEditionList {
     total_count: number;
     distance_status?: string;
     distance_message?: string;
+    entry_guarantee?: boolean;   // false = vaga sujeita a aceitação (ITF/COSAT)
+    entry_model?: string;        // 'direct' | 'acceptance_list'
     circuit_hint?: string | null;
   };
 }

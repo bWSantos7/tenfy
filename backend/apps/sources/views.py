@@ -44,6 +44,23 @@ class OrganizationViewSet(viewsets.ModelViewSet):
             qs = qs.filter(tournaments__editions__isnull=False).distinct()
         return qs
 
+    @action(detail=False, methods=['get'])
+    def federations(self, request):
+        """
+        GET /api/sources/organizations/federations/
+
+        Flat list of every active state federation, ordered by UF. Unlike the
+        default `list` action, this is NOT filtered by tournament editions —
+        the profile/onboarding federation picker must show all 27 federations
+        even when a federation has no tournaments synced yet.
+        """
+        qs = (
+            Organization.objects
+            .filter(is_active=True, type=Organization.TYPE_FEDERATION)
+            .order_by('state', 'short_name', 'name')
+        )
+        return Response(OrganizationSerializer(qs, many=True).data)
+
 
 class DataSourceViewSet(viewsets.ModelViewSet):
     queryset = DataSource.objects.select_related('organization').all()

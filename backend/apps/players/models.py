@@ -112,11 +112,22 @@ class PlayerProfile(TimestampedModel):
     external_ids = models.JSONField(default=dict, blank=True, help_text='CBT id, ITF id, etc')
     home_lat = models.FloatField(null=True, blank=True)
     home_lng = models.FloatField(null=True, blank=True)
+    federation = models.ForeignKey(
+        'sources.Organization',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='player_profiles',
+        limit_choices_to={'type': 'federation'},
+        help_text='Single federation the player competes for. Its UF (state) drives '
+                  'eligibility/location filtering. Replaces the legacy travel_states.',
+    )
     travel_states = ArrayField(
         models.CharField(max_length=2),
         blank=True,
         default=list,
-        help_text='UFs where the player accepts travelling to compete (e.g. ["SP","RJ","MG"]). Empty = not set.',
+        help_text='Legacy/fallback: UFs where the player accepts travelling to compete '
+                  '(e.g. ["SP","RJ","MG"]). Superseded by `federation`. Empty = not set.',
     )
     preferred_modality = models.CharField(
         max_length=50,
@@ -164,6 +175,18 @@ class PlayerProfile(TimestampedModel):
             return None
         from django.utils import timezone
         return timezone.now().year - self.birth_year
+
+    @property
+    def federation_state(self) -> str:
+        """UF of the player's federation, uppercased. Empty when not set.
+
+        This is the canonical state used by the eligibility/location engine.
+        Keyed by UF (not acronym) to avoid ambiguity between federations that
+        share a short_name (e.g. FCT — Carioca/RJ vs Catarinense/SC).
+        """
+        if self.federation_id and self.federation and self.federation.state:
+            return self.federation.state.upper()
+        return ''
 
 
 class ExternalPlayerRanking(TimestampedModel):

@@ -38,6 +38,23 @@ logger = logging.getLogger('apps.accounts')
 User = get_user_model()
 
 
+def _resolve_federation(federation_value):
+    """Resolve a federation id (from raw profile payload) to an active federation
+    Organization, or None. Tolerant: invalid/missing ids return None so federation
+    stays optional and never blocks profile creation."""
+    if not federation_value:
+        return None
+    from apps.sources.models import Organization
+    try:
+        return Organization.objects.get(
+            pk=int(federation_value),
+            type=Organization.TYPE_FEDERATION,
+            is_active=True,
+        )
+    except (Organization.DoesNotExist, ValueError, TypeError):
+        return None
+
+
 def _send_email_otp_with_fallback(user, subject_key='verify') -> bool:
     """
     Generate and dispatch an email OTP.
@@ -516,6 +533,10 @@ class ParentChildViewSet(viewsets.ModelViewSet):
         if not isinstance(travel_states, list):
             travel_states = []
 
+        # Federation is the eligibility source of truth; home_state stays as the
+        # player's residence UF (kept independent so it is never overwritten).
+        federation = _resolve_federation(profile_data.get('federation'))
+
         with transaction.atomic():
             link = account_serializer.save()
             child = link.child
@@ -527,6 +548,7 @@ class ParentChildViewSet(viewsets.ModelViewSet):
                 gender=profile_data.get('gender', ''),
                 home_state=profile_data.get('home_state', 'SP'),
                 home_city=profile_data.get('home_city', ''),
+                federation=federation,
                 travel_states=travel_states,
                 competitive_level=profile_data.get('competitive_level', 'amateur'),
                 tennis_class=profile_data.get('tennis_class', ''),
@@ -727,6 +749,7 @@ class ParentChildViewSet(viewsets.ModelViewSet):
             gender=vd.get('gender', ''),
             home_state=vd.get('home_state', 'SP'),
             home_city=vd.get('home_city', ''),
+            federation=vd.get('federation'),
             travel_states=vd.get('travel_states', []),
             competitive_level=vd.get('competitive_level', 'amateur'),
             tennis_class=vd.get('tennis_class', ''),

@@ -208,9 +208,11 @@ function FilterHeader({
                     {primaryProfile?.home_city ? (
                       <AppText variant="muted" style={{ fontSize: 10, marginTop: 1 }}>
                         {primaryProfile.home_city}{primaryProfile.home_state ? `/${primaryProfile.home_state}` : ''}
-                        {primaryProfile.travel_states && primaryProfile.travel_states.length > 0
-                          ? ` • ${primaryProfile.travel_states.length >= 27 ? 'Todo o Brasil' : `${primaryProfile.travel_states.length} estado${primaryProfile.travel_states.length > 1 ? 's' : ''}`}`
-                          : ''}
+                        {primaryProfile.federation_detail
+                          ? ` • ${primaryProfile.federation_detail.short_name || primaryProfile.federation_detail.name}`
+                          : (primaryProfile.travel_states && primaryProfile.travel_states.length > 0
+                            ? ` • ${primaryProfile.travel_states.length >= 27 ? 'Todo o Brasil' : `${primaryProfile.travel_states.length} estado${primaryProfile.travel_states.length > 1 ? 's' : ''}`}`
+                            : '')}
                       </AppText>
                     ) : (
                       <AppText variant="muted" style={{ fontSize: 10, marginTop: 1, color: colors.statusClosing }}>

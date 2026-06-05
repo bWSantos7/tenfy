@@ -147,6 +147,60 @@ class PlayerProfileAPITestCase(TestCase):
         self.assertEqual(res.status_code, 403)
 
 
+class FederationTestCase(TestCase):
+    """Task 4: single federation on the profile + federations endpoint."""
+
+    def setUp(self):
+        from apps.sources.models import Organization
+        self.client = APIClient()
+        self.user = make_user()
+        self.client.force_authenticate(user=self.user)
+        # Federations are seeded by migration players.0012.
+        self.fpt = Organization.objects.get(type='federation', state='SP')
+        self.fct = Organization.objects.get(name='Federação Carioca de Tênis')
+
+    def test_federations_endpoint_lists_all_27(self):
+        res = self.client.get('/api/sources/organizations/federations/')
+        self.assertEqual(res.status_code, 200)
+        # All 27 state federations, even those without tournaments.
+        self.assertEqual(len(res.data), 27)
+        states = {f['state'] for f in res.data}
+        self.assertEqual(len(states), 27)
+
+    def test_create_profile_with_federation(self):
+        res = self.client.post('/api/players/profiles/', {
+            'display_name': 'Fed Player',
+            'competitive_level': 'amateur',
+            'federation': self.fpt.id,
+        }, format='json')
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(res.data['federation'], self.fpt.id)
+        self.assertEqual(res.data['federation_detail']['state'], 'SP')
+        self.assertEqual(res.data['federation_state'], 'SP')
+
+    def test_federation_does_not_overwrite_home_state(self):
+        # Residence UF stays independent from the federation UF.
+        res = self.client.post('/api/players/profiles/', {
+            'display_name': 'Lives Elsewhere',
+            'competitive_level': 'amateur',
+            'home_state': 'MG',
+            'federation': self.fpt.id,
+        }, format='json')
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(res.data['home_state'], 'MG')
+        self.assertEqual(res.data['federation_state'], 'SP')
+
+    def test_federation_property_on_model(self):
+        p = PlayerProfile.objects.create(
+            user=self.user, display_name='Prop', federation=self.fct,
+        )
+        self.assertEqual(p.federation_state, 'RJ')
+
+    def test_profile_without_federation_has_empty_state(self):
+        p = PlayerProfile.objects.create(user=self.user, display_name='NoFed')
+        self.assertEqual(p.federation_state, '')
+
+
 class PlayerProfileChildRestrictionTestCase(TestCase):
     """Managed child accounts cannot add extra profiles or delete profiles —
     their responsável manages them. (A child's own first profile is created
@@ -389,11 +443,14 @@ class TenisIntegradoBootstrapTestCase(TestCase):
         from apps.sources.models import Organization
         from apps.tournaments.models import Tournament, TournamentEdition
 
-        org = Organization.objects.create(
+        # Seeded by migration players.0012; reuse it to avoid a unique-name clash.
+        org, _ = Organization.objects.get_or_create(
             name='Federação Paulista de Tênis',
-            short_name='FPT',
-            type=Organization.TYPE_FEDERATION,
-            state='SP',
+            defaults={
+                'short_name': 'FPT',
+                'type': Organization.TYPE_FEDERATION,
+                'state': 'SP',
+            },
         )
         tournament = Tournament.objects.create(
             canonical_name='Ranking Infantojuvenil',

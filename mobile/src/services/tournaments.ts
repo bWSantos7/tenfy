@@ -56,6 +56,15 @@ export async function listFederations() {
   return d.results ?? (res.data as Organization[]);
 }
 
+// All 27 state federations (not filtered by tournaments) — for the profile picker.
+let _allFederationsCache: Organization[] | null = null;
+export async function listAllFederations(): Promise<Organization[]> {
+  if (_allFederationsCache) return _allFederationsCache;
+  const res = await api.get<Organization[]>('/api/sources/organizations/federations/');
+  _allFederationsCache = res.data;
+  return res.data;
+}
+
 export async function getEdition(id: number) {
   const res = await api.get<TournamentEditionDetail>(`/api/tournaments/editions/${id}/`);
   return res.data;

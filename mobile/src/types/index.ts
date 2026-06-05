@@ -154,7 +154,10 @@ export interface PlayerProfile {
   home_state: string;
   home_city: string;
   travel_radius_km: number;
-  travel_states: string[];
+  travel_states: string[];          // Legacy/fallback — substituído por `federation`
+  federation: number | null;        // id da federação (Organization)
+  federation_detail?: { id: number; name: string; short_name: string; state: string } | null;
+  federation_state?: string;        // UF da federação (read-only)
   competitive_level: 'beginner' | 'amateur' | 'federated' | 'youth' | 'pro';
   dominant_hand: 'R' | 'L' | '';
   tennis_class: string;
@@ -214,6 +217,10 @@ export interface TournamentEditionList {
     compatible_count: number;
     unknown_count: number;
     total_count: number;
+    distance_status?: string;
+    distance_message?: string;
+    entry_guarantee?: boolean;   // false = vaga sujeita a aceitação (ITF/COSAT)
+    entry_model?: string;        // 'direct' | 'acceptance_list'
   };
 }
 

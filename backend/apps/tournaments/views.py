@@ -358,6 +358,8 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
                 'total_count': result['total_count'],
                 'distance_status': loc['status'],
                 'distance_message': loc['message'],
+                'entry_guarantee': loc.get('entry_guarantee', True),
+                'entry_model': loc.get('entry_model', 'direct'),
                 'circuit_hint': result.get('circuit_hint'),
                 'include_category_up': include_category_up,
             }

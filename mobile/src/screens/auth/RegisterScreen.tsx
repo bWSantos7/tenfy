@@ -14,7 +14,8 @@ import { checkout, fetchPlans, Plan } from '../../services/billing';
 import { UtrCandidate, User } from '../../types';
 import { LEVEL_LABELS, TENNIS_CLASS_LABELS } from '../../utils/format';
 import { MODALITY_OPTIONS, setProfileModality } from '../../utils/profileModality';
-import { AppText, Button, Card, Checkbox, Input, MultiSelectField, Screen, SelectField } from '../../components/ui';
+import { AppText, Button, Card, Checkbox, Input, Screen, SelectField } from '../../components/ui';
+import { FederationSelect } from '../../components/FederationSelect';
 
 type AppColors = ReturnType<typeof import('../../contexts/ThemeContext').useTheme>['colors'];
 
@@ -66,8 +67,6 @@ const CLASS_OPTIONS = [
   ...Object.entries(TENNIS_CLASS_LABELS).map(([value, label]) => ({ value, label })),
 ];
 const MOBILE_MODALITY_OPTIONS = MODALITY_OPTIONS.map(({ value, label }) => ({ value, label }));
-const ALL_STATES_OPTION = { value: '__ALL__', label: 'Todo o Brasil (todos os estados)' };
-const TRAVEL_STATE_OPTIONS = [ALL_STATES_OPTION, ...UF_OPTIONS];
 const GENDER_OPTIONS = [{ value: 'M', label: 'Masculino' }, { value: 'F', label: 'Feminino' }];
 
 export function RegisterScreen({ navigation }: Props) {
@@ -100,26 +99,18 @@ export function RegisterScreen({ navigation }: Props) {
     marketing_consent: false,
   });
   const [emailCode, setEmailCode] = useState('');
-  const ALL_BR_UFS = UF_OPTIONS.map((o) => o.value);
   const [profile, setProfile] = useState({
     display_name: '',
     birth_year: '',
     gender: '',
     home_state: 'SP',
     home_city: '',
-    travel_states: [] as string[],
+    federation: null as number | null,
     competitive_level: 'amateur',
     tennis_class: '',
     modality: '',
   });
 
-  function handleTravelStatesSelect(vals: string[]) {
-    if (vals.includes('__ALL__')) {
-      setProfile((p) => ({ ...p, travel_states: ALL_BR_UFS }));
-    } else {
-      setProfile((p) => ({ ...p, travel_states: vals }));
-    }
-  }
   const [dependentForm, setDependentForm] = useState({
     full_name: '',
     email: '',
@@ -281,7 +272,7 @@ export function RegisterScreen({ navigation }: Props) {
         gender: (profile.gender || undefined) as any,
         home_state: profile.home_state,
         home_city: profile.home_city,
-        travel_states: profile.travel_states,
+        federation: profile.federation,
         competitive_level: profile.competitive_level as any,
         tennis_class: profile.tennis_class || '',
         preferred_modality: profile.modality || '',
@@ -677,7 +668,7 @@ export function RegisterScreen({ navigation }: Props) {
             <SelectField label="Genero" value={profile.gender} options={GENDER_OPTIONS} onSelect={(v) => setProfile({ ...profile, gender: v })} placeholder="Selecione" />
             <SelectField label="Estado (UF)" value={profile.home_state} options={UF_OPTIONS} onSelect={(v) => setProfile({ ...profile, home_state: v, home_city: '' })} />
             <SelectField label="Cidade" value={profile.home_city} options={cities} onSelect={(v) => setProfile({ ...profile, home_city: v })} placeholder={loadingCities ? 'Carregando...' : 'Selecione a cidade'} loading={loadingCities} searchable />
-            <MultiSelectField label="Estados onde aceita jogar" values={profile.travel_states} options={TRAVEL_STATE_OPTIONS} onSelect={handleTravelStatesSelect} placeholder="Selecione os estados..." searchable />
+            <FederationSelect value={profile.federation} onChange={(id) => setProfile({ ...profile, federation: id })} />
             <SelectField label="Modalidade principal" value={profile.modality} options={MOBILE_MODALITY_OPTIONS} onSelect={(v) => setProfile({ ...profile, modality: v })} placeholder="Selecione a modalidade" />
             <SelectField label="Nivel competitivo" value={profile.competitive_level} options={LEVEL_OPTIONS} onSelect={(v) => setProfile({ ...profile, competitive_level: v })} />
             <SelectField label="Classe (FPT/CBT)" value={profile.tennis_class} options={CLASS_OPTIONS} onSelect={(v) => setProfile({ ...profile, tennis_class: v })} placeholder="Opcional" />

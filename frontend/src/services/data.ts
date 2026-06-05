@@ -1,5 +1,5 @@
 import api from './api';
-import { Alert, CoachAthlete, DependentInvite, Paginated, ParentChild, PlayerCategory, PlayerProfile, PlayerSearchResult, TiData, WatchlistItem } from '../types';
+import { Alert, CoachAthlete, DependentInvite, Federation, Paginated, ParentChild, PlayerCategory, PlayerProfile, PlayerSearchResult, TiData, WatchlistItem } from '../types';
 
 // ----- Players -----
 // Shared profiles cache. listProfiles() is called from several pages/components
@@ -44,6 +44,16 @@ export async function listProfiles(opts?: { force?: boolean }): Promise<PlayerPr
 }
 export async function getProfile(id: number) {
   const res = await api.get<PlayerProfile>(`/api/players/profiles/${id}/`);
+  return res.data;
+}
+
+// Lista completa das 27 federações estaduais (não filtra por torneios).
+// Cacheada em módulo: a lista é estável e usada no cadastro/perfil.
+let _federationsCache: Federation[] | null = null;
+export async function listFederations(): Promise<Federation[]> {
+  if (_federationsCache) return _federationsCache;
+  const res = await api.get<Federation[]>('/api/sources/organizations/federations/');
+  _federationsCache = res.data;
   return res.data;
 }
 export async function createProfile(data: Partial<PlayerProfile>) {

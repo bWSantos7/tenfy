@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { MapPin, Calendar, Clock, Circle, CheckCircle2, Receipt } from 'lucide-react';
+import { MapPin, Calendar, Clock, Circle, CheckCircle2, Receipt, Info } from 'lucide-react';
 import { TournamentEditionList } from '../types';
 import { STATUS_LABELS, fmtBRL, fmtDateRange, fmtRelative, fmtDateTime, statusBgClass } from '../utils/format';
 
@@ -130,6 +130,15 @@ export const TournamentCard: React.FC<Props> = ({
               Prazo {fmtRelative(edition.entry_close_at)}
             </span>
           )}
+          {showEligibility && edition.eligibility && edition.eligibility.entry_model === 'acceptance_list' && (
+            <span
+              className="flex items-center gap-1 text-amber-400 text-[10px] font-medium"
+              title={edition.eligibility.distance_message || 'Inscrição sujeita à aceitação'}
+            >
+              <Info className="w-3.5 h-3.5" />
+              Sujeito à aceitação
+            </span>
+          )}
           {showEligibility && edition.eligibility && edition.eligibility.compatible_count > 0 && (
             <span className="flex items-center gap-1 text-accent-neon text-[10px] font-medium ml-auto">
               <CheckCircle2 className="w-3.5 h-3.5" />
@@ -218,6 +227,15 @@ export const TournamentCard: React.FC<Props> = ({
           )}
           {edition.eligibility.circuit_hint === 'itf_ranking_required' && (
             <span className="text-text-muted italic">Requer ranking ITF</span>
+          )}
+          {edition.eligibility.entry_model === 'acceptance_list' && (
+            <span
+              className="flex items-center gap-1 text-amber-400 font-medium"
+              title={edition.eligibility.distance_message || undefined}
+            >
+              <Info className="w-4 h-4" />
+              Inscrição sujeita à aceitação
+            </span>
           )}
         </div>
       )}

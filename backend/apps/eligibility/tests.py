@@ -303,9 +303,13 @@ class TournamentYouthPolicyDefaultTestCase(TestCase):
 class TravelStatesTestCase(TestCase):
     """within_profile_states: state-based location check."""
 
-    def _make_profile(self, states):
+    def _make_profile(self, states, federation_state=''):
         p = MagicMock()
         p.travel_states = states
+        # No federation by default — exercise the legacy travel_states path.
+        # (A bare MagicMock attribute would be truthy and wrongly trigger the
+        # federation branch, so set it explicitly.)
+        p.federation_state = federation_state
         # Radius fallback fields — None causes within_profile_radius() to return
         # True optimistically (no home city → include), which is the expected
         # behaviour when travel_states is empty.
@@ -367,6 +371,34 @@ class TravelStatesTestCase(TestCase):
         from apps.eligibility.location import within_profile_states
         p = self._make_profile(['sp', 'rj'])
         self.assertTrue(within_profile_states(p, self._make_edition('SP')))
+
+    # ── Federation takes precedence over travel_states ──────────────────────
+
+    def test_federation_state_matches(self):
+        from apps.eligibility.location import within_profile_states
+        # travel_states would include SP, but federation (RJ) is the source of truth.
+        p = self._make_profile(['SP', 'MG'], federation_state='RJ')
+        self.assertTrue(within_profile_states(p, self._make_edition('RJ')))
+
+    def test_federation_state_mismatch(self):
+        from apps.eligibility.location import within_profile_states
+        p = self._make_profile(['SP', 'MG'], federation_state='RJ')
+        # SP is in travel_states but federation is RJ → SP tournament excluded.
+        self.assertFalse(within_profile_states(p, self._make_edition('SP')))
+
+    def test_federation_no_venue_state_optimistic(self):
+        from apps.eligibility.location import within_profile_states
+        p = self._make_profile([], federation_state='SP')
+        venue = MagicMock(); venue.state = None
+        ed = MagicMock(); ed.venue = venue
+        self.assertTrue(within_profile_states(p, ed))
+
+    def test_federation_result_message(self):
+        from apps.eligibility.location import profile_state_result, DISTANCE_OUTSIDE
+        p = self._make_profile(['SP'], federation_state='RJ')
+        res = profile_state_result(p, self._make_edition('SP'))
+        self.assertFalse(res['included'])
+        self.assertEqual(res['status'], DISTANCE_OUTSIDE)
 
 
 # ─── COSAT / duplas eligibility tests ─────────────────────────────────────────
@@ -592,3 +624,120 @@ class SubscriptionStateMachineTestCase(TestCase):
         # canceled → active is invalid
         result = _transition_subscription(sub, 'active', 'test')
         self.assertFalse(result)
+
+
+# ─── Federation-scope compatibility (real models) ───────────────────────────────
+
+class FederationScopeTestCase(TestCase):
+    """profile_state_result: federation-aware rules using the tournament's org."""
+
+    def setUp(self):
+        from apps.sources.models import Organization
+        from apps.players.models import PlayerProfile
+        # Federations seeded by players.0012; CBT seeded by seed_organizations is
+        # absent in the test DB, so create the confederation explicitly.
+        self.cbt, _ = Organization.objects.get_or_create(
+            name='Confederação Brasileira de Tênis',
+            defaults={'short_name': 'CBT', 'type': Organization.TYPE_CONFEDERATION},
+        )
+        self.fpt = Organization.objects.get(type='federation', state='SP')
+        self.fct = Organization.objects.get(name='Federação Carioca de Tênis')  # RJ
+        self.utr, _ = Organization.objects.get_or_create(
+            name='Universal Tennis Rating',
+            defaults={'short_name': 'UTR', 'type': Organization.TYPE_PLATFORM},
+        )
+        self.cosat, _ = Organization.objects.get_or_create(
+            name='Confederação Sul-Americana de Tênis',
+            defaults={'short_name': 'COSAT', 'type': Organization.TYPE_CONFEDERATION},
+        )
+        self.itf, _ = Organization.objects.get_or_create(
+            name='International Tennis Federation',
+            defaults={'short_name': 'ITF', 'type': Organization.TYPE_CONFEDERATION},
+        )
+        self.user = User.objects.create_user(email='fed@example.com', password='pass', full_name='Fed')
+        # Athlete competes for FPT (SP).
+        self.profile = PlayerProfile.objects.create(
+            user=self.user, display_name='FPT Athlete', federation=self.fpt,
+        )
+
+    def _edition(self, org, circuit='', name='Torneio', state='SP'):
+        from apps.tournaments.models import Tournament, TournamentEdition, Venue
+        import uuid
+        slug = f'{org.short_name}-{circuit}-{uuid.uuid4().hex[:8]}'.lower()
+        tournament = Tournament.objects.create(
+            canonical_name=name, canonical_slug=slug, organization=org, circuit=circuit,
+        )
+        venue = Venue.objects.create(name=f'Clube {state}', city='Cidade', state=state)
+        return TournamentEdition.objects.create(
+            tournament=tournament, season_year=2026, title=name, venue=venue,
+        )
+
+    def test_national_cbt_included_for_any_federation(self):
+        from apps.eligibility.location import profile_state_result, DISTANCE_NATIONAL
+        # CBT tournament held in BA — FPT athlete must still see it.
+        ed = self._edition(self.cbt, circuit='Infantojuvenil', name='Nacional CBT', state='BA')
+        res = profile_state_result(self.profile, ed)
+        self.assertTrue(res['included'])
+        self.assertEqual(res['status'], DISTANCE_NATIONAL)
+        # National entry is direct (not acceptance-list) by default.
+        self.assertNotEqual(res.get('entry_model'), 'acceptance_list')
+
+    def test_cosat_international_included_with_acceptance(self):
+        from apps.eligibility.location import (
+            profile_state_result, DISTANCE_INTERNATIONAL, ENTRY_MODEL_ACCEPTANCE,
+        )
+        ed = self._edition(self.cosat, name='COSAT Sub-16', state='AR')
+        res = profile_state_result(self.profile, ed)
+        self.assertTrue(res['included'])
+        self.assertEqual(res['status'], DISTANCE_INTERNATIONAL)
+        self.assertFalse(res['entry_guarantee'])
+        self.assertEqual(res['entry_model'], ENTRY_MODEL_ACCEPTANCE)
+        self.assertIn('aceitação', res['message'])
+
+    def test_itf_international_included_with_acceptance(self):
+        from apps.eligibility.location import (
+            profile_state_result, DISTANCE_INTERNATIONAL, ENTRY_MODEL_ACCEPTANCE,
+        )
+        ed = self._edition(self.itf, name='ITF J30 São Paulo', state='SP')
+        res = profile_state_result(self.profile, ed)
+        self.assertTrue(res['included'])
+        self.assertEqual(res['status'], DISTANCE_INTERNATIONAL)
+        self.assertFalse(res['entry_guarantee'])
+        self.assertEqual(res['entry_model'], ENTRY_MODEL_ACCEPTANCE)
+
+    def test_own_federation_state_included(self):
+        from apps.eligibility.location import profile_state_result, DISTANCE_OWN_FEDERATION
+        ed = self._edition(self.fpt, circuit='Infantojuvenil', name='Estadual FPT', state='SP')
+        res = profile_state_result(self.profile, ed)
+        self.assertTrue(res['included'])
+        self.assertEqual(res['status'], DISTANCE_OWN_FEDERATION)
+
+    def test_other_federation_state_excluded(self):
+        from apps.eligibility.location import profile_state_result, DISTANCE_OTHER_FEDERATION
+        ed = self._edition(self.fct, circuit='Infantojuvenil', name='Estadual FCT', state='RJ')
+        res = profile_state_result(self.profile, ed)
+        self.assertFalse(res['included'])
+        self.assertEqual(res['status'], DISTANCE_OTHER_FEDERATION)
+
+    def test_other_federation_open_still_excluded(self):
+        from apps.eligibility.location import profile_state_result, DISTANCE_OTHER_FEDERATION
+        # FCT "Torneios Abertos" — outra federação é incompatível mesmo quando "Aberto".
+        ed = self._edition(self.fct, circuit='Abertos', name='Aberto FCT', state='RJ')
+        res = profile_state_result(self.profile, ed)
+        self.assertFalse(res['included'])
+        self.assertEqual(res['status'], DISTANCE_OTHER_FEDERATION)
+
+    def test_utr_platform_included(self):
+        from apps.eligibility.location import profile_state_result, DISTANCE_NATIONAL
+        ed = self._edition(self.utr, circuit='', name='UTR Event', state='RJ')
+        res = profile_state_result(self.profile, ed)
+        self.assertTrue(res['included'])
+        self.assertEqual(res['status'], DISTANCE_NATIONAL)
+
+    def test_national_keyword_overrides_state_org(self):
+        from apps.eligibility.location import profile_state_result, DISTANCE_NATIONAL
+        # Even if linked to a state federation, a clearly national title is open.
+        ed = self._edition(self.fct, circuit='', name='Campeonato Brasileiro Juvenil', state='RJ')
+        res = profile_state_result(self.profile, ed)
+        self.assertTrue(res['included'])
+        self.assertEqual(res['status'], DISTANCE_NATIONAL)

@@ -23,6 +23,9 @@ media/
 staticfiles/
 /static/
 
+# Handoff doc may contain a private SSH key — never commit it.
+HANDOFF.md
+
 # Environment variables
 .env
 *.env

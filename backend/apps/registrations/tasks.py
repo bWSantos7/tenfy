@@ -345,6 +345,7 @@ def sync_fpt_sp_entries_task(self, limit: int = 50):
             skipped_total += 1
             continue
 
+        saved_eids = set()
         for entry_data in entries:
             player_name = (entry_data.get('player_name') or '').strip()
             category_text = (entry_data.get('category_text') or '').strip()
@@ -353,6 +354,7 @@ def sync_fpt_sp_entries_task(self, limit: int = 50):
 
             raw_eid = (entry_data.get('player_external_id') or '').strip()
             external_id = raw_eid or f'fpt:{_slug(player_name)}:{_slug(category_text)}'
+            saved_eids.add(external_id)
 
             raw_pay = (entry_data.get('payment_status') or FederationEntry.PAYMENT_UNKNOWN).strip()
             if raw_pay not in {FederationEntry.PAYMENT_PAID, FederationEntry.PAYMENT_PENDING, FederationEntry.PAYMENT_UNKNOWN}:
@@ -380,6 +382,17 @@ def sync_fpt_sp_entries_task(self, limit: int = 50):
                     updated_total += 1
             except Exception as exc:
                 log.warning('sync_fpt_sp upsert failed: %s', exc)
+
+        # Cancelamento fora da Tenfy: entradas que sumiram da lista oficial viram
+        # removed_or_replaced; inscrições vinculadas são retiradas (igual CBT/FCT).
+        if saved_eids:
+            FederationEntry.objects.filter(
+                edition=edition, source=FederationEntry.SOURCE_FPT, removed_or_replaced=False,
+            ).exclude(player_external_id__in=saved_eids).update(
+                removed_or_replaced=True,
+                replacement_reason='Não encontrado na última sincronização automática',
+            )
+            _sync_withdrawals(edition, FederationEntry.SOURCE_FPT, 'fpt', log)
 
         processed_edition_ids.append(edition.id)
 

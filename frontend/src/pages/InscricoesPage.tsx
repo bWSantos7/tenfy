@@ -19,6 +19,7 @@ const STATUS_META: Record<string, { label: string; color: string; bg: string }> 
   confirmed:       { label: 'Confirmado',       color: 'text-status-open',    bg: 'bg-status-open/15'   },
   waiting_list:    { label: 'Lista de espera',  color: 'text-status-closing', bg: 'bg-status-closing/15' },
   pending_payment: { label: 'Pag. pendente',    color: 'text-accent-blue',    bg: 'bg-accent-blue/15'   },
+  expired:         { label: 'Não confirmada',   color: 'text-status-canceled', bg: 'bg-status-canceled/15' },
   withdrawn:       { label: 'Cancelado',        color: 'text-status-canceled', bg: 'bg-status-canceled/15' },
 };
 

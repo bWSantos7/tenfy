@@ -287,3 +287,126 @@ class DeduplicateEditionsTestCase(TestCase):
         # inscrito preservado, agora na edição mantida
         self.assertEqual(FederationEntry.objects.filter(edition=keep, player_external_id='ext-unico-1').count(), 1)
         self.assertEqual(FederationEntry.objects.count(), 1)
+
+
+class ExpiredRegistrationTestCase(TestCase):
+    """Tarefa 2 — 'Aguardando pagamento' após o prazo vira inscrição não confirmada."""
+
+    def setUp(self):
+        from apps.sources.models import Organization
+        from apps.players.models import PlayerProfile
+        self.today = tz.now().date()
+        self.user = User.objects.create_user(email='exp@test.com', password='x')
+        self.profile = PlayerProfile.objects.create(
+            user=self.user, display_name='Atleta Exp', is_primary=True,
+        )
+        self.org, _ = Organization.objects.get_or_create(
+            name='EXP_ORG', defaults={'short_name': 'EXP', 'type': 'confederation'},
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+
+    def _edition_close(self, entry_close_at, start, end, status='open'):
+        from apps.tournaments.models import Tournament, TournamentEdition
+        t = Tournament.objects.create(
+            canonical_name='Copa Prazo', canonical_slug=f'prazo-{tz.now().timestamp()}',
+            circuit='CBT', modality='tennis', organization=self.org,
+        )
+        return TournamentEdition.objects.create(
+            tournament=t, title='Copa Prazo', external_id=f'exp:{tz.now().timestamp()}',
+            season_year=2026, status=status, start_date=start, end_date=end,
+            entry_close_at=entry_close_at,
+        )
+
+    def _reg(self, edition, payment='pending'):
+        from apps.registrations.models import TournamentRegistration
+        return TournamentRegistration.objects.create(
+            profile=self.profile, edition=edition, payment_status=payment,
+        )
+
+    def test_pending_past_deadline_is_expired(self):
+        # prazo passou, torneio ainda não começou
+        ed = self._edition_close(
+            tz.now() - timedelta(days=2),
+            self.today + timedelta(days=5), self.today + timedelta(days=7),
+        )
+        self._reg(ed, payment='pending')
+        res = self.client.get('/api/registrations/my/')
+        self.assertEqual(res.data[0]['registration_status'], 'expired')
+
+    def test_expired_excluded_from_active_included_in_history(self):
+        ed = self._edition_close(
+            tz.now() - timedelta(days=2),
+            self.today + timedelta(days=5), self.today + timedelta(days=7),
+        )
+        self._reg(ed, payment='pending')
+        active = self.client.get('/api/registrations/my/?scope=active')
+        history = self.client.get('/api/registrations/my/?scope=history')
+        self.assertEqual(len(active.data), 0)
+        self.assertEqual(len(history.data), 1)
+
+    def test_paid_past_deadline_is_not_expired(self):
+        ed = self._edition_close(
+            tz.now() - timedelta(days=2),
+            self.today + timedelta(days=5), self.today + timedelta(days=7),
+        )
+        self._reg(ed, payment='paid')
+        active = self.client.get('/api/registrations/my/?scope=active')
+        self.assertEqual(len(active.data), 1)
+        self.assertNotEqual(active.data[0]['registration_status'], 'expired')
+
+    def test_pending_before_deadline_stays_active(self):
+        ed = self._edition_close(
+            tz.now() + timedelta(days=3),
+            self.today + timedelta(days=5), self.today + timedelta(days=7),
+        )
+        self._reg(ed, payment='pending')
+        active = self.client.get('/api/registrations/my/?scope=active')
+        self.assertEqual(len(active.data), 1)
+        self.assertEqual(active.data[0]['registration_status'], 'pending_payment')
+
+
+class FptStaleWithdrawalTestCase(TestCase):
+    """Tarefa 2 — cancelamento fora da Tenfy no FPT retira a inscrição."""
+
+    def test_fpt_stale_entry_withdraws_registration(self):
+        from unittest.mock import patch
+        from apps.sources.models import Organization
+        from apps.players.models import PlayerProfile
+        from apps.tournaments.models import Tournament, TournamentEdition
+        from apps.registrations.models import FederationEntry, TournamentRegistration
+        from apps.registrations.tasks import sync_fpt_sp_entries_task
+
+        org = Organization.objects.create(name='FPT SP', short_name='FPT', state='SP', type='federation')
+        t = Tournament.objects.create(canonical_name='Aberto FPT', canonical_slug='aberto-fpt',
+                                      circuit='FPT', modality='tennis', organization=org)
+        ed = TournamentEdition.objects.create(
+            tournament=t, title='Aberto FPT', external_id='fpt:999', season_year=2026,
+            status='open',
+            official_source_url='https://fpt.tenisintegrado.com.br/torneio_painel_insc/index/999',
+        )
+        user = User.objects.create_user(email='fptw@test.com', password='x')
+        profile = PlayerProfile.objects.create(
+            user=user, display_name='Atleta FPT', is_primary=True,
+            external_ids={'fpt': 'ABC123'},
+        )
+        # Entrada oficial existente + inscrição vinculada
+        FederationEntry.objects.create(
+            edition=ed, category_text='14 M', player_name='Atleta FPT',
+            player_external_id='ABC123', source=FederationEntry.SOURCE_FPT,
+        )
+        reg = TournamentRegistration.objects.create(profile=profile, edition=ed)
+
+        # Próxima sincronização: a Atleta FPT NÃO aparece mais (cancelou fora da Tenfy)
+        fake = {'entries': [{
+            'player_name': 'Outro Atleta', 'category_text': '14 M',
+            'player_external_id': 'XYZ999', 'payment_status': 'pending',
+        }], 'parser_warning': None}
+        with patch('apps.registrations.parsers.fetch_tenisintegrado_entries', return_value=fake), \
+             patch('apps.registrations.tasks.match_federation_entries.delay'):
+            sync_fpt_sp_entries_task.run(limit=10)
+
+        old = FederationEntry.objects.get(player_external_id='ABC123')
+        reg.refresh_from_db()
+        self.assertTrue(old.removed_or_replaced)
+        self.assertTrue(reg.is_withdrawn)

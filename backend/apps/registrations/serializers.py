@@ -14,8 +14,15 @@ REGISTRATION_STATUS_LABELS = {
     'confirmed': 'Confirmado na chave',
     'waiting_list': 'Lista de espera',
     'pending_payment': 'Pagamento pendente',
+    'expired': 'Inscrição não confirmada',
     'withdrawn': 'Desistência',
 }
+
+
+def entry_deadline_passed(edition) -> bool:
+    """True quando o prazo de inscrição da edição já passou."""
+    from django.utils import timezone
+    return bool(edition.entry_close_at and edition.entry_close_at < timezone.now())
 
 
 def compute_registration_status(reg, slot_position, max_participants):
@@ -23,6 +30,9 @@ def compute_registration_status(reg, slot_position, max_participants):
     if reg.is_withdrawn:
         return 'withdrawn'
     payment_confirmed = reg.payment_status in ('paid', 'waived')
+    # Aguardando pagamento após o prazo de inscrição → inscrição não confirmada/expirada.
+    if not payment_confirmed and entry_deadline_passed(reg.edition):
+        return 'expired'
     if max_participants and slot_position and slot_position > max_participants:
         return 'waiting_list'
     if payment_confirmed:

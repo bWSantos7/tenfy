@@ -8,7 +8,7 @@ import {
 import { AddChildForm, LinkPlayerModal } from './ProfilePage';
 import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
-import { ParentChild, PlayerProfile, TiData, TiRankingEntry, TournamentRegistration, UtrCandidate, WatchlistItem } from '../types';
+import { CatalogRanking, ParentChild, PlayerProfile, TiData, TiRankingEntry, TournamentRegistration, UtrCandidate, WatchlistItem } from '../types';
 import { fetchTiData, linkUtr, listChildProfiles, listChildWatchlist, listChildren, listProfiles, searchUtr, syncTiData, syncUtr, unlinkUtr } from '../services/data';
 import { myRegistrations } from '../services/registrations';
 import { mediaUrl } from '../services/api';
@@ -499,8 +499,13 @@ export const PlayerProfilePage: React.FC = () => {
                     <div className="card flex items-center justify-center py-6">
                       <Loader2 className="w-5 h-5 text-accent-neon animate-spin" />
                     </div>
-                  ) : tiData?.rankings && tiData.rankings.length > 0 ? (
-                    <RankingsDisplay rankings={tiData.rankings} isStale={!!tiData.is_stale} />
+                  ) : (tiData?.rankings && tiData.rankings.length > 0) || (tiData?.catalog_rankings && tiData.catalog_rankings.length > 0) ? (
+                    <div className="space-y-3">
+                      {tiData?.rankings && tiData.rankings.length > 0 && (
+                        <RankingsDisplay rankings={tiData.rankings} isStale={!!tiData.is_stale} />
+                      )}
+                      <CatalogRankingsDisplay rankings={tiData?.catalog_rankings ?? []} />
+                    </div>
                   ) : (
                     <div className="card text-center py-4">
                       <p className="text-xs text-text-muted">Nenhum ranking encontrado no Tênis Integrado.</p>
@@ -861,6 +866,65 @@ function RankingsDisplay({ rankings, isStale }: { rankings: TiRankingEntry[]; is
       {isStale && (
         <p className="text-[10px] text-text-muted text-center">Dados podem estar desatualizados. Clique em Atualizar.</p>
       )}
+    </div>
+  );
+}
+
+// ── CatalogRankingsDisplay ────────────────────────────────────────────────────
+// Structured rankings imported into Tenfy's local catalogue (CBT / state
+// federations via Tênis Integrado). Additive — does not touch UTR.
+
+function CatalogRankingsDisplay({ rankings }: { rankings: CatalogRanking[] }) {
+  if (!rankings || rankings.length === 0) return null;
+
+  return (
+    <div className="card !p-0 overflow-hidden">
+      <div className="px-4 py-2.5 bg-bg-elevated/60 border-b border-border-subtle flex items-center gap-2">
+        <Trophy className="w-3.5 h-3.5 text-accent-blue shrink-0" />
+        <span className="text-xs font-bold text-accent-blue">Rankings CBT / Federações</span>
+      </div>
+      <div className="divide-y divide-border-subtle">
+        {rankings.map((r, i) => {
+          const pos = r.position ?? null;
+          const medalColor =
+            pos === 1 ? 'text-yellow-400 bg-yellow-400/15 border-yellow-400/30' :
+            pos === 2 ? 'text-slate-300 bg-slate-300/15 border-slate-300/30' :
+            pos === 3 ? 'text-amber-600 bg-amber-600/15 border-amber-600/30' :
+            'text-accent-neon bg-accent-neon/12 border-accent-neon/25';
+
+          return (
+            <div key={r.id ?? i} className="flex items-center gap-3 px-4 py-3">
+              <div className={`w-11 h-11 rounded-xl flex flex-col items-center justify-center border shrink-0 ${pos ? medalColor : 'text-text-muted bg-bg-elevated border-border-subtle'}`}>
+                {pos ? (
+                  <span className="text-sm font-black leading-none">{pos}º</span>
+                ) : (
+                  <span className="text-xs text-text-muted">—</span>
+                )}
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold leading-snug line-clamp-2">{r.ranking_name || r.category || '—'}</p>
+                <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                  {r.federation && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-accent-blue/12 text-accent-blue font-medium border border-accent-blue/20">
+                      {r.federation}
+                    </span>
+                  )}
+                  {r.category && <span className="text-[10px] text-text-muted">{r.category}</span>}
+                  {r.season && <span className="text-[10px] text-text-muted">· {r.season}</span>}
+                </div>
+              </div>
+
+              {r.points && (
+                <div className="text-right shrink-0">
+                  <span className="text-base font-black text-text-primary tabular-nums">{r.points}</span>
+                  <p className="text-[10px] text-text-muted">pontos</p>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

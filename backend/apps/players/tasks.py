@@ -47,7 +47,26 @@ def _find_ti_id_in_rankings(profile_name: str) -> tuple[str | None, str | None]:
         .distinct()
     )
 
-    # Fall back to fuzzy scan only when no exact hit (bounded for safety).
+    # Token-subset match: the Tenfy profile often holds a shorter name than the
+    # federation record (e.g. "Laura Saviole" vs "Laura Saviole Silva"). Accept it
+    # when every token of the profile name is present in the catalogue name, with
+    # at least two tokens (avoids matching on a lone first name) and a unique id.
+    if not rows:
+        profile_tokens = set(profile_name.split())
+        if len(profile_tokens) >= 2:
+            pivot = max(profile_tokens, key=len)  # most distinctive token, for a cheap DB prefilter
+            cand_ids: dict[str, str] = {}
+            for r in (
+                ExternalPlayerRanking.objects
+                .filter(player_name_normalized__contains=pivot)
+                .values('ti_player_id', 'source', 'player_name_normalized')
+                .distinct()[:5000]
+            ):
+                if profile_tokens <= set(r['player_name_normalized'].split()):
+                    cand_ids[r['ti_player_id']] = r['source']
+            rows = [{'ti_player_id': tid, 'source': src} for tid, src in cand_ids.items()]
+
+    # Fall back to fuzzy scan only when still no hit (bounded for safety).
     if not rows:
         candidates: dict[tuple[str, str], float] = {}
         for r in (

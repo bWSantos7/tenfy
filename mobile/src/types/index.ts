@@ -238,7 +238,7 @@ export interface TournamentCategory {
   notes: string;
 }
 
-export type RegistrationStatus = 'confirmed' | 'waiting_list' | 'pending_payment' | 'withdrawn';
+export type RegistrationStatus = 'confirmed' | 'waiting_list' | 'pending_payment' | 'expired' | 'withdrawn';
 export type PaymentStatus = 'pending' | 'paid' | 'waived' | 'refunded';
 
 export interface TournamentRegistration {

@@ -199,7 +199,7 @@ export interface DependentInvite {
   created_at: string;
 }
 
-export type RegistrationStatus = 'confirmed' | 'waiting_list' | 'pending_payment' | 'withdrawn';
+export type RegistrationStatus = 'confirmed' | 'waiting_list' | 'pending_payment' | 'expired' | 'withdrawn';
 export type PaymentStatus = 'paid' | 'pending' | 'waived' | 'refunded' | 'unknown';
 
 export interface TournamentRegistration {

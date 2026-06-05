@@ -24,7 +24,7 @@ from .serializers import (
 )
 
 _COMPATIBLE_CACHE_TTL = 300   # 5 minutes
-_COMPATIBLE_CACHE_VERSION = 6  # bumped: active-status filter + priority ordering
+_COMPATIBLE_CACHE_VERSION = 7  # bumped: federation-scope compatibility (UF match, ITF/COSAT/CBT)
 
 # Spec §4/§22: "torneios compatíveis" exibe somente status acionáveis.
 # Comparação feita sobre o status dinâmico (canônico), nunca o texto bruto.

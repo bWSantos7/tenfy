@@ -46,6 +46,17 @@ function extractTiId(value: unknown): string | null {
   return m ? m[1] : null;
 }
 
+/** True quando o torneio da inscrição declarada (watchlist) já passou. */
+function isWatchlistEditionPast(item: WatchlistItem): boolean {
+  if (item.user_status === 'completed') return true;
+  const ed = item.edition_detail;
+  if (!ed) return false;
+  const ds = ed.dynamic_status || ed.status;
+  if (ds === 'finished' || ds === 'canceled') return true;
+  const todayStr = new Date().toISOString().slice(0, 10);
+  return !!(ed.end_date && ed.end_date < todayStr);
+}
+
 export const PlayerProfilePage: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -116,7 +127,10 @@ export const PlayerProfilePage: React.FC = () => {
     ]).then(([profs, wl]) => {
       setChildProfiles(profs);
       setChildActiveRegs(
-        wl.filter((i) => i.is_registered || i.user_status === 'registered_declared' || i.user_status === 'completed')
+        wl.filter((i) =>
+          (i.is_registered || i.user_status === 'registered_declared' || i.user_status === 'completed')
+          && !isWatchlistEditionPast(i)
+        )
       );
       const primary = profs.find((p) => p.is_primary) ?? profs[0];
       if (primary) return fetchTiData(primary.id);

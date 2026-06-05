@@ -161,7 +161,21 @@ export function TournamentCard({
               </AppText>
             </View>
           ) : null}
+
+          {showEligibility && edition.eligibility?.entry_model === 'acceptance_list' ? (
+            <View style={[styles.eligBadge, { backgroundColor: '#f59e0b12', borderColor: '#f59e0b30' }]}>
+              <Ionicons name="information-circle-outline" size={12} color="#f59e0b" />
+              <AppText variant="caption" style={{ color: '#f59e0b', fontWeight: '700', fontSize: 11 }}>
+                Sujeito à aceitação
+              </AppText>
+            </View>
+          ) : null}
         </View>
+        {showEligibility && edition.eligibility?.entry_model === 'acceptance_list' && edition.eligibility?.distance_message ? (
+          <AppText variant="caption" style={{ color: colors.textMuted, fontSize: 10, marginTop: -4 }}>
+            {edition.eligibility.distance_message}
+          </AppText>
+        ) : null}
       </Animated.View>
     </Pressable>
   );

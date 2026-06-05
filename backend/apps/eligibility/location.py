@@ -21,9 +21,8 @@ DISTANCE_UNKNOWN = 'unknown'
 DISTANCE_NATIONWIDE = 'nationwide'
 # Federation-scope statuses (when the profile has a single federation).
 DISTANCE_NATIONAL = 'national'              # CBT/confederation/international — open to any federation
-DISTANCE_OPEN = 'open'                       # tournament aberto a outras federações
 DISTANCE_OWN_FEDERATION = 'own_federation'   # estadual da própria federação do atleta
-DISTANCE_OTHER_FEDERATION = 'other_federation'  # estadual de outra federação — incompatível por padrão
+DISTANCE_OTHER_FEDERATION = 'other_federation'  # estadual de outra federação — incompatível
 
 
 # ── Federation-scope helpers ────────────────────────────────────────────────────
@@ -33,14 +32,16 @@ _ORG_CONFEDERATION = 'confederation'   # CBT, COSAT, ITF — nacional/internacio
 _ORG_FEDERATION = 'federation'         # federação estadual (tem UF)
 _ORG_PLATFORM = 'platform'             # UTR — torneios por rating, não atrelados a federação
 
-# Whole-word patterns that flag a tournament as national or open to athletes of
-# any federation. Word boundaries (\b) avoid false positives such as matching
+# Whole-word patterns that flag a tournament as national (open to athletes of any
+# federation). Word boundaries (\b) avoid false positives such as matching
 # "nacional" inside "internacional" or a substring inside an unrelated club name.
-# The primary, reliable national signal is org.type == confederation; these
-# keyword patterns are only a safety net for nationally-titled events that happen
-# to be linked to a state federation org.
+# The primary, reliable national signal is org.type == confederation; this keyword
+# pattern is only a safety net for nationally-titled events that happen to be
+# linked to a state federation org.
+#
+# NB: "Aberto/Abertos" is intentionally NOT a compatibility signal — a tournament
+# from another federation is incompatible even when titled "Aberto" (produto).
 _NATIONAL_RE = re.compile(r'\b(nacional|brasileiro|brasileira)\b')
-_OPEN_RE = re.compile(r'\b(aberto|abertos)\b')
 
 
 def _edition_organization(edition):
@@ -60,10 +61,6 @@ def _scope_text(edition) -> str:
     return ' '.join(parts).lower()
 
 
-def _is_open_tournament(edition) -> bool:
-    return bool(_OPEN_RE.search(_scope_text(edition)))
-
-
 def _is_national_scope(edition, org) -> bool:
     org_type = getattr(org, 'type', None) if org is not None else None
     if org_type == _ORG_CONFEDERATION:
@@ -81,10 +78,10 @@ def federation_compatibility(profile, edition):
     Rules (per produto):
       1. Nacional/CBT/internacional (organização = confederação) ou plataforma
          (UTR) → compatível para qualquer federação.
-      2. Torneio aberto (regulamento "Abertos") → compatível, marcado como aberto.
-      3. Estadual da própria federação do atleta → compatível.
-      4. Estadual de outra federação (não aberto) → NÃO compatível por padrão.
-      5. Sem organização identificada → cai para a UF do local vs UF da federação.
+      2. Estadual da própria federação do atleta → compatível.
+      3. Estadual de outra federação → NÃO compatível, mesmo quando "Aberto".
+         (Só torneios nacionais/CBT abrem para atletas de qualquer federação.)
+      4. Sem organização identificada → cai para a UF do local vs UF da federação.
     """
     fed_state = (getattr(profile, 'federation_state', '') or '').upper()
     if not fed_state:
@@ -97,15 +94,9 @@ def federation_compatibility(profile, edition):
     if _is_national_scope(edition, org) or org_type == _ORG_PLATFORM:
         return {'included': True, 'status': DISTANCE_NATIONAL, 'message': None}
 
-    # 2) Open tournament → any federation, flagged as "aberto".
-    if _is_open_tournament(edition):
-        return {
-            'included': True,
-            'status': DISTANCE_OPEN,
-            'message': 'Torneio aberto a atletas de outras federações.',
-        }
-
-    # 3/4) State federation tournament.
+    # 2/3) State federation tournament — only the athlete's own federation is
+    # compatible. Other federations are excluded even when titled "Aberto":
+    # apenas torneios nacionais/CBT abrem para atletas de qualquer federação.
     if org_type == _ORG_FEDERATION:
         prof_fed_id = getattr(profile, 'federation_id', None)
         org_id = getattr(org, 'id', None)
@@ -119,10 +110,10 @@ def federation_compatibility(profile, edition):
         return {
             'included': False,
             'status': DISTANCE_OTHER_FEDERATION,
-            'message': 'Torneio estadual de outra federação (não aberto).',
+            'message': 'Torneio estadual de outra federação.',
         }
 
-    # 5) Organization unknown — compare the venue UF to the federation UF.
+    # 4) Organization unknown — compare the venue UF to the federation UF.
     venue = edition.venue
     if not venue or not venue.state:
         return {

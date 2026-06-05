@@ -686,13 +686,13 @@ class FederationScopeTestCase(TestCase):
         self.assertFalse(res['included'])
         self.assertEqual(res['status'], DISTANCE_OTHER_FEDERATION)
 
-    def test_other_federation_open_included(self):
-        from apps.eligibility.location import profile_state_result, DISTANCE_OPEN
-        # FCT "Torneios Abertos" — open to other federations.
+    def test_other_federation_open_still_excluded(self):
+        from apps.eligibility.location import profile_state_result, DISTANCE_OTHER_FEDERATION
+        # FCT "Torneios Abertos" — outra federação é incompatível mesmo quando "Aberto".
         ed = self._edition(self.fct, circuit='Abertos', name='Aberto FCT', state='RJ')
         res = profile_state_result(self.profile, ed)
-        self.assertTrue(res['included'])
-        self.assertEqual(res['status'], DISTANCE_OPEN)
+        self.assertFalse(res['included'])
+        self.assertEqual(res['status'], DISTANCE_OTHER_FEDERATION)
 
     def test_utr_platform_included(self):
         from apps.eligibility.location import profile_state_result, DISTANCE_NATIONAL

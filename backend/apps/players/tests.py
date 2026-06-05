@@ -702,6 +702,25 @@ class ProfileCatalogRankingsTestCase(TestCase):
             resp = self.client.get(f'/api/players/profiles/{self.profile.id}/ti-data/')
         self.assertEqual(resp.json()['catalog_rankings'], [])
 
+    def test_zero_point_catalog_rankings_are_hidden(self):
+        from unittest.mock import patch
+        self._make_ranking(points='200,00')                               # kept
+        self._make_ranking(category_code='11', points='0,00', position=105)  # hidden
+        with patch('apps.players.views._sync_ti_data_inline'):
+            resp = self.client.get(f'/api/players/profiles/{self.profile.id}/ti-data/')
+        cats = resp.json()['catalog_rankings']
+        self.assertEqual(len(cats), 1)
+        self.assertEqual(cats[0]['points'], '200,00')
+
+
+class PointsAreZeroTestCase(TestCase):
+    def test_zero_detection(self):
+        from apps.players.views import _points_are_zero
+        for z in ['0,00', '0.00', '0', '', None, '  ']:
+            self.assertTrue(_points_are_zero(z), z)
+        for nz in ['200,00', '324.00', '3.440,00', '0,50', '1']:
+            self.assertFalse(_points_are_zero(nz), nz)
+
 
 class SyncTiRankingsTaskTestCase(TestCase):
     def test_task_imports_registry_and_federations(self):

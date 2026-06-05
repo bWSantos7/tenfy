@@ -131,9 +131,14 @@ def federation_compatibility(profile, edition):
         prof_fed_id = getattr(profile, 'federation_id', None)
         org_id = getattr(org, 'id', None)
         org_state = (getattr(org, 'state', '') or '').upper()
+        # Match by UF first — the canonical key. This is robust to duplicate
+        # federation orgs (e.g. accented "Federação Paulista de Tênis" vs the
+        # ingestion-created "Federacao Paulista de Tenis"), which would otherwise
+        # fail an id-only comparison and wrongly exclude the athlete's own
+        # federation. Falls back to id match when the org has no UF.
         same_federation = (
-            (prof_fed_id and org_id and prof_fed_id == org_id)
-            or (not prof_fed_id and org_state and org_state == fed_state)
+            (org_state and org_state == fed_state)
+            or (prof_fed_id and org_id and prof_fed_id == org_id)
         )
         if same_federation:
             return {'included': True, 'status': DISTANCE_OWN_FEDERATION, 'message': None}

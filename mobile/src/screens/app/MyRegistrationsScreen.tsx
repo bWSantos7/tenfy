@@ -138,7 +138,23 @@ export function MyRegistrationsScreen({ navigation }: Props) {
   // após o prazo) vão para o histórico, mesmo sem cancelamento manual.
   const active = registrations.filter((r) => !r.is_withdrawn && !r.is_past && r.registration_status !== 'expired');
   const withdrawn = registrations.filter((r) => r.is_withdrawn || r.is_past || r.registration_status === 'expired');
-  const totalWatchlistInscribed = childGroups.reduce((acc, g) => acc + g.items.length, 0);
+
+  // Declarada cujo torneio já passou (finalizado/cancelado ou data final no
+  // passado) vai para o histórico, não fica em "declaradas ativas".
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const isDeclaredPast = (item: WatchlistItem): boolean => {
+    if (item.user_status === 'completed') return true;
+    const ed = item.edition_detail;
+    if (!ed) return false;
+    const ds = ed.dynamic_status || ed.status;
+    if (ds === 'finished' || ds === 'canceled') return true;
+    return !!(ed.end_date && ed.end_date < todayStr);
+  };
+  const activeChildGroups = childGroups
+    .map((g) => ({ ...g, items: g.items.filter((it) => !isDeclaredPast(it)) }))
+    .filter((g) => g.items.length > 0);
+  const pastDeclared = childGroups.flatMap((g) => g.items.filter(isDeclaredPast));
+  const totalWatchlistInscribed = activeChildGroups.reduce((acc, g) => acc + g.items.length, 0);
   const withdrawnRegEditionIds = new Set(withdrawn.map((r) => r.edition_id));
   const declaredWithdrawnOnly = declaredWithdrawn.filter(
     (it) => !withdrawnRegEditionIds.has(it.edition_detail?.id),
@@ -162,7 +178,7 @@ export function MyRegistrationsScreen({ navigation }: Props) {
           subtitle={error}
           action={<Button title="Tentar novamente" variant="ghost" onPress={load} />}
         />
-      ) : active.length === 0 && withdrawn.length === 0 && totalWatchlistInscribed === 0 && declaredWithdrawnOnly.length === 0 ? (
+      ) : active.length === 0 && withdrawn.length === 0 && totalWatchlistInscribed === 0 && declaredWithdrawnOnly.length === 0 && pastDeclared.length === 0 ? (
         <EmptyState
           icon="ticket-outline"
           title="Você ainda não tem inscrições"
@@ -171,10 +187,10 @@ export function MyRegistrationsScreen({ navigation }: Props) {
       ) : (
         <>
           {/* Watchlist-based inscriptions grouped by child */}
-          {childGroups.length > 0 && (
+          {activeChildGroups.length > 0 && (
             <View>
               <SectionHeader title="Inscrições declaradas" subtitle={`${totalWatchlistInscribed} torneio${totalWatchlistInscribed > 1 ? 's' : ''}`} />
-              {childGroups.map((group) => (
+              {activeChildGroups.map((group) => (
                 <View key={group.childId || 'self'}>
                   {user?.role === 'parent' ? (
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6, marginTop: 4 }}>
@@ -233,7 +249,7 @@ export function MyRegistrationsScreen({ navigation }: Props) {
               ))}
             </View>
           )}
-          {(withdrawn.length > 0 || declaredWithdrawnOnly.length > 0) && (
+          {(withdrawn.length > 0 || declaredWithdrawnOnly.length > 0 || pastDeclared.length > 0) && (
             <View>
               <SectionHeader title="Histórico" subtitle="Encerradas e canceladas" />
               {withdrawn.map((reg) => (
@@ -244,6 +260,37 @@ export function MyRegistrationsScreen({ navigation }: Props) {
                   onPress={() => navigation.navigate('TournamentDetail', { id: reg.edition_id })}
                 />
               ))}
+              {pastDeclared.map((item) => {
+                const ed = item.edition_detail;
+                const done = item.user_status === 'completed';
+                return (
+                  <Pressable
+                    key={`wlp-${item.id}`}
+                    onPress={() => navigation.navigate('TournamentDetail', { id: ed.id, edition: ed })}
+                    style={{ marginBottom: 10 }}
+                  >
+                    <Card>
+                      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
+                        <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: `${colors.statusFinished}20`, alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <Ionicons name="checkmark-done-circle" size={20} color={colors.statusFinished} />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <AppText variant="body" style={{ fontWeight: '700', fontSize: 14 }} numberOfLines={2}>{ed.title}</AppText>
+                          {ed.start_date ? (
+                            <AppText variant="caption" style={{ color: colors.textMuted, marginTop: 2 }}>
+                              {fmtDateRange(ed.start_date, ed.end_date)}
+                            </AppText>
+                          ) : null}
+                          <View style={{ marginTop: 4, backgroundColor: `${colors.statusFinished}18`, alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}>
+                            <AppText variant="caption" style={{ color: colors.statusFinished, fontWeight: '700', fontSize: 10 }}>{done ? 'Concluído' : 'Encerrado'}</AppText>
+                          </View>
+                        </View>
+                        <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+                      </View>
+                    </Card>
+                  </Pressable>
+                );
+              })}
               {declaredWithdrawnOnly.map((item) => {
                 const ed = item.edition_detail;
                 return (

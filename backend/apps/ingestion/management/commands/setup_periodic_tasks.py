@@ -40,6 +40,12 @@ TASKS = [
         'description': 'Sync COSAT tournaments from MongoDB every 6 hours (00:30, 06:30, 12:30, 18:30 UTC)',
     },
     {
+        'name': 'sync-utr-every-12h',
+        'task': 'apps.ingestion.tasks.sync_utr_task',
+        'cron': {'minute': '45', 'hour': '*/12', 'day_of_week': '*', 'day_of_month': '*', 'month_of_year': '*'},
+        'description': 'Sync UTR Brazil youth tournaments every 12h (00:45, 12:45 UTC)',
+    },
+    {
         'name': 'sync-fpt-sp-entries-hourly',
         'task': 'apps.registrations.tasks.sync_fpt_sp_entries_task',
         'cron': {'minute': '10', 'hour': '*', 'day_of_week': '*', 'day_of_month': '*', 'month_of_year': '*'},

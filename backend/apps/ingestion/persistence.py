@@ -272,6 +272,7 @@ class TournamentPersister:
                 surface=data.get('surface') or TournamentEdition.SURFACE_UNKNOWN,
                 venue=venue,
                 base_price_brl=data.get('base_price_brl'),
+                price_notes=_trunc(data.get('price_notes') or '', 300, 'price_notes'),
                 data_source=self.data_source,
                 official_source_url=data.get('official_source_url', ''),
                 source_name=_trunc(self.data_source.source_name, 120, 'source_name'),
@@ -340,6 +341,8 @@ class TournamentPersister:
                     ed.surface = after['surface']
                 if after['base_price_brl'] is not None:
                     ed.base_price_brl = after['base_price_brl']
+                if data.get('price_notes'):
+                    ed.price_notes = _trunc(data['price_notes'], 300, 'price_notes')
                 if venue:
                     ed.venue = venue
                 ed.official_source_url = data.get('official_source_url') or ed.official_source_url

@@ -161,6 +161,22 @@ def run_all_active_sources():
     return {'dispatched': len(ids)}
 
 
+@shared_task
+def sync_utr_task():
+    """Periodic UTR events sync (Brazil youth). Runs every 12h via Beat.
+
+    The UTR DataSource is kept enabled=False so the hourly run_all_active_sources
+    sweep skips it (paging the UTR API is heavy); this dedicated task triggers it
+    on its own cadence — same pattern as COSAT/ITF.
+    """
+    ds = DataSource.objects.filter(connector_key='utr_public').first()
+    if not ds:
+        logger.warning('sync_utr_task: no utr_public DataSource found')
+        return {'skipped': True, 'reason': 'no_datasource'}
+    run_source.delay(ds.id)
+    return {'dispatched': ds.id}
+
+
 @shared_task(bind=True, max_retries=0)
 def sync_cosat_from_mongo_task(self):
     """

@@ -363,6 +363,14 @@ SCRAPER_USER_AGENT = config(
 SCRAPER_TIMEOUT = config('SCRAPER_TIMEOUT', default=30, cast=int)
 SCRAPER_RATE_LIMIT_SECONDS = config('SCRAPER_RATE_LIMIT_SECONDS', default=2, cast=int)
 
+# UTR (Universal Tennis Rating) — authenticated account used by the UTR events
+# connector to read tournaments + entrants (registeredMembers). Backend-only;
+# never expose to frontend/mobile. Either email+password (login → jwt cookie) or
+# a ready bearer token. Empty → connector runs public-only (limited fields).
+UTR_EMAIL = config('UTR_EMAIL', default='')
+UTR_PASSWORD = config('UTR_PASSWORD', default='')
+UTR_API_TOKEN = config('UTR_API_TOKEN', default='')
+
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
 
 # Import API token — used by n8n / external pipelines to authenticate against

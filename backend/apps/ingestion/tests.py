@@ -1308,3 +1308,81 @@ class FbtSeedTestCase(TestCase):
         call_command('seed_sources', verbosity=0)
         self.assertEqual(Organization.objects.filter(short_name='FBT').count(), 1)
         self.assertEqual(DataSource.objects.filter(slug='fbt-public').count(), 1)
+
+
+class UTRConnectorTestCase(TestCase):
+    """UTR v2 connector parsing — youth filter, venue country, entrants, price."""
+
+    def _conn(self):
+        from apps.ingestion.connectors.utr import UTRConnector
+        return UTRConnector(config={'youth_only': True, 'youth_min': 12, 'youth_max': 18})
+
+    def _youth_source(self):
+        return {
+            'id': 364159, 'name': 'Kirmayr UTR',
+            'eventDivisions': [{'name': 'Masculino Sub-14'}, {'name': 'Feminino Sub-16'}],
+            'eventSchedule': {
+                'eventStartUtc': '2026-06-19T06:00:00', 'eventEndUtc': '2026-06-21T06:00:00',
+                'registrationStartUtc': '2026-05-01T06:00:00', 'registrationEndUtc': '2026-06-09T22:00:00',
+            },
+            'eventState': {'registrationState': {'value': 'open_registration'}},
+            'surfaceType': 'clay',
+            'priceRange': '200 Division Fees', 'currencyInfo': {'abbreviation': 'BRL'},
+            'eventLocations': [{
+                'cityName': 'Sao Paulo', 'stateAbbr': 'SP', 'stateName': 'Sao Paulo',
+                'countryName': 'Brazil', 'countryCode3': 'BRA', 'streetAddress': 'Rua X',
+            }],
+            'club': {'name': 'Kirmayr Country Club'},
+            'utrRange': '1.0 - 16.0', 'gender': 'Co-ed',
+            'registeredMembers': [
+                {'memberId': 1, 'firstName': 'Joao', 'lastName': 'Silva'},
+                {'memberId': 2, 'firstName': 'Maria', 'lastName': 'Souza'},
+            ],
+        }
+
+    def test_parses_youth_brazil_event(self):
+        src = self._youth_source()
+        loc0 = src['eventLocations'][0]
+        p = self._conn()._parse_event(src, loc0, youth_only=True, lo=12, hi=18)
+        self.assertIsNotNone(p)
+        self.assertEqual(p['external_id'], 'utr:364159')
+        self.assertEqual(p['circuit'], 'UTR')
+        self.assertEqual(p['modality'], 'tennis')
+        self.assertEqual(p['status'], 'open')
+        self.assertEqual(p['surface'], 'clay')
+        self.assertEqual(p['start_date'], '2026-06-19')
+        self.assertEqual(p['venue']['country'], 'Brazil')
+        self.assertEqual(p['venue']['country_code'], 'BRA')
+        self.assertEqual(p['venue']['city'], 'Sao Paulo')
+        self.assertEqual(p['venue']['state'], 'SP')
+        # BRL price parsed
+        self.assertEqual(p['base_price_brl'], 200.0)
+        # entrants captured
+        self.assertEqual(len(p['acceptance_list'][0]['players']), 2)
+        names = [pl['name'] for pl in p['acceptance_list'][0]['players']]
+        self.assertIn('Joao Silva', names)
+
+    def test_excludes_adult_event(self):
+        src = self._youth_source()
+        src['name'] = 'CSA Tennis Tour Livre'
+        src['eventDivisions'] = [{'name': 'Masculino Livre'}, {'name': 'Feminino Livre'}]
+        loc0 = src['eventLocations'][0]
+        p = self._conn()._parse_event(src, loc0, youth_only=True, lo=12, hi=18)
+        self.assertIsNone(p)
+
+    def test_youth_matcher(self):
+        c = self._conn()
+        self.assertTrue(c._matches_youth('Copa Sub-14', [], 12, 18))
+        self.assertTrue(c._matches_youth('Torneio', ['U16 Masculino'], 12, 18))
+        self.assertTrue(c._matches_youth('Juvenil', [], 12, 18))
+        self.assertFalse(c._matches_youth('Open Livre', ['Masculino Livre'], 12, 18))
+        self.assertFalse(c._matches_youth('Sub-10 Kids', [], 12, 18))  # below 12
+
+    def test_usd_price_not_set_as_brl(self):
+        src = self._youth_source()
+        src['priceRange'] = 'Free–235 Division Fees'
+        src['currencyInfo'] = {'abbreviation': 'USD'}
+        loc0 = src['eventLocations'][0]
+        p = self._conn()._parse_event(src, loc0, youth_only=True, lo=12, hi=18)
+        self.assertIsNone(p['base_price_brl'])
+        self.assertIn('USD', p['price_notes'])

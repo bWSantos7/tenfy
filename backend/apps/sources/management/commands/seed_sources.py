@@ -50,6 +50,13 @@ ORGANIZATIONS = [
         'website_url': 'https://letzplay.me',
     },
     {
+        'name': 'Universal Tennis Rating',
+        'short_name': 'UTR',
+        'type': Organization.TYPE_PLATFORM,
+        'website_url': 'https://app.utrsports.net',
+        'description': 'Plataforma UTR. Torneios infantojuvenis do Brasil via API v2 (conta autenticada).',
+    },
+    {
         'name': 'Federação Baiana de Tênis',
         'short_name': 'FBT',
         'type': Organization.TYPE_FEDERATION,
@@ -104,6 +111,32 @@ DATA_SOURCES = [
             'state_id': 24,
             'months_ahead': 5,
         },
+    },
+    {
+        'org_short': 'UTR',
+        'source_name': 'UTR Sports – Torneios infantojuvenis (Brasil)',
+        'slug': 'utr-public',
+        'source_type': DataSource.SOURCE_TYPE_JSON,
+        'base_url': 'https://api.utrsports.net/v2/search/events',
+        'connector_key': 'utr_public',
+        'fetch_schedule_cron': '0 */12 * * *',
+        'priority': 'P2',
+        # Kept out of the hourly run_all_active_sources sweep; driven by the
+        # dedicated sync_utr_task (every 12h) — paging the UTR API is heavy.
+        'enabled': False,
+        'config_json': {
+            'country_code3': 'BRA',
+            'youth_only': True,
+            'youth_min': 12,
+            'youth_max': 18,
+            'page_size': 100,
+            'max_pages': 60,
+        },
+        'legal_notes': (
+            'API pública de busca de eventos da UTR (v2). Acesso autenticado por conta '
+            'própria (env UTR_EMAIL/UTR_PASSWORD) apenas para leitura de torneios e '
+            'lista de inscritos públicos do evento. Sem burlar paywall/captcha.'
+        ),
     },
     {
         'org_short': 'FBT',

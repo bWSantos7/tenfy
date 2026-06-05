@@ -167,6 +167,21 @@ class FederationTestCase(TestCase):
         states = {f['state'] for f in res.data}
         self.assertEqual(len(states), 27)
 
+    def test_federations_endpoint_dedupes_by_uf(self):
+        from apps.sources.models import Organization
+        # Simulate the production duplicate: an ingestion-created unaccented SP org.
+        Organization.objects.create(
+            name='Federacao Paulista de Tenis', short_name='FPT',
+            type=Organization.TYPE_FEDERATION, state='SP',
+        )
+        res = self.client.get('/api/sources/organizations/federations/')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(res.data), 27)  # still one entry per UF
+        sp = [f for f in res.data if f['state'] == 'SP']
+        self.assertEqual(len(sp), 1)
+        # Prefers the canonical (accented) name for the picker label.
+        self.assertEqual(sp[0]['name'], 'Federação Paulista de Tênis')
+
     def test_create_profile_with_federation(self):
         res = self.client.post('/api/players/profiles/', {
             'display_name': 'Fed Player',

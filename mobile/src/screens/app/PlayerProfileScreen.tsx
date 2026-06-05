@@ -281,7 +281,12 @@ export function PlayerProfileScreen(_: Props) {
                   ) : (tiData?.rankings && tiData.rankings.length > 0) || (tiData?.catalog_rankings && tiData.catalog_rankings.length > 0) ? (
                     <>
                       {tiData?.rankings && tiData.rankings.length > 0 ? (
-                        <RankingsMobile rankings={tiData.rankings} isStale={!!tiData.is_stale} colors={colors} />
+                        <RankingsMobile
+                          rankings={tiData.rankings}
+                          isStale={!!tiData.is_stale}
+                          colors={colors}
+                          showFederativos={!(tiData?.catalog_rankings && tiData.catalog_rankings.length > 0)}
+                        />
                       ) : null}
                       <CatalogRankingsMobile rankings={tiData?.catalog_rankings ?? []} colors={colors} />
                     </>
@@ -562,9 +567,19 @@ function Row({ icon, label, value, colors }: { icon: string; label: string; valu
 
 // ── RankingsMobile ────────────────────────────────────────────────────────────
 
-function RankingsMobile({ rankings, isStale, colors }: { rankings: TiRankingEntry[]; isStale: boolean; colors: any }) {
+/** True when a points string ("0.00", "0,00", "", "200.25") represents zero / no standing. */
+function pointsAreZero(p?: string): boolean {
+  if (!p) return true;
+  const n = parseFloat(String(p).replace(/\./g, '').replace(',', '.'));
+  return !isNaN(n) && n === 0;
+}
+
+function RankingsMobile({ rankings, isStale, colors, showFederativos = true }: { rankings: TiRankingEntry[]; isStale: boolean; colors: any; showFederativos?: boolean }) {
   const wtn = rankings.filter((r) => r.federation === 'World Tennis Number');
-  const fed = rankings.filter((r) => r.federation !== 'World Tennis Number');
+  // Fallback only (avoid duplicating "Rankings CBT / Federações"); hide zero points.
+  const fed = showFederativos
+    ? rankings.filter((r) => r.federation !== 'World Tennis Number' && !pointsAreZero(r.points))
+    : [];
 
   return (
     <View style={{ gap: 10, marginBottom: 12 }}>

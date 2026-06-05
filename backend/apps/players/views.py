@@ -15,6 +15,23 @@ from .serializers import (
 
 logger = logging.getLogger('apps.players')
 
+
+def _points_are_zero(points) -> bool:
+    """
+    True when a ranking points value represents zero / no standing.
+
+    Handles Brazilian formatting ("0,00", "200,00", "3.440,00") and empty values.
+    Empty/blank is treated as zero so entries without an actual standing are hidden.
+    """
+    s = str(points or '').strip()
+    if not s:
+        return True
+    try:
+        return float(s.replace('.', '').replace(',', '.')) == 0
+    except ValueError:
+        return False
+
+
 _TI_CACHE_TTL = timedelta(hours=2)
 _TI_SYNC_COOLDOWN = timedelta(minutes=30)
 _UTR_SYNC_COOLDOWN = timedelta(minutes=30)
@@ -167,6 +184,8 @@ class PlayerProfileViewSet(viewsets.ModelViewSet):
 
         # Federation/CBT rankings imported into the local catalogue for this athlete.
         # Already kept fresh by the daily sync_ti_rankings_task — no scraping here.
+        # Entries with zero points are not shown on the profile (athlete listed but
+        # without an actual standing in that ranking).
         from .models import ExternalPlayerRanking
         from .serializers import ExternalPlayerRankingSerializer
         catalog_qs = (
@@ -174,7 +193,10 @@ class PlayerProfileViewSet(viewsets.ModelViewSet):
             .filter(ti_player_id=str(ti_id))
             .order_by('source', 'ranking_name', 'category_label', 'position')
         )
-        catalog_rankings = ExternalPlayerRankingSerializer(catalog_qs, many=True).data
+        catalog_rankings = [
+            r for r in ExternalPlayerRankingSerializer(catalog_qs, many=True).data
+            if not _points_are_zero(r.get('points'))
+        ]
 
         now = timezone.now()
         force_refresh = request.query_params.get('refresh') == '1'

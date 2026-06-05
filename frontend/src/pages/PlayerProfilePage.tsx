@@ -502,7 +502,11 @@ export const PlayerProfilePage: React.FC = () => {
                   ) : (tiData?.rankings && tiData.rankings.length > 0) || (tiData?.catalog_rankings && tiData.catalog_rankings.length > 0) ? (
                     <div className="space-y-3">
                       {tiData?.rankings && tiData.rankings.length > 0 && (
-                        <RankingsDisplay rankings={tiData.rankings} isStale={!!tiData.is_stale} />
+                        <RankingsDisplay
+                          rankings={tiData.rankings}
+                          isStale={!!tiData.is_stale}
+                          showFederativos={!(tiData?.catalog_rankings && tiData.catalog_rankings.length > 0)}
+                        />
                       )}
                       <CatalogRankingsDisplay rankings={tiData?.catalog_rankings ?? []} />
                     </div>
@@ -784,9 +788,21 @@ export const PlayerProfilePage: React.FC = () => {
 
 // ── RankingsDisplay ───────────────────────────────────────────────────────────
 
-function RankingsDisplay({ rankings, isStale }: { rankings: TiRankingEntry[]; isStale: boolean }) {
+/** True when a points string ("0.00", "0,00", "", "200.25") represents zero / no standing. */
+function pointsAreZero(p?: string): boolean {
+  if (!p) return true;
+  const n = parseFloat(String(p).replace(/\./g, '').replace(',', '.'));
+  return !isNaN(n) && n === 0;
+}
+
+function RankingsDisplay({ rankings, isStale, showFederativos = true }: { rankings: TiRankingEntry[]; isStale: boolean; showFederativos?: boolean }) {
   const wtn = rankings.filter((r) => r.federation === 'World Tennis Number');
-  const fed = rankings.filter((r) => r.federation !== 'World Tennis Number');
+  // Federation rankings are shown only as a fallback (when the structured catalogue
+  // has nothing) to avoid duplicating the "Rankings CBT / Federações" block, and
+  // zero-point standings are hidden.
+  const fed = showFederativos
+    ? rankings.filter((r) => r.federation !== 'World Tennis Number' && !pointsAreZero(r.points))
+    : [];
 
   return (
     <div className="space-y-3">

@@ -103,7 +103,24 @@ export const InscricoesPage: React.FC = () => {
   // pagamento após o prazo) vão para o Histórico, mesmo sem cancelamento manual.
   const activeRegs = registrations.filter((r) => !r.is_withdrawn && !r.is_past && r.registration_status !== 'expired');
   const withdrawnRegs = registrations.filter((r) => r.is_withdrawn || r.is_past || r.registration_status === 'expired');
-  const totalDeclared = childGroups.reduce((acc, g) => acc + g.items.length, 0);
+
+  // Uma inscrição declarada cujo torneio já passou (finalizado/cancelado ou
+  // data final no passado) vai para o Histórico, não fica em "declaradas ativas".
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const isDeclaredPast = (item: WatchlistItem): boolean => {
+    if (item.user_status === 'completed') return true;
+    const ed = item.edition_detail;
+    if (!ed) return false;
+    const ds = ed.dynamic_status || ed.status;
+    if (ds === 'finished' || ds === 'canceled') return true;
+    return !!(ed.end_date && ed.end_date < todayStr);
+  };
+  const activeChildGroups = childGroups
+    .map((g) => ({ ...g, items: g.items.filter((it) => !isDeclaredPast(it)) }))
+    .filter((g) => g.items.length > 0);
+  const pastDeclared = childGroups.flatMap((g) => g.items.filter(isDeclaredPast));
+  const totalDeclared = activeChildGroups.reduce((acc, g) => acc + g.items.length, 0);
+
   // Avoid showing a desistência twice when both an official registration and a
   // watchlist declaration exist for the same edition.
   const withdrawnRegEditionIds = new Set(withdrawnRegs.map((r) => r.edition_id));
@@ -111,7 +128,8 @@ export const InscricoesPage: React.FC = () => {
     (it) => !withdrawnRegEditionIds.has(it.edition_detail?.id),
   );
   const hasAnything =
-    totalDeclared > 0 || activeRegs.length > 0 || withdrawnRegs.length > 0 || declaredWithdrawnOnly.length > 0;
+    totalDeclared > 0 || activeRegs.length > 0 || withdrawnRegs.length > 0 ||
+    declaredWithdrawnOnly.length > 0 || pastDeclared.length > 0;
 
   if (loading) {
     return (
@@ -149,7 +167,7 @@ export const InscricoesPage: React.FC = () => {
       ) : (
         <>
           {/* ─── Inscrições declaradas (watchlist) ───────────────────────── */}
-          {childGroups.length > 0 && (
+          {activeChildGroups.length > 0 && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
@@ -159,7 +177,7 @@ export const InscricoesPage: React.FC = () => {
                 <span className="text-xs text-text-muted">{totalDeclared}</span>
               </div>
 
-              {childGroups.map((group) => (
+              {activeChildGroups.map((group) => (
                 <div key={group.childId || 'self'} className="space-y-2">
                   {user?.role === 'parent' && (
                     <div className="flex items-center gap-1.5 px-1 mt-2">
@@ -224,7 +242,7 @@ export const InscricoesPage: React.FC = () => {
           )}
 
           {/* ─── Histórico ───────────────────────────────────────────────── */}
-          {(withdrawnRegs.length > 0 || declaredWithdrawnOnly.length > 0) && (
+          {(withdrawnRegs.length > 0 || declaredWithdrawnOnly.length > 0 || pastDeclared.length > 0) && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <h2 className="font-bold text-sm text-text-muted">Histórico</h2>
@@ -233,6 +251,26 @@ export const InscricoesPage: React.FC = () => {
               {withdrawnRegs.map((reg) => (
                 <RegistrationCard key={reg.id} reg={reg} confirmWithdraw={null} withdrawing={null} />
               ))}
+              {pastDeclared.map((item) => {
+                const ed = item.edition_detail;
+                return (
+                  <Link key={`wlp-${item.id}`} to={`/torneios/${ed.id}`} className="card flex items-center gap-3 hover:border-accent-neon/30 transition-colors no-underline opacity-80">
+                    <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 bg-status-finished/15">
+                      <CheckCircle className="w-5 h-5 text-status-finished" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-bold text-sm line-clamp-1">{ed.title}</div>
+                      {ed.start_date && (
+                        <div className="text-xs text-text-muted mt-0.5">{fmtDateRange(ed.start_date, ed.end_date)}</div>
+                      )}
+                      <span className="inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-status-finished/15 text-status-finished">
+                        {item.user_status === 'completed' ? 'Concluído' : 'Encerrado'}
+                      </span>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-text-muted shrink-0" />
+                  </Link>
+                );
+              })}
               {declaredWithdrawnOnly.map((item) => {
                 const ed = item.edition_detail;
                 return (

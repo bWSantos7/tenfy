@@ -683,6 +683,30 @@ class ProfileCatalogRankingsTestCase(TestCase):
         self.assertEqual(resp.json()['catalog_rankings'], [])
 
 
+class SyncTiRankingsTaskTestCase(TestCase):
+    def test_task_imports_registry_and_federations(self):
+        from unittest.mock import patch, call
+        from apps.players.tasks import sync_ti_rankings_task
+        with patch('django.core.management.call_command') as cc:
+            result = sync_ti_rankings_task()
+        names = [c.args[0] for c in cc.call_args_list]
+        self.assertIn('sync_ti_rankings', names)
+        self.assertIn('match_profiles_to_ti_rankings', names)
+        # registry (all=True) + federations_juvenil were both requested
+        kwargs_seen = [c.kwargs for c in cc.call_args_list if c.args and c.args[0] == 'sync_ti_rankings']
+        self.assertTrue(any(k.get('all') for k in kwargs_seen))
+        self.assertTrue(any(k.get('federations_juvenil') for k in kwargs_seen))
+        self.assertEqual(result['status'], 'done')
+
+    def test_specific_sources_skip_federations(self):
+        from unittest.mock import patch
+        from apps.players.tasks import sync_ti_rankings_task
+        with patch('django.core.management.call_command') as cc:
+            sync_ti_rankings_task(sources=['cbt'])
+        kwargs_seen = [c.kwargs for c in cc.call_args_list if c.args and c.args[0] == 'sync_ti_rankings']
+        self.assertFalse(any(k.get('federations_juvenil') for k in kwargs_seen))
+
+
 class TIYouthRankingHelpersTestCase(TestCase):
     def test_youth_ranking_name_matches(self):
         from apps.players.ti_rankings import is_youth_ranking_name

@@ -232,15 +232,23 @@ def sync_all_ti_profiles_task():
 
 
 @shared_task(name='apps.players.tasks.sync_ti_rankings_task')
-def sync_ti_rankings_task(sources=None):
+def sync_ti_rankings_task(sources=None, include_federations=True):
     """
     Periodic task: import public Tênis Integrado rankings into the local
     ExternalPlayerRanking catalogue, then backfill profile auto-links.
 
+    Imports both:
+      * configured registry sources (--all → CBT Ranking Nacional Juvenil), and
+      * federation infantojuvenil/juvenil/juniors rankings (12–18 categories),
+        unless a specific `sources` list is given or include_federations is False.
+
     Scheduled daily. Heavy/rate-limited work runs inside the management command,
-    which already throttles its own HTTP requests.
+    which already throttles its own HTTP requests. Each phase is isolated so a
+    failure in one does not abort the others.
     """
     from django.core.management import call_command
+
+    errors = []
 
     try:
         if sources:
@@ -249,8 +257,17 @@ def sync_ti_rankings_task(sources=None):
         else:
             call_command('sync_ti_rankings', all=True, verbosity=0)
     except Exception as exc:
-        logger.error('sync_ti_rankings_task: import error: %s', exc)
-        raise
+        logger.error('sync_ti_rankings_task: registry import error: %s', exc)
+        errors.append(f'registry: {exc}')
+
+    # Federation rankings (FPT/SP, FCT, …) are not in the registry — they are
+    # discovered live and filtered to youth (12–18) categories.
+    if include_federations and not sources:
+        try:
+            call_command('sync_ti_rankings', federations_juvenil=True, verbosity=0)
+        except Exception as exc:
+            logger.error('sync_ti_rankings_task: federations import error: %s', exc)
+            errors.append(f'federations: {exc}')
 
     # After importing, try to link any still-unlinked profiles (no re-sync here;
     # the hourly sync_all_ti_profiles_task will pick up newly-linked profiles).
@@ -259,7 +276,7 @@ def sync_ti_rankings_task(sources=None):
     except Exception as exc:
         logger.warning('sync_ti_rankings_task: backfill matching error: %s', exc)
 
-    return {'status': 'done'}
+    return {'status': 'done' if not errors else 'partial', 'errors': errors}
 
 
 _UTR_STAGGER_SECONDS = 30

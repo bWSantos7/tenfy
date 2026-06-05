@@ -98,11 +98,11 @@ export const InscricoesPage: React.FC = () => {
     }
   }
 
-  // Inscrições ativas = não cancelada E torneio não passado. Torneios já
-  // finalizados/cancelados vão para o Histórico, mesmo que a inscrição não
-  // tenha sido cancelada manualmente.
-  const activeRegs = registrations.filter((r) => !r.is_withdrawn && !r.is_past);
-  const withdrawnRegs = registrations.filter((r) => r.is_withdrawn || r.is_past);
+  // Inscrições ativas = não cancelada, torneio não passado E não expirada.
+  // Torneios já finalizados/cancelados e inscrições não confirmadas (aguardando
+  // pagamento após o prazo) vão para o Histórico, mesmo sem cancelamento manual.
+  const activeRegs = registrations.filter((r) => !r.is_withdrawn && !r.is_past && r.registration_status !== 'expired');
+  const withdrawnRegs = registrations.filter((r) => r.is_withdrawn || r.is_past || r.registration_status === 'expired');
   const totalDeclared = childGroups.reduce((acc, g) => acc + g.items.length, 0);
   // Avoid showing a desistência twice when both an official registration and a
   // watchlist declaration exist for the same edition.

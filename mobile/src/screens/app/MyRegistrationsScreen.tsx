@@ -133,10 +133,11 @@ export function MyRegistrationsScreen({ navigation }: Props) {
     }
   }
 
-  // Ativas = não cancelada E torneio não passado. Torneios já encerrados/
-  // cancelados vão para o histórico, mesmo sem cancelamento manual.
-  const active = registrations.filter((r) => !r.is_withdrawn && !r.is_past);
-  const withdrawn = registrations.filter((r) => r.is_withdrawn || r.is_past);
+  // Ativas = não cancelada, torneio não passado E não expirada. Torneios já
+  // encerrados/cancelados e inscrições não confirmadas (aguardando pagamento
+  // após o prazo) vão para o histórico, mesmo sem cancelamento manual.
+  const active = registrations.filter((r) => !r.is_withdrawn && !r.is_past && r.registration_status !== 'expired');
+  const withdrawn = registrations.filter((r) => r.is_withdrawn || r.is_past || r.registration_status === 'expired');
   const totalWatchlistInscribed = childGroups.reduce((acc, g) => acc + g.items.length, 0);
   const withdrawnRegEditionIds = new Set(withdrawn.map((r) => r.edition_id));
   const declaredWithdrawnOnly = declaredWithdrawn.filter(

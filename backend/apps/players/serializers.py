@@ -1,7 +1,15 @@
 from rest_framework import serializers
+from apps.sources.models import Organization
 from .models import (
     PlayerProfile, PlayerCategory, PlayerProfileCategory, ExternalPlayerRanking,
 )
+
+
+class FederationBriefSerializer(serializers.ModelSerializer):
+    """Lightweight federation read view embedded in the player profile."""
+    class Meta:
+        model = Organization
+        fields = ('id', 'name', 'short_name', 'state')
 
 
 class ExternalPlayerRankingSerializer(serializers.ModelSerializer):
@@ -41,12 +49,19 @@ class PlayerProfileSerializer(serializers.ModelSerializer):
     )
     sporting_age = serializers.IntegerField(read_only=True)
     user_id = serializers.IntegerField(read_only=True)
+    federation = serializers.PrimaryKeyRelatedField(
+        queryset=Organization.objects.filter(type=Organization.TYPE_FEDERATION, is_active=True),
+        required=False, allow_null=True,
+    )
+    federation_detail = FederationBriefSerializer(source='federation', read_only=True)
+    federation_state = serializers.CharField(read_only=True)
 
     class Meta:
         model = PlayerProfile
         fields = (
             'id', 'user_id', 'display_name', 'birth_year', 'birth_date',
             'gender', 'home_state', 'home_city', 'travel_radius_km', 'travel_states',
+            'federation', 'federation_detail', 'federation_state',
             'competitive_level', 'dominant_hand', 'tennis_class', 'preferred_modality',
             'is_primary', 'external_ids', 'categories', 'sporting_age',
             'created_at', 'updated_at',
@@ -56,6 +71,7 @@ class PlayerProfileSerializer(serializers.ModelSerializer):
         )
         read_only_fields = (
             'created_at', 'updated_at', 'sporting_age',
+            'federation_detail', 'federation_state',
             'utr_player_id', 'utr_display_name', 'utr_singles', 'utr_doubles',
             'utr_profile_url', 'utr_synced_at', 'utr_sync_error',
         )

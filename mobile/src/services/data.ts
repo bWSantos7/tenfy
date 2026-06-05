@@ -180,6 +180,7 @@ export async function createChildWithProfile(
     gender: 'M' | 'F' | '';
     home_state: string;
     home_city?: string;
+    federation?: number | null;
     travel_states?: string[];
     competitive_level: string;
     tennis_class?: string;

@@ -22,7 +22,8 @@ import { GENDER_LABELS, LEVEL_LABELS, ROLE_LABELS, TENNIS_CLASS_LABELS } from '.
 import { markProfileDirty } from '../../utils/profileRefresh';
 import { getProfileModality, setProfileModality, MODALITY_OPTIONS } from '../../utils/profileModality';
 import { getActiveProfileId, setActiveProfileId } from '../../utils/activeProfile';
-import { AppText, Button, Card, EmptyState, Input, LoadingBlock, Screen, SectionHeader, SelectField, MultiSelectField } from '../../components/ui';
+import { AppText, Button, Card, EmptyState, Input, LoadingBlock, Screen, SectionHeader, SelectField } from '../../components/ui';
+import { FederationSelect } from '../../components/FederationSelect';
 
 type Props = BottomTabScreenProps<MainTabParamList, 'Profile'>;
 type StackNav = NativeStackNavigationProp<MainStackParamList>;
@@ -50,12 +51,6 @@ const CLASS_OPTIONS = [
   { value: '', label: 'Sem classe definida' },
   ...Object.entries(TENNIS_CLASS_LABELS).map(([value, label]) => ({ value, label })),
 ];
-const ALL_UFS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
-const TRAVEL_STATE_OPTIONS = [
-  { value: '__ALL__', label: 'Todo o Brasil (todos os estados)' },
-  ...UF_OPTIONS,
-];
-
 type DependentData = { link: ParentChild; profiles: PlayerProfile[] };
 
 export function ProfileScreen(_: Props) {
@@ -680,7 +675,7 @@ function AddDependentForm({ onSuccess, onCancel }: { onSuccess: () => Promise<vo
     gender: '',
     home_state: 'SP',
     home_city: '',
-    travel_states: [] as string[],
+    federation: null as number | null,
     competitive_level: 'amateur',
     tennis_class: '',
   });
@@ -700,14 +695,6 @@ function AddDependentForm({ onSuccess, onCancel }: { onSuccess: () => Promise<vo
       setCities([]);
     } finally {
       setLoadingCities(false);
-    }
-  }
-
-  function handleTravelStates(vals: string[]) {
-    if (vals.includes('__ALL__')) {
-      setProfile((p) => ({ ...p, travel_states: ALL_UFS }));
-    } else {
-      setProfile((p) => ({ ...p, travel_states: vals }));
     }
   }
 
@@ -742,7 +729,7 @@ function AddDependentForm({ onSuccess, onCancel }: { onSuccess: () => Promise<vo
           gender: profile.gender as 'M' | 'F' | '',
           home_state: profile.home_state,
           home_city: profile.home_city,
-          travel_states: profile.travel_states,
+          federation: profile.federation,
           competitive_level: profile.competitive_level,
           tennis_class: profile.tennis_class,
         },
@@ -895,13 +882,9 @@ function AddDependentForm({ onSuccess, onCancel }: { onSuccess: () => Promise<vo
         loading={loadingCities}
         searchable
       />
-      <MultiSelectField
-        label="Estados onde aceita jogar"
-        values={profile.travel_states}
-        options={TRAVEL_STATE_OPTIONS}
-        onSelect={handleTravelStates}
-        placeholder="Selecione os estados..."
-        searchable
+      <FederationSelect
+        value={profile.federation}
+        onChange={(id) => setProfile({ ...profile, federation: id })}
       />
       <SelectField
         label="Nível competitivo *"
@@ -936,7 +919,7 @@ function CreateChildProfileForm({ link, onSuccess, onCancel }: {
     gender: '',
     home_state: 'SP',
     home_city: '',
-    travel_states: [] as string[],
+    federation: null as number | null,
     competitive_level: 'amateur',
     tennis_class: '',
   });
@@ -959,14 +942,6 @@ function CreateChildProfileForm({ link, onSuccess, onCancel }: {
     }
   }
 
-  function handleTravelStates(vals: string[]) {
-    if (vals.includes('__ALL__')) {
-      setForm((f) => ({ ...f, travel_states: ALL_UFS }));
-    } else {
-      setForm((f) => ({ ...f, travel_states: vals }));
-    }
-  }
-
   async function submit() {
     if (!form.birth_year) return Toast.show({ type: 'error', text1: 'Informe o ano de nascimento' });
     const birthYearNum = Number(form.birth_year);
@@ -984,7 +959,7 @@ function CreateChildProfileForm({ link, onSuccess, onCancel }: {
         gender: form.gender as any,
         home_state: form.home_state,
         home_city: form.home_city,
-        travel_states: form.travel_states,
+        federation: form.federation,
         competitive_level: form.competitive_level as any,
         tennis_class: form.tennis_class,
         is_primary: true,
@@ -1038,13 +1013,9 @@ function CreateChildProfileForm({ link, onSuccess, onCancel }: {
         loading={loadingCities}
         searchable
       />
-      <MultiSelectField
-        label="Estados onde aceita jogar"
-        values={form.travel_states}
-        options={TRAVEL_STATE_OPTIONS}
-        onSelect={handleTravelStates}
-        placeholder="Selecione os estados..."
-        searchable
+      <FederationSelect
+        value={form.federation}
+        onChange={(id) => setForm({ ...form, federation: id })}
       />
       <SelectField
         label="Nível competitivo *"
@@ -1157,7 +1128,15 @@ function ProfileCard({ profile: p, colors, onEdit, onMakePrimary, onRemove, rest
             <AppText variant="caption">{[p.home_city, p.home_state].filter(Boolean).join('/')}</AppText>
           </View>
         ) : null}
-        {(p.travel_states && p.travel_states.length > 0) ? (
+        {p.federation_detail ? (
+          <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+            <Ionicons name="flag-outline" size={13} color={colors.textMuted} />
+            <AppText variant="caption">
+              {p.federation_detail.short_name || p.federation_detail.name}
+              {p.federation_detail.state ? ` (${p.federation_detail.state})` : ''}
+            </AppText>
+          </View>
+        ) : (p.travel_states && p.travel_states.length > 0) ? (
           <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
             <Ionicons name="map-outline" size={13} color={colors.textMuted} />
             <AppText variant="caption">
@@ -1193,19 +1172,12 @@ function ProfileEditor({ profile, onSaved, onCancel, restrictedMode = false }: {
     gender: profile.gender ?? '',
     home_state: profile.home_state ?? 'SP',
     home_city: profile.home_city ?? '',
-    travel_states: profile.travel_states ?? [],
+    federation: profile.federation ?? null,
     tennis_class: profile.tennis_class ?? '',
     competitive_level: profile.competitive_level ?? 'amateur',
   });
   const [modality, setModality] = React.useState(profile.preferred_modality ?? '');
 
-  function handleTravelStatesSelect(vals: string[]) {
-    if (vals.includes('__ALL__')) {
-      setForm((f) => ({ ...f, travel_states: ALL_UFS }));
-    } else {
-      setForm((f) => ({ ...f, travel_states: vals }));
-    }
-  }
   const [saving, setSaving] = useState(false);
   const [cities, setCities] = useState<{ value: string; label: string }[]>([]);
   const [loadingCities, setLoadingCities] = useState(false);
@@ -1274,13 +1246,9 @@ function ProfileEditor({ profile, onSaved, onCancel, restrictedMode = false }: {
       />
       {!restrictedMode ? (
         <>
-          <MultiSelectField
-            label="Estados onde aceita jogar"
-            values={form.travel_states}
-            options={TRAVEL_STATE_OPTIONS}
-            onSelect={handleTravelStatesSelect}
-            placeholder="Selecione os estados..."
-            searchable
+          <FederationSelect
+            value={form.federation}
+            onChange={(id) => setForm({ ...form, federation: id })}
           />
           <SelectField label="Nível competitivo" value={form.competitive_level} options={LEVEL_OPTIONS} onSelect={(v) => setForm({ ...form, competitive_level: v as PlayerProfile['competitive_level'] })} />
           <SelectField label="Classe" value={form.tennis_class} options={CLASS_OPTIONS} onSelect={(v) => setForm({ ...form, tennis_class: v })} />

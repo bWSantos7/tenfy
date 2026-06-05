@@ -6,6 +6,7 @@ Usage:
 """
 from django.core.management.base import BaseCommand
 from apps.sources.models import Organization, DataSource
+from apps.sources.federations import BRAZIL_TENNIS_FEDERATIONS
 
 ORGANIZATIONS = [
     {
@@ -185,6 +186,44 @@ class Command(BaseCommand):
             self.stdout.write(f'  {label}: {obj}')
 
         self.stdout.write(self.style.SUCCESS(f'\n{len(ORGANIZATIONS)} organizações processadas.'))
+
+        # ── State federations (all 27 UFs) ───────────────────────────────────
+        # Profile/onboarding federation picker needs the full list, even for
+        # federations without a data source/scraper. The UF is the canonical key.
+        fed_created = 0
+        for uf, name, short in BRAZIL_TENNIS_FEDERATIONS:
+            obj, created = Organization.objects.get_or_create(
+                name=name,
+                defaults={
+                    'short_name': short,
+                    'type': Organization.TYPE_FEDERATION,
+                    'state': uf,
+                    'is_active': True,
+                },
+            )
+            if created:
+                fed_created += 1
+            else:
+                # Keep state/type/short_name canonical without clobbering
+                # rich descriptions/website set on existing rows.
+                changed = False
+                if obj.state != uf:
+                    obj.state = uf
+                    changed = True
+                if obj.type != Organization.TYPE_FEDERATION:
+                    obj.type = Organization.TYPE_FEDERATION
+                    changed = True
+                if not obj.short_name:
+                    obj.short_name = short
+                    changed = True
+                if changed:
+                    obj.save()
+            org_map.setdefault(obj.short_name, obj)
+
+        self.stdout.write(self.style.SUCCESS(
+            f'{len(BRAZIL_TENNIS_FEDERATIONS)} federações estaduais processadas '
+            f'({fed_created} criadas).'
+        ))
 
         created_sources = 0
         for ds_data in DATA_SOURCES:

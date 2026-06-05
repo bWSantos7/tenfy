@@ -6,7 +6,8 @@ import { createProfile, listProfiles } from '../services/data';
 import { extractApiError } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { LEVEL_LABELS, TENNIS_CLASS_LABELS } from '../utils/format';
-import { StateMultiSelect, loadCitiesForState } from '../components/StateMultiSelect';
+import { loadCitiesForState } from '../components/StateMultiSelect';
+import { FederationSelect } from '../components/FederationSelect';
 import { MODALITY_OPTIONS } from '../utils/profileModality';
 
 const UF_OPTIONS = [
@@ -27,7 +28,7 @@ export const OnboardingPage: React.FC = () => {
     gender: '' as 'M' | 'F' | '',
     home_state: 'SP',
     home_city: '',
-    travel_states: [] as string[],
+    federation: null as number | null,
     competitive_level: 'amateur',
     tennis_class: '',
     preferred_modality: '' as string,
@@ -66,16 +67,6 @@ export const OnboardingPage: React.FC = () => {
     }
   }, [form.home_state, step]);
 
-  function handleTravelStates(vals: string[]) {
-    const ALL_UFS_SET = new Set(UF_OPTIONS);
-    const hasAll = vals.every((v) => ALL_UFS_SET.has(v)) && vals.length === UF_OPTIONS.length;
-    if (vals.includes('__ALL__') || hasAll) {
-      update('travel_states', [...UF_OPTIONS]);
-    } else {
-      update('travel_states', vals);
-    }
-  }
-
   async function finish() {
     setSubmitting(true);
     try {
@@ -89,7 +80,7 @@ export const OnboardingPage: React.FC = () => {
         gender: form.gender || undefined,
         home_state: form.home_state,
         home_city: form.home_city,
-        travel_states: form.travel_states,
+        federation: form.federation,
         competitive_level: form.competitive_level as any,
         tennis_class: form.tennis_class,
         preferred_modality: form.preferred_modality,
@@ -194,10 +185,10 @@ export const OnboardingPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Estados onde aceita jogar — substituiu travel_radius_km */}
-            <StateMultiSelect
-              values={form.travel_states}
-              onChange={handleTravelStates}
+            {/* Federação — substituiu a multisseleção de estados */}
+            <FederationSelect
+              value={form.federation}
+              onChange={(id) => update('federation', id)}
             />
 
             <div className="flex gap-2">

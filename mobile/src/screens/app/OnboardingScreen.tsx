@@ -9,7 +9,8 @@ import { createProfile, linkUtr, searchUtr } from '../../services/data';
 import { extractApiError } from '../../services/api';
 import { UtrCandidate } from '../../types';
 import { LEVEL_LABELS, TENNIS_CLASS_LABELS } from '../../utils/format';
-import { AppText, Button, Card, Input, MultiSelectField, Screen, SectionHeader, SelectField } from '../../components/ui';
+import { AppText, Button, Card, Input, Screen, SectionHeader, SelectField } from '../../components/ui';
+import { FederationSelect } from '../../components/FederationSelect';
 
 type Props = NativeStackScreenProps<MainStackParamList, 'Onboarding'>;
 
@@ -54,19 +55,12 @@ const CLASS_OPTIONS = [
   ...Object.entries(TENNIS_CLASS_LABELS).map(([value, label]) => ({ value, label })),
 ];
 
-const ALL_STATES_OPTION = { value: '__ALL__', label: '🌎 Todo o Brasil (todos os estados)' };
-const TRAVEL_STATE_OPTIONS = [
-  ALL_STATES_OPTION,
-  ...UF_OPTIONS,
-];
-
 export function OnboardingScreen({ navigation }: Props) {
   const { colors } = useTheme();
   const [submitting, setSubmitting] = useState(false);
   const [cities, setCities] = useState<{ value: string; label: string }[]>([]);
   const [loadingCities, setLoadingCities] = useState(false);
   const [citiesError, setCitiesError] = useState(false);
-  const ALL_BR_UFS = UF_OPTIONS.map((o) => o.value);
 
   // ── UTR step (shown after profile creation) ──────────────────────────────────
   const [utrStep, setUtrStep] = useState(false);
@@ -81,19 +75,10 @@ export function OnboardingScreen({ navigation }: Props) {
     gender: '',
     home_state: 'SP',
     home_city: '',
-    travel_states: [] as string[],
+    federation: null as number | null,
     competitive_level: 'amateur',
     tennis_class: '',
   });
-
-  function handleTravelStatesSelect(vals: string[]) {
-    if (vals.includes('__ALL__')) {
-      // Tapped "Todo o Brasil" — select all UFs
-      setForm((f) => ({ ...f, travel_states: ALL_BR_UFS }));
-    } else {
-      setForm((f) => ({ ...f, travel_states: vals }));
-    }
-  }
 
   useEffect(() => {
     loadCities(form.home_state);
@@ -130,7 +115,7 @@ export function OnboardingScreen({ navigation }: Props) {
         gender: (form.gender || undefined) as any,
         home_state: form.home_state,
         home_city: form.home_city,
-        travel_states: form.travel_states,
+        federation: form.federation,
         competitive_level: form.competitive_level as any,
         tennis_class: form.tennis_class || '',
         is_primary: true,
@@ -328,13 +313,9 @@ export function OnboardingScreen({ navigation }: Props) {
             </AppText>
           </Pressable>
         )}
-        <MultiSelectField
-          label="Estados onde aceita jogar"
-          values={form.travel_states}
-          options={TRAVEL_STATE_OPTIONS}
-          onSelect={handleTravelStatesSelect}
-          placeholder="Selecione os estados..."
-          searchable
+        <FederationSelect
+          value={form.federation}
+          onChange={(id) => setForm((f) => ({ ...f, federation: id }))}
         />
       </Card>
 

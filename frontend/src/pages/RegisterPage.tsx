@@ -12,7 +12,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { extractApiError } from '../services/api';
 import { User as UserType } from '../types';
 import { LEVEL_LABELS } from '../utils/format';
-import { StateMultiSelect, ALL_UFS, loadCitiesForState } from '../components/StateMultiSelect';
+import { loadCitiesForState } from '../components/StateMultiSelect';
+import { FederationSelect } from '../components/FederationSelect';
 import { MODALITY_OPTIONS, setProfileModality } from '../utils/profileModality';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -102,7 +103,7 @@ export const RegisterPage: React.FC = () => {
     gender: '' as 'M' | 'F' | '',
     home_state: 'SP',
     home_city: '',
-    travel_states: [] as string[],
+    federation: null as number | null,
     competitive_level: 'amateur',
     tennis_class: '',
     modality: '',
@@ -264,7 +265,7 @@ export const RegisterPage: React.FC = () => {
         gender: profile.gender || undefined,
         home_state: profile.home_state,
         home_city: profile.home_city,
-        travel_states: profile.travel_states,
+        federation: profile.federation,
         competitive_level: profile.competitive_level as any,
         tennis_class: profile.tennis_class,
         preferred_modality: profile.modality || '',
@@ -315,14 +316,6 @@ export const RegisterPage: React.FC = () => {
     try { await sendEmailOtp(); toast.success('Novo código enviado.'); }
     catch { toast.error('Não foi possível reenviar.'); }
     finally { setResending(false); }
-  }
-
-  function handleTravelStates(vals: string[]) {
-    if (vals.includes('__ALL__')) {
-      setProfile((p) => ({ ...p, travel_states: [...ALL_UFS] }));
-    } else {
-      setProfile((p) => ({ ...p, travel_states: vals }));
-    }
   }
 
   // Progress indicator
@@ -754,10 +747,10 @@ export const RegisterPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Estados onde aceita jogar — substituiu travel_radius_km */}
-            <StateMultiSelect
-              values={profile.travel_states}
-              onChange={handleTravelStates}
+            {/* Federação — substituiu a multisseleção de estados */}
+            <FederationSelect
+              value={profile.federation}
+              onChange={(id) => setProfile((p) => ({ ...p, federation: id }))}
             />
 
             <div>

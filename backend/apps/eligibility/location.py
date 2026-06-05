@@ -1,4 +1,5 @@
 import math
+import re
 from functools import lru_cache
 
 import requests
@@ -18,20 +19,144 @@ DISTANCE_WITHIN = 'within_radius'
 DISTANCE_OUTSIDE = 'outside_radius'
 DISTANCE_UNKNOWN = 'unknown'
 DISTANCE_NATIONWIDE = 'nationwide'
+# Federation-scope statuses (when the profile has a single federation).
+DISTANCE_NATIONAL = 'national'              # CBT/confederation/international — open to any federation
+DISTANCE_OPEN = 'open'                       # tournament aberto a outras federações
+DISTANCE_OWN_FEDERATION = 'own_federation'   # estadual da própria federação do atleta
+DISTANCE_OTHER_FEDERATION = 'other_federation'  # estadual de outra federação — incompatível por padrão
+
+
+# ── Federation-scope helpers ────────────────────────────────────────────────────
+# Organization.type values (apps.sources.models.Organization) referenced as
+# literals to avoid an import cycle (sources ← eligibility).
+_ORG_CONFEDERATION = 'confederation'   # CBT, COSAT, ITF — nacional/internacional
+_ORG_FEDERATION = 'federation'         # federação estadual (tem UF)
+_ORG_PLATFORM = 'platform'             # UTR — torneios por rating, não atrelados a federação
+
+# Whole-word patterns that flag a tournament as national or open to athletes of
+# any federation. Word boundaries (\b) avoid false positives such as matching
+# "nacional" inside "internacional" or a substring inside an unrelated club name.
+# The primary, reliable national signal is org.type == confederation; these
+# keyword patterns are only a safety net for nationally-titled events that happen
+# to be linked to a state federation org.
+_NATIONAL_RE = re.compile(r'\b(nacional|brasileiro|brasileira)\b')
+_OPEN_RE = re.compile(r'\b(aberto|abertos)\b')
+
+
+def _edition_organization(edition):
+    tournament = getattr(edition, 'tournament', None)
+    return getattr(tournament, 'organization', None) if tournament is not None else None
+
+
+def _scope_text(edition) -> str:
+    """Lowercased haystack of circuit/name/title to detect national/open scope.
+    Coerces every part to str so MagicMock-based unit tests never raise on join."""
+    parts = []
+    tournament = getattr(edition, 'tournament', None)
+    if tournament is not None:
+        parts.append(str(getattr(tournament, 'circuit', '') or ''))
+        parts.append(str(getattr(tournament, 'canonical_name', '') or ''))
+    parts.append(str(getattr(edition, 'title', '') or ''))
+    return ' '.join(parts).lower()
+
+
+def _is_open_tournament(edition) -> bool:
+    return bool(_OPEN_RE.search(_scope_text(edition)))
+
+
+def _is_national_scope(edition, org) -> bool:
+    org_type = getattr(org, 'type', None) if org is not None else None
+    if org_type == _ORG_CONFEDERATION:
+        return True
+    return bool(_NATIONAL_RE.search(_scope_text(edition)))
+
+
+def federation_compatibility(profile, edition):
+    """
+    Federation-aware compatibility for a profile that competes for a single
+    federation. Returns the same {'included', 'status', 'message'} shape as
+    profile_state_result, or None when the profile has no federation (caller
+    then falls back to the legacy travel_states/home_state logic).
+
+    Rules (per produto):
+      1. Nacional/CBT/internacional (organização = confederação) ou plataforma
+         (UTR) → compatível para qualquer federação.
+      2. Torneio aberto (regulamento "Abertos") → compatível, marcado como aberto.
+      3. Estadual da própria federação do atleta → compatível.
+      4. Estadual de outra federação (não aberto) → NÃO compatível por padrão.
+      5. Sem organização identificada → cai para a UF do local vs UF da federação.
+    """
+    fed_state = (getattr(profile, 'federation_state', '') or '').upper()
+    if not fed_state:
+        return None
+
+    org = _edition_organization(edition)
+    org_type = getattr(org, 'type', None) if org is not None else None
+
+    # 1) National / international / rating-based → open to everyone.
+    if _is_national_scope(edition, org) or org_type == _ORG_PLATFORM:
+        return {'included': True, 'status': DISTANCE_NATIONAL, 'message': None}
+
+    # 2) Open tournament → any federation, flagged as "aberto".
+    if _is_open_tournament(edition):
+        return {
+            'included': True,
+            'status': DISTANCE_OPEN,
+            'message': 'Torneio aberto a atletas de outras federações.',
+        }
+
+    # 3/4) State federation tournament.
+    if org_type == _ORG_FEDERATION:
+        prof_fed_id = getattr(profile, 'federation_id', None)
+        org_id = getattr(org, 'id', None)
+        org_state = (getattr(org, 'state', '') or '').upper()
+        same_federation = (
+            (prof_fed_id and org_id and prof_fed_id == org_id)
+            or (not prof_fed_id and org_state and org_state == fed_state)
+        )
+        if same_federation:
+            return {'included': True, 'status': DISTANCE_OWN_FEDERATION, 'message': None}
+        return {
+            'included': False,
+            'status': DISTANCE_OTHER_FEDERATION,
+            'message': 'Torneio estadual de outra federação (não aberto).',
+        }
+
+    # 5) Organization unknown — compare the venue UF to the federation UF.
+    venue = edition.venue
+    if not venue or not venue.state:
+        return {
+            'included': True,
+            'status': DISTANCE_UNKNOWN,
+            'message': 'Estado do torneio não identificado. Verifique o regulamento oficial.',
+        }
+    included = venue.state.upper() == fed_state
+    return {
+        'included': included,
+        'status': DISTANCE_WITHIN if included else DISTANCE_OUTSIDE,
+        'message': None if included else 'Torneio fora da UF da sua federação.',
+    }
 
 
 # ── State-based check (primary, replaces radius for new profiles) ──────────────
 
 def within_profile_states(profile, edition) -> bool:
     """
-    Primary location check: profile.travel_states vs edition.venue.state.
+    Primary location check: profile.federation (UF) / travel_states vs edition.venue.state.
 
-    Returns True when the tournament state is among the player's accepted states,
-    or when travel_states covers all Brazilian states (Todo o Brasil).
+    Priority:
+      1. profile.federation_state — the player competes for a single federation;
+         only its UF is considered in-region.
+      2. profile.travel_states — legacy multi-state selection (fallback).
+      3. home_state / radius — fallback for incomplete profiles.
 
     Returns True (optimistic) when the tournament has no venue/state — caller
     should flag this as DISTANCE_UNKNOWN in the API response.
     """
+    fed = federation_compatibility(profile, edition)
+    if fed is not None:
+        return fed['included']
+
     states = list(profile.travel_states or [])
 
     if not states:
@@ -62,7 +187,14 @@ def profile_state_result(profile, edition) -> dict:
     """
     Detailed state check result for the API response.
     Returns {'included': bool, 'status': str, 'message': str|None}.
+
+    The player's federation drives compatibility (see federation_compatibility);
+    it falls back to the legacy travel_states when no federation is set.
     """
+    fed = federation_compatibility(profile, edition)
+    if fed is not None:
+        return fed
+
     states = list(profile.travel_states or [])
 
     if not states:

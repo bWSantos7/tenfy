@@ -19,10 +19,19 @@ DISTANCE_WITHIN = 'within_radius'
 DISTANCE_OUTSIDE = 'outside_radius'
 DISTANCE_UNKNOWN = 'unknown'
 DISTANCE_NATIONWIDE = 'nationwide'
-# Federation-scope statuses (when the profile has a single federation).
-DISTANCE_NATIONAL = 'national'              # CBT/confederation/international — open to any federation
+# Distance/scope statuses (when the profile has a single federation).
+DISTANCE_NATIONAL = 'national'              # CBT/confederação nacional — aberto a qualquer federação
+DISTANCE_INTERNATIONAL = 'international'      # ITF/COSAT — aberto a qualquer federação, inscrição por aceitação
 DISTANCE_OWN_FEDERATION = 'own_federation'   # estadual da própria federação do atleta
 DISTANCE_OTHER_FEDERATION = 'other_federation'  # estadual de outra federação — incompatível
+
+# Entry model: distinguishes guaranteed entry from acceptance-list circuits.
+ENTRY_MODEL_DIRECT = 'direct'                # inscrição direta (vaga conforme regras da fonte)
+ENTRY_MODEL_ACCEPTANCE = 'acceptance_list'   # vaga sujeita a ranking/lista/quali/wild card/IPIN
+
+_ENTRY_ACCEPTANCE_MESSAGE = (
+    'Inscrição sujeita à aceitação por ranking/lista de entrada e regras do torneio.'
+)
 
 
 # ── Federation-scope helpers ────────────────────────────────────────────────────
@@ -31,6 +40,11 @@ DISTANCE_OTHER_FEDERATION = 'other_federation'  # estadual de outra federação 
 _ORG_CONFEDERATION = 'confederation'   # CBT, COSAT, ITF — nacional/internacional
 _ORG_FEDERATION = 'federation'         # federação estadual (tem UF)
 _ORG_PLATFORM = 'platform'             # UTR — torneios por rating, não atrelados a federação
+
+# Confederations whose circuits are international official tours: any compatible
+# athlete may try to enter, but a vaga depende de aceitação (ranking/lista/quali/
+# wild card/IPIN). Matched by Organization.short_name.
+_INTERNATIONAL_CONFED = {'ITF', 'COSAT'}
 
 # Whole-word patterns that flag a tournament as national (open to athletes of any
 # federation). Word boundaries (\b) avoid false positives such as matching
@@ -76,12 +90,16 @@ def federation_compatibility(profile, edition):
     then falls back to the legacy travel_states/home_state logic).
 
     Rules (per produto):
-      1. Nacional/CBT/internacional (organização = confederação) ou plataforma
-         (UTR) → compatível para qualquer federação.
-      2. Estadual da própria federação do atleta → compatível.
-      3. Estadual de outra federação → NÃO compatível, mesmo quando "Aberto".
-         (Só torneios nacionais/CBT abrem para atletas de qualquer federação.)
-      4. Sem organização identificada → cai para a UF do local vs UF da federação.
+      1. Internacional (ITF/COSAT) → compatível para qualquer federação, mas a
+         inscrição é "sujeita à aceitação" (entry_guarantee=False).
+      2. Nacional/CBT (confederação) ou plataforma (UTR) → compatível para
+         qualquer federação.
+      3. Estadual da própria federação do atleta → compatível.
+      4. Estadual de outra federação → NÃO compatível, mesmo quando "Aberto".
+      5. Sem organização identificada → cai para a UF do local vs UF da federação.
+
+    The returned dict may carry 'entry_guarantee' (bool) and 'entry_model'
+    (ENTRY_MODEL_*). When absent, the caller treats entry as guaranteed/direct.
     """
     fed_state = (getattr(profile, 'federation_state', '') or '').upper()
     if not fed_state:
@@ -89,12 +107,24 @@ def federation_compatibility(profile, edition):
 
     org = _edition_organization(edition)
     org_type = getattr(org, 'type', None) if org is not None else None
+    org_short = (getattr(org, 'short_name', '') or '').upper() if org is not None else ''
 
-    # 1) National / international / rating-based → open to everyone.
+    # 1) International official tours (ITF/COSAT) → compatible for any federation,
+    # but entry is subject to acceptance (ranking/lista/quali/wild card/IPIN).
+    if org_type == _ORG_CONFEDERATION and org_short in _INTERNATIONAL_CONFED:
+        return {
+            'included': True,
+            'status': DISTANCE_INTERNATIONAL,
+            'message': _ENTRY_ACCEPTANCE_MESSAGE,
+            'entry_guarantee': False,
+            'entry_model': ENTRY_MODEL_ACCEPTANCE,
+        }
+
+    # 2) National (CBT/other confederation) / rating-based (UTR) → open to everyone.
     if _is_national_scope(edition, org) or org_type == _ORG_PLATFORM:
         return {'included': True, 'status': DISTANCE_NATIONAL, 'message': None}
 
-    # 2/3) State federation tournament — only the athlete's own federation is
+    # 3/4) State federation tournament — only the athlete's own federation is
     # compatible. Other federations are excluded even when titled "Aberto":
     # apenas torneios nacionais/CBT abrem para atletas de qualquer federação.
     if org_type == _ORG_FEDERATION:

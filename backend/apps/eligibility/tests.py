@@ -646,6 +646,14 @@ class FederationScopeTestCase(TestCase):
             name='Universal Tennis Rating',
             defaults={'short_name': 'UTR', 'type': Organization.TYPE_PLATFORM},
         )
+        self.cosat, _ = Organization.objects.get_or_create(
+            name='Confederação Sul-Americana de Tênis',
+            defaults={'short_name': 'COSAT', 'type': Organization.TYPE_CONFEDERATION},
+        )
+        self.itf, _ = Organization.objects.get_or_create(
+            name='International Tennis Federation',
+            defaults={'short_name': 'ITF', 'type': Organization.TYPE_CONFEDERATION},
+        )
         self.user = User.objects.create_user(email='fed@example.com', password='pass', full_name='Fed')
         # Athlete competes for FPT (SP).
         self.profile = PlayerProfile.objects.create(
@@ -671,6 +679,31 @@ class FederationScopeTestCase(TestCase):
         res = profile_state_result(self.profile, ed)
         self.assertTrue(res['included'])
         self.assertEqual(res['status'], DISTANCE_NATIONAL)
+        # National entry is direct (not acceptance-list) by default.
+        self.assertNotEqual(res.get('entry_model'), 'acceptance_list')
+
+    def test_cosat_international_included_with_acceptance(self):
+        from apps.eligibility.location import (
+            profile_state_result, DISTANCE_INTERNATIONAL, ENTRY_MODEL_ACCEPTANCE,
+        )
+        ed = self._edition(self.cosat, name='COSAT Sub-16', state='AR')
+        res = profile_state_result(self.profile, ed)
+        self.assertTrue(res['included'])
+        self.assertEqual(res['status'], DISTANCE_INTERNATIONAL)
+        self.assertFalse(res['entry_guarantee'])
+        self.assertEqual(res['entry_model'], ENTRY_MODEL_ACCEPTANCE)
+        self.assertIn('aceitação', res['message'])
+
+    def test_itf_international_included_with_acceptance(self):
+        from apps.eligibility.location import (
+            profile_state_result, DISTANCE_INTERNATIONAL, ENTRY_MODEL_ACCEPTANCE,
+        )
+        ed = self._edition(self.itf, name='ITF J30 São Paulo', state='SP')
+        res = profile_state_result(self.profile, ed)
+        self.assertTrue(res['included'])
+        self.assertEqual(res['status'], DISTANCE_INTERNATIONAL)
+        self.assertFalse(res['entry_guarantee'])
+        self.assertEqual(res['entry_model'], ENTRY_MODEL_ACCEPTANCE)
 
     def test_own_federation_state_included(self):
         from apps.eligibility.location import profile_state_result, DISTANCE_OWN_FEDERATION

@@ -217,6 +217,10 @@ export interface TournamentEditionList {
     compatible_count: number;
     unknown_count: number;
     total_count: number;
+    distance_status?: string;
+    distance_message?: string;
+    entry_guarantee?: boolean;   // false = vaga sujeita a aceitação (ITF/COSAT)
+    entry_model?: string;        // 'direct' | 'acceptance_list'
   };
 }
 

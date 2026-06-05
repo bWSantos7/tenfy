@@ -279,6 +279,8 @@ export interface TournamentEditionList {
     total_count: number;
     distance_status?: string;
     distance_message?: string;
+    entry_guarantee?: boolean;   // false = vaga sujeita a aceitação (ITF/COSAT)
+    entry_model?: string;        // 'direct' | 'acceptance_list'
     circuit_hint?: string | null;
   };
 }

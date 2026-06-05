@@ -573,6 +573,26 @@ class TIRankingMatchingTestCase(TestCase):
         source, ext = _find_ti_external_id_for_profile(profile)
         self.assertEqual(ext, 'tenisintegrado:375605')
 
+    def test_token_subset_links_shorter_profile_name(self):
+        # Profile "Laura Saviole" should link to catalogue "Laura Saviole Silva".
+        from apps.players.tasks import _find_ti_id_in_rankings
+        self._ranking('Laura Saviole Silva', '375605')
+        source, ext = _find_ti_id_in_rankings('laura saviole')
+        self.assertEqual(ext, 'tenisintegrado:375605')
+
+    def test_token_subset_ambiguous_not_linked(self):
+        from apps.players.tasks import _find_ti_id_in_rankings
+        self._ranking('Laura Saviole Silva', '111')
+        self._ranking('Laura Saviole Souza', '222')
+        source, ext = _find_ti_id_in_rankings('laura saviole')
+        self.assertIsNone(ext)
+
+    def test_single_token_does_not_link(self):
+        from apps.players.tasks import _find_ti_id_in_rankings
+        self._ranking('Laura Saviole Silva', '375605')
+        source, ext = _find_ti_id_in_rankings('laura')
+        self.assertIsNone(ext)
+
     def test_backfill_command_links_profile(self):
         from django.core.management import call_command
         from io import StringIO

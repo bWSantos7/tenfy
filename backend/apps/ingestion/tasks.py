@@ -46,14 +46,16 @@ def _record_connector_success(connector_key: str):
 
 
 @shared_task(bind=True, max_retries=2, default_retry_delay=300)
-def run_source(self, data_source_id: int):
+def run_source(self, data_source_id: int, force: bool = False):
     try:
         source = DataSource.objects.select_related('organization').get(pk=data_source_id)
     except DataSource.DoesNotExist:
         logger.error('DataSource %s not found', data_source_id)
         return {'error': 'not_found'}
 
-    if not source.enabled:
+    # `force` lets a dedicated scheduled task (e.g. sync_utr_task) run a source
+    # that is intentionally kept enabled=False to stay out of the hourly sweep.
+    if not source.enabled and not force:
         return {'skipped': True, 'reason': 'disabled'}
 
     # Per-connector circuit breaker — skip if recently blocked
@@ -173,7 +175,7 @@ def sync_utr_task():
     if not ds:
         logger.warning('sync_utr_task: no utr_public DataSource found')
         return {'skipped': True, 'reason': 'no_datasource'}
-    run_source.delay(ds.id)
+    run_source.delay(ds.id, force=True)
     return {'dispatched': ds.id}
 
 

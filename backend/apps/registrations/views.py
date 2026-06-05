@@ -83,6 +83,19 @@ def _edition_is_past(edition) -> bool:
     )
 
 
+def _registration_is_expired(reg) -> bool:
+    """
+    True para inscrição 'Aguardando pagamento' cujo prazo de inscrição já passou.
+
+    Essas inscrições não confirmadas não devem aparecer como ativas (vão para o
+    histórico). Pagas/isentas e desistências não contam aqui.
+    """
+    if reg.is_withdrawn or reg.payment_status in ('paid', 'waived'):
+        return False
+    ec = reg.edition.entry_close_at
+    return bool(ec and ec < timezone.now())
+
+
 def _norm_title(text: str) -> str:
     """Normaliza título para comparação: sem acento, minúsculo, espaços colapsados."""
     import unicodedata as _ud
@@ -199,9 +212,15 @@ class RegistrationViewSet(viewsets.GenericViewSet):
 
         scope = (request.query_params.get('scope') or 'all').strip().lower()
         if scope == 'active':
-            regs = [r for r in regs if not r.is_withdrawn and not _edition_is_past(r.edition)]
+            regs = [
+                r for r in regs
+                if not r.is_withdrawn and not _edition_is_past(r.edition) and not _registration_is_expired(r)
+            ]
         elif scope == 'history':
-            regs = [r for r in regs if r.is_withdrawn or _edition_is_past(r.edition)]
+            regs = [
+                r for r in regs
+                if r.is_withdrawn or _edition_is_past(r.edition) or _registration_is_expired(r)
+            ]
 
         serializer = MyRegistrationSerializer(regs, many=True)
         return Response(serializer.data)

@@ -23,6 +23,7 @@ function getStatusConfig(c: ThemeColors): Record<string, { color: string; icon: 
     confirmed:       { color: c.statusOpen,    icon: 'checkmark-circle', bg: `${c.statusOpen}20` },
     waiting_list:    { color: c.statusClosing, icon: 'time',             bg: `${c.statusClosing}20` },
     pending_payment: { color: c.accentBlue,    icon: 'card',             bg: `${c.accentBlue}20` },
+    expired:         { color: c.statusClosed,  icon: 'alert-circle',     bg: `${c.statusClosed}20` },
     withdrawn:       { color: c.statusClosed,  icon: 'close-circle',     bg: `${c.statusClosed}20` },
   };
 }

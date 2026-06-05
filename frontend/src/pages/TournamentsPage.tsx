@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Search, Filter, Loader2, X, MapPin, List, Calendar, ChevronLeft, ChevronRight, GitCompareArrows, CheckSquare, Square } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Search, Filter, Loader2, X, MapPin, List, Calendar, ChevronLeft, ChevronRight, GitCompareArrows, CheckSquare, Square, Sparkles } from 'lucide-react';
 import { TournamentEditionList } from '../types';
 import {
   listEditions,
   listOrganizations,
   calendar as calendarApi,
+  compatibleForProfile,
   TournamentFilters,
   OrganizationOption,
 } from '../services/tournaments';
@@ -119,6 +120,11 @@ function saveFilters(state: PersistedFilters) {
 export const TournamentsPage: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  // Compatible mode: "Ver todos" from the home "Compatíveis com você" section.
+  // Lists the full compatibility-filtered set for the active profile (federation,
+  // category, modality, location), not the generic catalogue.
+  const compatMode = searchParams.get('compat') === '1';
   const saved = useRef<PersistedFilters | null>(loadSavedFilters());
 
   const [viewMode, setViewMode] = useState<ViewMode>('list');
@@ -226,6 +232,20 @@ export const TournamentsPage: React.FC = () => {
     if (viewMode !== 'list') return;
     let cancel = false;
     setLoading(true);
+
+    // Compatible mode: full compatibility-filtered list for the active profile.
+    if (compatMode && primaryProfileId) {
+      compatibleForProfile(primaryProfileId, { ...filters, page, page_size: 20 } as TournamentFilters)
+        .then((data) => {
+          if (cancel) return;
+          setItems(sortTournaments(data.results));
+          setTotalPages(Math.max(1, Math.ceil((data.count || 0) / 20)));
+        })
+        .catch(() => setItems([]))
+        .finally(() => { if (!cancel) setLoading(false); });
+      return () => { cancel = true; };
+    }
+
     const nearFilter = nearMe && primaryProfileId ? { near_profile: primaryProfileId } : {};
     listEditions({ ...filters, ...nearFilter, page, page_size: 20, ordering: 'status_priority,start_date' })
       .then((data) => {
@@ -236,7 +256,7 @@ export const TournamentsPage: React.FC = () => {
       .catch(() => setItems([]))
       .finally(() => { if (!cancel) setLoading(false); });
     return () => { cancel = true; };
-  }, [filters, page, nearMe, primaryProfileId, viewMode]);
+  }, [filters, page, nearMe, primaryProfileId, viewMode, compatMode]);
 
   // Load calendar view
   useEffect(() => {
@@ -338,6 +358,22 @@ export const TournamentsPage: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Compatible-mode banner */}
+      {compatMode && (
+        <div className="flex items-center justify-between gap-2 rounded-xl border border-accent-neon/40 bg-accent-neon/5 px-3 py-2">
+          <span className="flex items-center gap-1.5 text-sm text-accent-neon font-medium">
+            <Sparkles className="w-4 h-4" />
+            Mostrando apenas torneios compatíveis com o seu perfil
+          </span>
+          <button
+            className="text-xs text-accent-blue hover:underline shrink-0"
+            onClick={() => { setSearchParams({}); setPage(1); }}
+          >
+            Ver todos os torneios
+          </button>
+        </div>
+      )}
 
       {/* Filters row */}
       <div className="flex items-center gap-2 flex-wrap">

@@ -340,7 +340,7 @@ export const HomePage: React.FC = () => {
           icon={<Sparkles className="w-4 h-4 text-accent-neon" />}
           emptyText="Nenhum torneio compatível encontrado. Verifique se o perfil está completo (modalidade, classe, UF) ou aguarde novas ingestões (a cada hora)."
           items={compat}
-          viewAll="/torneios"
+          viewAll="/torneios?compat=1"
           accent
           loading={compatLoading}
         />

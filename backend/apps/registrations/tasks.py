@@ -108,6 +108,16 @@ def _do_match(entries, profiles, edition, registrations_created_ref: list) -> li
                             ext_ids[entry.source] = entry.player_external_id
                             matched_profile.external_ids = ext_ids
                             matched_profile.save(update_fields=['external_ids'])
+                            profile_id = matched_profile.pk
+
+                            def enqueue_ti_bootstrap(pid=profile_id):
+                                try:
+                                    from apps.players.tasks import bootstrap_ti_profile_task
+                                    bootstrap_ti_profile_task.delay(pid)
+                                except Exception as exc:
+                                    logger.warning('Could not enqueue TI bootstrap for profile=%s: %s', pid, exc)
+
+                            transaction.on_commit(enqueue_ti_bootstrap)
 
                         # Guarantee the tournament appears in the user's agenda
                         _ensure_watchlist(matched_profile.user_id, edition)

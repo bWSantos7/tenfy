@@ -49,17 +49,43 @@ class OrganizationViewSet(viewsets.ModelViewSet):
         """
         GET /api/sources/organizations/federations/
 
-        Flat list of every active state federation, ordered by UF. Unlike the
-        default `list` action, this is NOT filtered by tournament editions —
-        the profile/onboarding federation picker must show all 27 federations
-        even when a federation has no tournaments synced yet.
+        Flat list of state federations for the profile/onboarding picker, ordered
+        by UF. Unlike the default `list` action, this is NOT filtered by tournament
+        editions — every federation must be selectable even without synced
+        tournaments.
+
+        Deduplicated by UF: production may hold more than one federation org per
+        state (e.g. an accented canonical row and an ingestion-created unaccented
+        one). We expose a single entry per UF, preferring the canonical name from
+        apps.sources.federations so the label is clean. Eligibility matches by UF,
+        so which duplicate a profile points to does not affect compatibility.
         """
+        from apps.sources.federations import BRAZIL_TENNIS_FEDERATIONS
+
+        canonical_name_by_uf = {uf: name for uf, name, _short in BRAZIL_TENNIS_FEDERATIONS}
+
         qs = (
             Organization.objects
             .filter(is_active=True, type=Organization.TYPE_FEDERATION)
-            .order_by('state', 'short_name', 'name')
+            .order_by('state', 'id')
         )
-        return Response(OrganizationSerializer(qs, many=True).data)
+
+        by_uf: dict[str, Organization] = {}
+        stateless: list[Organization] = []
+        for org in qs:
+            uf = (org.state or '').upper()
+            if not uf:
+                stateless.append(org)
+                continue
+            current = by_uf.get(uf)
+            if current is None:
+                by_uf[uf] = org
+            elif org.name == canonical_name_by_uf.get(uf) and current.name != canonical_name_by_uf.get(uf):
+                # Prefer the canonical-named org for the picker label.
+                by_uf[uf] = org
+
+        deduped = sorted(by_uf.values(), key=lambda o: o.state) + stateless
+        return Response(OrganizationSerializer(deduped, many=True).data)
 
 
 class DataSourceViewSet(viewsets.ModelViewSet):

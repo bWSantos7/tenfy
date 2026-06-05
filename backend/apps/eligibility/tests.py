@@ -712,6 +712,21 @@ class FederationScopeTestCase(TestCase):
         self.assertTrue(res['included'])
         self.assertEqual(res['status'], DISTANCE_OWN_FEDERATION)
 
+    def test_own_federation_matched_by_uf_across_duplicate_orgs(self):
+        from apps.eligibility.location import profile_state_result, DISTANCE_OWN_FEDERATION
+        from apps.sources.models import Organization
+        # Production has duplicate SP federation orgs (accented vs ingestion-created).
+        # The athlete's profile may point to one while tournaments hang off the other;
+        # matching by UF must still treat it as the athlete's own federation.
+        fpt_dup = Organization.objects.create(
+            name='Federacao Paulista de Tenis', short_name='FPT',
+            type=Organization.TYPE_FEDERATION, state='SP',
+        )
+        ed = self._edition(fpt_dup, circuit='Infantojuvenil', name='Estadual FPT (dup)', state='SP')
+        res = profile_state_result(self.profile, ed)  # profile.federation = self.fpt
+        self.assertTrue(res['included'])
+        self.assertEqual(res['status'], DISTANCE_OWN_FEDERATION)
+
     def test_other_federation_state_excluded(self):
         from apps.eligibility.location import profile_state_result, DISTANCE_OTHER_FEDERATION
         ed = self._edition(self.fct, circuit='Infantojuvenil', name='Estadual FCT', state='RJ')

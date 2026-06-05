@@ -216,6 +216,55 @@ class FederationTestCase(TestCase):
         self.assertEqual(p.federation_state, '')
 
 
+class DedupeFederationOrgsTestCase(TestCase):
+    """dedupe_federation_orgs merges duplicate federation orgs per UF."""
+
+    def test_merges_into_org_with_tournaments_and_repoints(self):
+        from django.core.management import call_command
+        from apps.sources.models import Organization
+        from apps.tournaments.models import Tournament
+
+        # Seeded canonical SP org (accented, no tournaments) from players.0012.
+        canonical = Organization.objects.get(type='federation', state='SP')
+        # Ingestion-created duplicate (unaccented) that actually holds tournaments.
+        dup = Organization.objects.create(
+            name='Federacao Paulista de Tenis', short_name='FPT',
+            type=Organization.TYPE_FEDERATION, state='SP',
+        )
+        Tournament.objects.create(
+            canonical_name='FPT Open', canonical_slug='fpt-open-dedupe', organization=dup,
+        )
+        user = make_user(email='dedupe@example.com')
+        prof = PlayerProfile.objects.create(
+            user=user, display_name='Dedupe', federation=canonical,
+        )
+
+        call_command('dedupe_federation_orgs', '--apply')
+
+        sp_orgs = Organization.objects.filter(type='federation', state='SP')
+        self.assertEqual(sp_orgs.count(), 1)
+        survivor = sp_orgs.first()
+        # Survivor is the one that held the tournament...
+        self.assertEqual(Tournament.objects.filter(organization=survivor).count(), 1)
+        # ...renamed to the canonical accented name...
+        self.assertEqual(survivor.name, 'Federação Paulista de Tênis')
+        # ...and the profile was repointed to it.
+        prof.refresh_from_db()
+        self.assertEqual(prof.federation_id, survivor.id)
+
+    def test_dry_run_does_not_change_data(self):
+        from django.core.management import call_command
+        from apps.sources.models import Organization
+        Organization.objects.create(
+            name='Federacao Paulista de Tenis', short_name='FPT',
+            type=Organization.TYPE_FEDERATION, state='SP',
+        )
+        call_command('dedupe_federation_orgs')  # no --apply
+        self.assertEqual(
+            Organization.objects.filter(type='federation', state='SP').count(), 2
+        )
+
+
 class PlayerProfileChildRestrictionTestCase(TestCase):
     """Managed child accounts cannot add extra profiles or delete profiles —
     their responsável manages them. (A child's own first profile is created

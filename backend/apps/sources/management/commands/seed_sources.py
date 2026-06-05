@@ -15,21 +15,23 @@ ORGANIZATIONS = [
         'description': 'Confederacao Brasileira de Tenis - entidade nacional.',
     },
     {
-        'name': 'Federacao Paulista de Tenis',
+        # Accented canonical name — must match apps.sources.federations so the
+        # profile picker and ingestion converge on a single org per UF (no dup).
+        'name': 'Federação Paulista de Tênis',
         'short_name': 'FPT',
         'type': Organization.TYPE_FEDERATION,
         'website_url': 'https://fpt.tenisintegrado.com.br',
         'state': 'SP',
     },
     {
-        'name': 'Federacao Mineira de Tenis',
+        'name': 'Federação Mineira de Tênis',
         'short_name': 'FMT',
         'type': Organization.TYPE_FEDERATION,
         'website_url': 'https://www.fmtenis.com.br',
         'state': 'MG',
     },
     {
-        'name': 'Federacao Catarinense de Tenis',
+        'name': 'Federação Catarinense de Tênis',
         'short_name': 'FCT',
         'type': Organization.TYPE_FEDERATION,
         'website_url': 'https://fct.org.br',
@@ -48,7 +50,7 @@ ORGANIZATIONS = [
         'website_url': 'https://letzplay.me',
     },
     {
-        'name': 'Federacao Baiana de Tenis',
+        'name': 'Federação Baiana de Tênis',
         'short_name': 'FBT',
         'type': Organization.TYPE_FEDERATION,
         'website_url': 'https://fbt.com.br',

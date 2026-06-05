@@ -166,6 +166,107 @@ class PlayerProfile(TimestampedModel):
         return timezone.now().year - self.birth_year
 
 
+class ExternalPlayerRanking(TimestampedModel):
+    """
+    Local catalogue of athletes imported from public Tênis Integrado ranking lists.
+
+    One row = one athlete's standing in a specific (ranking, category, season).
+    Unlike registrations.FederationEntry (which is tied to a tournament edition),
+    these rows are pure ranking data and double as a name→TI-profile-id index used
+    to auto-link Tenfy PlayerProfiles.
+
+    Never invent data: every row preserves its source_url and raw_data so the
+    origin stays traceable, and `confidence` reflects that it came from an
+    official public page.
+    """
+
+    SOURCE_CBT = 'cbt'
+    SOURCE_FPT = 'fpt'
+    SOURCE_FCT = 'fct'
+    SOURCE_FBT = 'fbt'
+    SOURCE_FED = 'fed'
+    SOURCE_CHOICES = [
+        (SOURCE_CBT, 'CBT — Confederação Brasileira de Tênis'),
+        (SOURCE_FPT, 'FPT — Federação Paulista de Tênis'),
+        (SOURCE_FCT, 'FCT — Federação Catarinense de Tênis'),
+        (SOURCE_FBT, 'FBT — Federação Baiana de Tênis'),
+        (SOURCE_FED, 'Federação (via Tênis Integrado)'),
+    ]
+
+    CONFIDENCE_HIGH = 'high'
+    CONFIDENCE_MEDIUM = 'medium'
+    CONFIDENCE_LOW = 'low'
+    CONFIDENCE_CHOICES = [
+        (CONFIDENCE_HIGH, 'Alta — página oficial pública'),
+        (CONFIDENCE_MEDIUM, 'Média'),
+        (CONFIDENCE_LOW, 'Baixa'),
+    ]
+
+    # ── Athlete identity ─────────────────────────────────────────────────────
+    ti_player_id = models.CharField(
+        max_length=20, db_index=True,
+        help_text='Numeric Tênis Integrado profile id (perfil2/index/{id})',
+    )
+    player_name = models.CharField(max_length=200)
+    player_name_normalized = models.CharField(
+        max_length=200, blank=True, db_index=True,
+        help_text='Accent/case-folded name used for auto-linking lookups',
+    )
+    uf = models.CharField(max_length=2, blank=True)
+    age = models.PositiveIntegerField(null=True, blank=True)
+    club = models.CharField(max_length=200, blank=True)
+
+    # ── Ranking context ──────────────────────────────────────────────────────
+    source = models.CharField(max_length=20, choices=SOURCE_CHOICES, db_index=True)
+    federation = models.CharField(max_length=120, blank=True)
+    ranking_external_id = models.CharField(
+        max_length=20, db_index=True,
+        help_text='TI ranking id (ranking_painel_classif/index/{id})',
+    )
+    ranking_name = models.CharField(max_length=200, blank=True)
+    category_code = models.CharField(
+        max_length=20, blank=True, help_text='TI id_categoria value',
+    )
+    category_label = models.CharField(max_length=200, blank=True)
+    modality = models.CharField(max_length=40, blank=True, default='')
+
+    # ── Ranking values ───────────────────────────────────────────────────────
+    position = models.PositiveIntegerField(null=True, blank=True)
+    points = models.CharField(max_length=20, blank=True)
+    wtn = models.CharField(max_length=20, blank=True)
+    season = models.PositiveIntegerField(null=True, blank=True, db_index=True)
+    classified_at = models.DateField(
+        null=True, blank=True, help_text='Cut-off (corte) date of the standing',
+    )
+
+    # ── Provenance ───────────────────────────────────────────────────────────
+    source_url = models.URLField(max_length=500, blank=True)
+    confidence = models.CharField(
+        max_length=10, choices=CONFIDENCE_CHOICES, default=CONFIDENCE_HIGH,
+    )
+    raw_data = models.JSONField(default=dict, blank=True)
+    synced_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['source', 'ranking_external_id', 'category_code', 'position']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['source', 'ranking_external_id', 'category_code', 'ti_player_id', 'season'],
+                name='unique_external_ranking_entry',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['player_name_normalized']),
+            models.Index(fields=['ti_player_id']),
+            models.Index(fields=['source', 'ranking_external_id']),
+            models.Index(fields=['source', 'season']),
+        ]
+
+    def __str__(self):
+        pos = f'{self.position}º ' if self.position else ''
+        return f'{pos}{self.player_name} (TI {self.ti_player_id}) — {self.source}/{self.category_label}'
+
+
 class PlayerProfileCategory(TimestampedModel):
     """Links a player profile to categories they play."""
     CONFIDENCE_DECLARED = 'declared'

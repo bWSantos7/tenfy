@@ -162,7 +162,19 @@ class PlayerProfileViewSet(viewsets.ModelViewSet):
                 'detail': 'Nenhum ID do Tênis Integrado vinculado a este perfil.',
                 'results': [],
                 'rankings': [],
+                'catalog_rankings': [],
             })
+
+        # Federation/CBT rankings imported into the local catalogue for this athlete.
+        # Already kept fresh by the daily sync_ti_rankings_task — no scraping here.
+        from .models import ExternalPlayerRanking
+        from .serializers import ExternalPlayerRankingSerializer
+        catalog_qs = (
+            ExternalPlayerRanking.objects
+            .filter(ti_player_id=str(ti_id))
+            .order_by('source', 'ranking_name', 'category_label', 'position')
+        )
+        catalog_rankings = ExternalPlayerRankingSerializer(catalog_qs, many=True).data
 
         now = timezone.now()
         force_refresh = request.query_params.get('refresh') == '1'
@@ -191,6 +203,7 @@ class PlayerProfileViewSet(viewsets.ModelViewSet):
                     'is_stale': results_stale or rankings_stale,
                     'results': profile.ti_results_cache or [],
                     'rankings': profile.ti_rankings_cache or [],
+                    'catalog_rankings': catalog_rankings,
                     'results_synced_at': profile.ti_results_synced_at,
                     'rankings_synced_at': profile.ti_rankings_synced_at,
                 }, status=status.HTTP_429_TOO_MANY_REQUESTS)
@@ -219,6 +232,7 @@ class PlayerProfileViewSet(viewsets.ModelViewSet):
             'sync_error': profile.ti_sync_error or None,
             'results': profile.ti_results_cache or [],
             'rankings': profile.ti_rankings_cache or [],
+            'catalog_rankings': catalog_rankings,
             'results_synced_at': profile.ti_results_synced_at,
             'rankings_synced_at': profile.ti_rankings_synced_at,
         })

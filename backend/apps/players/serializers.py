@@ -1,5 +1,21 @@
 from rest_framework import serializers
-from .models import PlayerProfile, PlayerCategory, PlayerProfileCategory
+from .models import (
+    PlayerProfile, PlayerCategory, PlayerProfileCategory, ExternalPlayerRanking,
+)
+
+
+class ExternalPlayerRankingSerializer(serializers.ModelSerializer):
+    """Normalised ranking entry for the athlete's profile 'Rankings do atleta' section."""
+    category = serializers.CharField(source='category_label', read_only=True)
+    source_label = serializers.CharField(source='get_source_display', read_only=True)
+
+    class Meta:
+        model = ExternalPlayerRanking
+        fields = (
+            'id', 'ranking_name', 'federation', 'source', 'source_label',
+            'category', 'modality', 'position', 'points', 'wtn',
+            'season', 'classified_at', 'source_url', 'synced_at',
+        )
 
 
 class PlayerCategorySerializer(serializers.ModelSerializer):

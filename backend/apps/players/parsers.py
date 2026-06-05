@@ -235,7 +235,7 @@ def extract_ti_id(external_ids: dict) -> tuple[str | None, str | None]:
     if not external_ids:
         return None, None
 
-    TI_SOURCES = ('cbt', 'fpt', 'fbt', 'fct')  # sources that use TenisIntegrado
+    TI_SOURCES = ('cbt', 'fpt', 'fbt', 'fct', 'fed')  # sources that use TenisIntegrado
 
     for source in TI_SOURCES:
         val = external_ids.get(source)

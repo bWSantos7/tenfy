@@ -26,6 +26,24 @@ export interface TiRankingEntry {
   _raw?: Record<string, string>;
 }
 
+/** A structured ranking entry from the local catalogue (CBT / federations via Tênis Integrado). */
+export interface CatalogRanking {
+  id: number;
+  ranking_name?: string;
+  federation?: string;
+  source?: string;
+  source_label?: string;
+  category?: string;
+  modality?: string;
+  position?: number | null;
+  points?: string;
+  wtn?: string;
+  season?: number | null;
+  classified_at?: string | null;
+  source_url?: string;
+  synced_at?: string | null;
+}
+
 export interface TiData {
   has_ti_id: boolean;
   ti_id?: string;
@@ -37,6 +55,7 @@ export interface TiData {
   sync_error?: string | null;
   results: TiResultEntry[];
   rankings: TiRankingEntry[];
+  catalog_rankings?: CatalogRanking[];
   results_synced_at?: string | null;
   rankings_synced_at?: string | null;
   detail?: string;

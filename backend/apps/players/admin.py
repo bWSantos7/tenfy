@@ -1,5 +1,8 @@
 from django.contrib import admin
-from .models import PlayerProfile, PlayerCategory, PlayerProfileCategory
+
+from .models import (
+    PlayerProfile, PlayerCategory, PlayerProfileCategory, ExternalPlayerRanking,
+)
 
 
 @admin.register(PlayerCategory)
@@ -20,3 +23,18 @@ class PlayerProfileAdmin(admin.ModelAdmin):
     list_filter = ('competitive_level', 'home_state', 'gender', 'is_primary')
     search_fields = ('display_name', 'user__email')
     inlines = [PlayerProfileCategoryInline]
+
+
+@admin.register(ExternalPlayerRanking)
+class ExternalPlayerRankingAdmin(admin.ModelAdmin):
+    """Audit view for athletes imported from public Tênis Integrado rankings."""
+    list_display = (
+        'position', 'player_name', 'ti_player_id', 'source', 'category_label',
+        'uf', 'points', 'season', 'classified_at', 'synced_at',
+    )
+    list_filter = ('source', 'season', 'modality', 'uf', 'ranking_name', 'confidence')
+    search_fields = ('player_name', 'player_name_normalized', 'ti_player_id', 'club')
+    list_select_related = False
+    ordering = ('source', 'ranking_external_id', 'category_code', 'position')
+    readonly_fields = ('synced_at', 'created_at', 'updated_at', 'raw_data')
+    list_per_page = 50

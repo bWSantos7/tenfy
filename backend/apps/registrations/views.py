@@ -11,7 +11,7 @@ from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
 
-from apps.players.models import PlayerProfile
+from apps.players.models import PlayerProfile, ExternalPlayerRanking
 from apps.tournaments.models import TournamentEdition, TournamentCategory
 from .models import FederationEntry, TournamentRegistration, MatchingLog
 from .serializers import (
@@ -23,7 +23,32 @@ from .serializers import (
     REGISTRATION_STATUS_LABELS,
     RegistrationCreateSerializer,
     compute_registration_status,
+    ti_id_from_external,
 )
+
+
+def _build_ti_info(entries):
+    """Mapa {ti_player_id: {'uf','age'}} a partir do catálogo local do Tênis Integrado,
+    para enriquecer os inscritos com UF/idade via o id do TI (player_external_id)."""
+    ids = set()
+    for e in entries:
+        tid = ti_id_from_external(e.player_external_id)
+        if tid:
+            ids.add(tid)
+    if not ids:
+        return {}
+    info = {}
+    rows = (
+        ExternalPlayerRanking.objects
+        .filter(ti_player_id__in=ids)
+        .order_by('ti_player_id', '-season', '-synced_at')
+        .values('ti_player_id', 'uf', 'age')
+    )
+    for row in rows:
+        tid = row['ti_player_id']
+        if tid not in info:  # primeira ocorrência = mais recente (ordenação acima)
+            info[tid] = {'uf': row['uf'] or '', 'age': row['age']}
+    return info
 
 logger = logging.getLogger('apps.registrations')
 
@@ -408,6 +433,9 @@ class RegistrationViewSet(viewsets.GenericViewSet):
             entry._max_participants = cat_max.get(entry.category_text)
             grouped[entry.category_text].append(entry)
 
+        # UF/idade dos inscritos via catálogo do Tênis Integrado (uma consulta).
+        ti_info = _build_ti_info(entries)
+
         result = []
         for cat_text, cat_entries in grouped.items():
             max_p = cat_max.get(cat_text)
@@ -432,7 +460,7 @@ class RegistrationViewSet(viewsets.GenericViewSet):
                     'filled_slots': filled,
                     'remaining_slots': remaining,
                 },
-                'entries': FederationEntrySerializer(cat_entries, many=True).data,
+                'entries': FederationEntrySerializer(cat_entries, many=True, context={'ti_info': ti_info}).data,
             })
 
         if not result:

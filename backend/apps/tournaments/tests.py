@@ -1110,3 +1110,49 @@ class CompatibleStatusOrderingTestCase(TestCase):
         )
         ids = {item['id'] for item in self._compatible()}
         self.assertIn(ed.id, ids)
+
+
+class CountryFilterTestCase(TestCase):
+    """Task 7: country filter + countries endpoint."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(email='country@test.com', password='pass', full_name='C')
+        self.client.force_authenticate(user=self.user)
+        self.cbt = Organization.objects.create(
+            name='CBT País', short_name='CBT', type=Organization.TYPE_CONFEDERATION, state='',
+        )
+        self.cosat = Organization.objects.create(
+            name='COSAT País', short_name='COSAT', type=Organization.TYPE_CONFEDERATION, state='',
+        )
+
+    def _edition(self, org, slug, *, city, state='', country='', country_code=''):
+        venue = Venue.objects.create(name=f'V {slug}', city=city, state=state,
+                                     country=country, country_code=country_code)
+        t = Tournament.objects.create(canonical_name=slug, canonical_slug=slug, organization=org, modality='tennis')
+        return TournamentEdition.objects.create(
+            tournament=t, season_year=2026, title=slug, venue=venue, is_published=True,
+        )
+
+    def test_country_filter_argentina(self):
+        arg = self._edition(self.cosat, 'cosat-arg', city='Rosario', state='AR', country='Argentina', country_code='ARG')
+        self._edition(self.cosat, 'cosat-chl', city='Santiago', state='CH', country='Chile', country_code='CHL')
+        self._edition(self.cbt, 'cbt-sp', city='São Paulo', state='SP')  # Brazilian federation, no code
+        res = self.client.get('/api/tournaments/editions/?country=ARG')
+        ids = {r['id'] for r in res.data['results']}
+        self.assertEqual(ids, {arg.id})
+
+    def test_country_filter_brazil_includes_empty_code(self):
+        br_fed = self._edition(self.cbt, 'cbt-rj', city='Rio', state='RJ')          # country_code=''
+        br_intl = self._edition(self.cosat, 'cosat-br', city='Porto Alegre', state='BR', country='Brasil', country_code='BRA')
+        self._edition(self.cosat, 'cosat-uy', city='Montevideo', state='UR', country='Uruguai', country_code='URY')
+        res = self.client.get('/api/tournaments/editions/?country=BRA')
+        ids = {r['id'] for r in res.data['results']}
+        self.assertEqual(ids, {br_fed.id, br_intl.id})
+
+    def test_countries_endpoint(self):
+        self._edition(self.cosat, 'cosat-arg2', city='Rosario', state='AR', country='Argentina', country_code='ARG')
+        self._edition(self.cbt, 'cbt-sp2', city='São Paulo', state='SP')  # empty code → Brazil surfaced as BRA
+        res = self.client.get('/api/tournaments/editions/countries/')
+        self.assertIn('ARG', res.data)
+        self.assertIn('BRA', res.data)

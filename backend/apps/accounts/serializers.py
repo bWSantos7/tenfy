@@ -1,5 +1,9 @@
+import re
+import unicodedata
+
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
+from django.db.models import Func
 from django.utils import timezone
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
@@ -7,6 +11,36 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 User = get_user_model()
 
 CURRENT_CONSENT_VERSION = '1.0.0'
+
+
+class _NormalizedName(Func):
+    """SQL normalização do nome: trim(regexp_replace(unaccent(lower(x)), '\\s+', ' ')).
+
+    Mantém em paridade com ``normalize_full_name`` (lado Python).
+    """
+    template = "TRIM(REGEXP_REPLACE(UNACCENT(LOWER(%(expressions)s)), '\\s+', ' ', 'g'))"
+    arity = 1
+
+
+def normalize_full_name(name: str) -> str:
+    """Normaliza para comparação: sem acento, minúsculo, espaços colapsados."""
+    folded = unicodedata.normalize('NFKD', name or '').encode('ascii', 'ignore').decode()
+    return re.sub(r'\s+', ' ', folded).strip().lower()
+
+
+def full_name_taken(name: str, *, exclude_pk=None) -> bool:
+    """Task 11: True se já existe usuário com o mesmo nome completo (normalizado).
+
+    Trava absoluta para cadastros novos. Cadastros antigos com nomes iguais
+    permanecem (verificação a nível de aplicação, não constraint de banco).
+    """
+    norm = normalize_full_name(name)
+    if not norm:
+        return False
+    qs = User.objects.annotate(_nn=_NormalizedName('full_name')).filter(_nn=norm)
+    if exclude_pk is not None:
+        qs = qs.exclude(pk=exclude_pk)
+    return qs.exists()
 
 # Base URL for Tênis Integrado player avatar images (external S3 bucket, public CDN).
 # Format: {base}/id{ti_id}/fotos/avatar.jpg
@@ -91,6 +125,11 @@ class RegisterSerializer(serializers.ModelSerializer):
         if not attrs.pop('accept_terms'):
             raise serializers.ValidationError(
                 {'accept_terms': 'É necessário aceitar os termos e a política de privacidade.'}
+            )
+        # Task 11: nome completo não pode repetir um cadastro existente.
+        if full_name_taken(attrs.get('full_name', '')):
+            raise serializers.ValidationError(
+                {'full_name': 'Já existe um cadastro com este nome completo.'}
             )
         return attrs
 
@@ -193,6 +232,11 @@ class ChildAccountCreateSerializer(serializers.Serializer):
             raise serializers.ValidationError('Apenas responsáveis podem cadastrar filhos.')
         if attrs['password'] != attrs['password_confirm']:
             raise serializers.ValidationError({'password': 'As senhas não conferem.'})
+        # Task 11: nome completo do dependente não pode repetir um cadastro existente.
+        if full_name_taken(attrs.get('full_name', '')):
+            raise serializers.ValidationError(
+                {'full_name': 'Já existe um cadastro com este nome completo.'}
+            )
         # Confirma o código enviado ao e-mail do dependente.
         if not verify_email_code(attrs['email'], attrs.get('email_code', '')):
             raise serializers.ValidationError(

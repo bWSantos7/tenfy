@@ -591,3 +591,22 @@ class FullNameDedupTestCase(TestCase):
         r2 = self._register('', 'b@example.com')
         self.assertEqual(r1.status_code, 201, r1.data)
         self.assertEqual(r2.status_code, 201, r2.data)
+
+
+class StrongPasswordValidatorTestCase(TestCase):
+    """Task 14: senha exige maiúscula + número + caractere especial."""
+
+    def _validate(self, pwd):
+        from apps.accounts.validators import StrongPasswordValidator
+        StrongPasswordValidator().validate(pwd)
+
+    def test_rejects_weak_passwords(self):
+        from django.core.exceptions import ValidationError
+        for weak in ['minuscula1!', 'MAIUSCULA1!'.lower(), 'SemNumero!', 'SemEspecial1']:
+            with self.assertRaises(ValidationError, msg=f'{weak!r} deveria ser rejeitada'):
+                self._validate(weak)
+
+    def test_accepts_strong_password(self):
+        # não deve levantar
+        self._validate('Str0ngPass!')
+        self._validate('Abc12345#')

@@ -12,7 +12,7 @@ import { fetchTiData, linkUtr, listProfiles, searchUtr, syncTiData, syncUtr, unl
 import { myRegistrations } from '../../services/registrations';
 import { extractApiError, mediaUrl } from '../../services/api';
 import { CatalogRanking, PlayerProfile, TiData, TiRankingEntry, TournamentRegistration, UtrCandidate } from '../../types';
-import { GENDER_LABELS, LEVEL_LABELS, ROLE_LABELS } from '../../utils/format';
+import { GENDER_LABELS, LEVEL_LABELS, ROLE_LABELS, calculateAge } from '../../utils/format';
 import { editionCountry } from '../../utils/country';
 import { AppText, Button, Card, EmptyState, LoadingBlock, Screen, SectionHeader } from '../../components/ui';
 
@@ -94,6 +94,7 @@ export function PlayerProfileScreen(_: Props) {
   );
 
   const primary = profiles.find((p) => p.is_primary) ?? profiles[0] ?? null;
+  const profileAge = primary ? calculateAge(primary.birth_date, primary.birth_year) : null;
   const avatarLetter = (user?.full_name || user?.email || 'U').slice(0, 1).toUpperCase();
   const roleLabel = ROLE_LABELS[user?.role ?? ''] ?? user?.role ?? '';
 
@@ -201,13 +202,27 @@ export function PlayerProfileScreen(_: Props) {
                   ))}
                 </View>
 
-                {/* Secondary info */}
+                {/* Secondary info — ID, UF/federação, idade (Task 13) */}
                 <View style={{ paddingHorizontal: 16, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-                  {primary.birth_year ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                    <Ionicons name="pricetag-outline" size={13} color={colors.textMuted} />
+                    <AppText variant="muted" style={{ fontSize: 12 }}>ID {primary.user_id}</AppText>
+                  </View>
+                  {(primary.federation_detail || primary.federation_state || primary.home_state) ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                      <Ionicons name="flag-outline" size={13} color={colors.textMuted} />
+                      <AppText variant="muted" style={{ fontSize: 12 }}>
+                        {primary.federation_detail?.short_name
+                          ? `${primary.federation_detail.short_name}${primary.federation_state ? ` (${primary.federation_state})` : ''}`
+                          : (primary.federation_state || primary.home_state)}
+                      </AppText>
+                    </View>
+                  ) : null}
+                  {profileAge != null ? (
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
                       <Ionicons name="calendar-outline" size={13} color={colors.textMuted} />
                       <AppText variant="muted" style={{ fontSize: 12 }}>
-                        Nasc. {primary.birth_year}{primary.sporting_age != null ? ` (${primary.sporting_age} anos)` : ''}
+                        {profileAge} anos{primary.birth_year ? ` · Nasc. ${primary.birth_year}` : ''}
                       </AppText>
                     </View>
                   ) : null}

@@ -93,6 +93,22 @@ export function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((email || '').trim());
 }
 
+/** Idade calculada a partir da data (preferida) ou do ano de nascimento. */
+export function calculateAge(birthDate?: string | null, birthYear?: number | null): number | null {
+  if (birthDate) {
+    const d = new Date(birthDate);
+    if (!Number.isNaN(d.getTime())) {
+      const now = new Date();
+      let age = now.getFullYear() - d.getFullYear();
+      const m = now.getMonth() - d.getMonth();
+      if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--;
+      return age;
+    }
+  }
+  if (birthYear) return new Date().getFullYear() - birthYear;
+  return null;
+}
+
 export const GENDER_LABELS: Record<string, string> = {
   M: 'Masculino',
   F: 'Feminino',

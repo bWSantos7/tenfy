@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   Settings, ExternalLink, Trophy, MapPin, Calendar, User, Users, Plus,
   Link as LinkIcon, Loader2, ChevronRight, Ticket, RefreshCw,
-  Unlink, X, Search,
+  Unlink, X, Search, Hash,
 } from 'lucide-react';
 import { AddChildForm, LinkPlayerModal } from './ProfilePage';
 import toast from 'react-hot-toast';
@@ -13,7 +13,7 @@ import { fetchTiData, linkUtr, listChildProfiles, listChildWatchlist, listChildr
 import { myRegistrations } from '../services/registrations';
 import { mediaUrl } from '../services/api';
 import { resolveAvatar } from '../utils/format';
-import { LEVEL_LABELS, GENDER_LABELS, ROLE_LABELS } from '../utils/format';
+import { LEVEL_LABELS, GENDER_LABELS, ROLE_LABELS, calculateAge } from '../utils/format';
 import { editionCountry } from '../utils/country';
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -143,6 +143,7 @@ export const PlayerProfilePage: React.FC = () => {
 
   const activeProfiles = isParent ? childProfiles : profiles;
   const primary = activeProfiles.find((p) => p.is_primary) ?? activeProfiles[0] ?? null;
+  const profileAge = primary ? calculateAge(primary.birth_date, primary.birth_year) : null;
   const hasUtrData = !!(
     primary?.utr_player_id
     || primary?.utr_singles
@@ -451,15 +452,27 @@ export const PlayerProfilePage: React.FC = () => {
                     ))}
                   </div>
 
-                  {/* Secondary info row */}
+                  {/* Secondary info row — ID, UF/federação, idade (Task 13) */}
                   <div className="px-5 py-3 flex items-center gap-4 flex-wrap">
-                    {primary.birth_year && (
+                    <div className="flex items-center gap-1.5 text-xs text-text-secondary">
+                      <Hash className="w-3.5 h-3.5 text-text-muted shrink-0" />
+                      <span>ID <span className="font-semibold">{primary.user_id}</span></span>
+                    </div>
+                    {(primary.federation_detail || primary.federation_state || primary.home_state) && (
+                      <div className="flex items-center gap-1.5 text-xs text-text-secondary">
+                        <MapPin className="w-3.5 h-3.5 text-text-muted shrink-0" />
+                        <span>
+                          {primary.federation_detail?.short_name
+                            ? `${primary.federation_detail.short_name}${primary.federation_state ? ` (${primary.federation_state})` : ''}`
+                            : (primary.federation_state || primary.home_state)}
+                        </span>
+                      </div>
+                    )}
+                    {profileAge != null && (
                       <div className="flex items-center gap-1.5 text-xs text-text-secondary">
                         <Calendar className="w-3.5 h-3.5 text-text-muted shrink-0" />
-                        <span>Nasc. {primary.birth_year}</span>
-                        {primary.sporting_age != null && (
-                          <span className="text-text-muted">({primary.sporting_age} anos)</span>
-                        )}
+                        <span><span className="font-semibold">{profileAge}</span> anos</span>
+                        {primary.birth_year && <span className="text-text-muted">· Nasc. {primary.birth_year}</span>}
                       </div>
                     )}
                   </div>

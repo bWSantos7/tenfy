@@ -148,6 +148,15 @@ def send_otp_email(self, user_id: int, email: str, full_name: str, code: str, su
             'title': 'Redefinição de senha 🔐',
             'subtitle': f'Olá, <strong style="color:{TEXT}">{name}</strong>! Use o código abaixo para redefinir sua senha.',
         },
+        'dependent': {
+            'subject': f'[{APP_NAME}] Código para confirmar e-mail de dependente',
+            'preview': f'Código para confirmar este e-mail: {code} — válido por 10 minutos.',
+            'title': 'Confirmação de e-mail ✉️',
+            'subtitle': (
+                f'Olá! Um responsável está cadastrando um dependente no {APP_NAME} com este '
+                f'e-mail. Informe o código abaixo para confirmar que o e-mail é válido.'
+            ),
+        },
     }
     c = cfg.get(subject_key, cfg['verify'])
 

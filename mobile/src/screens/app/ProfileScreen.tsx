@@ -15,6 +15,7 @@ import {
   cancelDependentInvite, createChildProfile, createChildWithProfile, deleteProfile, listChildren,
   listChildProfiles, listProfiles, listSentInvites, removeChild, requestDataExport,
   searchPlayersForInvite, sendChildPasswordReset, sendDependentInvite, setPrimary, updateProfile,
+  requestChildEmailCode,
 } from '../../services/data';
 import { extractApiError, mediaUrl } from '../../services/api';
 import { DependentInvite, ParentChild, PlayerProfile, PlayerSearchResult } from '../../types';
@@ -664,6 +665,31 @@ function AddDependentForm({ onSuccess, onCancel }: { onSuccess: () => Promise<vo
   const [submitting, setSubmitting] = useState(false);
   const [account, setAccount] = useState({ full_name: '', email: '', password: '', password_confirm: '' });
   const [duplicateEmail, setDuplicateEmail] = useState(false);
+  // Task 10: confirmação do e-mail do dependente por código (OTP) antes de criar.
+  const [emailCode, setEmailCode] = useState('');
+  const [codeSent, setCodeSent] = useState(false);
+  const [sendingCode, setSendingCode] = useState(false);
+
+  async function sendEmailCode() {
+    if (!account.email.trim()) return Toast.show({ type: 'error', text1: 'Informe o e-mail do dependente' });
+    if (!isValidEmail(account.email)) return Toast.show({ type: 'error', text1: 'E-mail inválido', text2: 'Use o formato nome@dominio.com.' });
+    setSendingCode(true);
+    setDuplicateEmail(false);
+    try {
+      await requestChildEmailCode(account.email.trim().toLowerCase());
+      setCodeSent(true);
+      Toast.show({ type: 'success', text1: 'Código enviado', text2: 'Confira o e-mail do dependente.' });
+    } catch (err) {
+      const msg = extractApiError(err).toLowerCase();
+      if (msg.includes('email') && (msg.includes('existe') || msg.includes('cadastro') || msg.includes('already'))) {
+        setDuplicateEmail(true);
+      } else {
+        Toast.show({ type: 'error', text1: 'Não foi possível enviar o código', text2: extractApiError(err), visibilityTime: 6000 });
+      }
+    } finally {
+      setSendingCode(false);
+    }
+  }
   const [profile, setProfile] = useState({
     display_name: '',
     birth_year: '',
@@ -696,6 +722,8 @@ function AddDependentForm({ onSuccess, onCancel }: { onSuccess: () => Promise<vo
     if (!account.full_name.trim()) return Toast.show({ type: 'error', text1: 'Informe o nome do dependente' });
     if (!account.email.trim()) return Toast.show({ type: 'error', text1: 'Informe o e-mail do dependente' });
     if (!isValidEmail(account.email)) return Toast.show({ type: 'error', text1: 'E-mail inválido', text2: 'Use o formato nome@dominio.com.' });
+    if (!codeSent) return Toast.show({ type: 'error', text1: 'Confirme o e-mail', text2: 'Envie e digite o código enviado ao e-mail do dependente.' });
+    if (emailCode.trim().length < 6) return Toast.show({ type: 'error', text1: 'Informe o código de 6 dígitos enviado ao e-mail' });
     if (!account.password) return Toast.show({ type: 'error', text1: 'Defina uma senha' });
     if (account.password.length < 8) return Toast.show({ type: 'error', text1: 'Senha deve ter no mínimo 8 caracteres' });
     if (account.password !== account.password_confirm) return Toast.show({ type: 'error', text1: 'As senhas não conferem' });
@@ -717,6 +745,7 @@ function AddDependentForm({ onSuccess, onCancel }: { onSuccess: () => Promise<vo
           email: account.email.trim().toLowerCase(),
           password: account.password,
           password_confirm: account.password_confirm,
+          email_code: emailCode.trim(),
         },
         {
           display_name: profile.display_name.trim() || account.full_name.trim(),
@@ -787,11 +816,30 @@ function AddDependentForm({ onSuccess, onCancel }: { onSuccess: () => Promise<vo
       <Input
         label="E-mail *"
         value={account.email}
-        onChangeText={(v) => { setAccount({ ...account, email: v }); setDuplicateEmail(false); }}
+        onChangeText={(v) => { setAccount({ ...account, email: v }); setDuplicateEmail(false); setCodeSent(false); setEmailCode(''); }}
         autoCapitalize="none"
         keyboardType="email-address"
         placeholder="email@exemplo.com"
       />
+      <Pressable
+        onPress={sendEmailCode}
+        disabled={sendingCode || !account.email.trim()}
+        style={{ alignSelf: 'flex-start', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 10, backgroundColor: colors.bgElevated, borderWidth: 1, borderColor: colors.borderSubtle, marginBottom: 8, opacity: (sendingCode || !account.email.trim()) ? 0.5 : 1 }}
+      >
+        <AppText variant="caption" style={{ fontWeight: '700', color: colors.accentBlue }}>
+          {sendingCode ? 'Enviando...' : (codeSent ? 'Reenviar código' : 'Enviar código de verificação')}
+        </AppText>
+      </Pressable>
+      {codeSent ? (
+        <Input
+          label="Código de verificação *"
+          value={emailCode}
+          onChangeText={(v) => setEmailCode(v.replace(/\D/g, '').slice(0, 6))}
+          keyboardType="number-pad"
+          placeholder="000000"
+          maxLength={6}
+        />
+      ) : null}
 
       {duplicateEmail ? (
         <View style={{ backgroundColor: `${colors.accentBlue}10`, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: `${colors.accentBlue}35`, marginBottom: 4 }}>

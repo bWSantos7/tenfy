@@ -1,4 +1,5 @@
 """OTP utilities: generate and verify 6-digit codes stored in Redis."""
+import hashlib
 import hmac
 import logging
 import secrets
@@ -11,7 +12,24 @@ OTP_TTL = 600        # seconds (10 minutes)
 MAX_ATTEMPTS = 3     # reduced from 5 — fewer brute-force attempts allowed
 LOCKOUT_TTL = 900    # 15-minute lockout after MAX_ATTEMPTS failures
 
-VALID_OTP_TYPES = frozenset({'email', 'phone', 'password_reset'})
+# 'dependent_email' is keyed by the e-mail (not a user) — used to confirm a new
+# dependent's e-mail BEFORE the account exists (Task 10).
+VALID_OTP_TYPES = frozenset({'email', 'phone', 'password_reset', 'dependent_email'})
+
+
+def _email_identifier(email: str) -> str:
+    """Stable, key-safe identifier for an e-mail (no user yet)."""
+    return 'eml-' + hashlib.sha256((email or '').strip().lower().encode()).hexdigest()[:24]
+
+
+def generate_email_code(email: str) -> str:
+    """Generate + store a 6-digit code for confirming an e-mail address."""
+    return generate_and_store(_email_identifier(email), 'dependent_email')
+
+
+def verify_email_code(email: str, code: str) -> bool:
+    """Verify the code sent to confirm an e-mail address."""
+    return verify(_email_identifier(email), 'dependent_email', code)
 
 
 def _code_key(user_id: int, otp_type: str) -> str:

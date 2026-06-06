@@ -600,7 +600,7 @@ const ProfileEditor: React.FC<{
     home_state:        profile.home_state ?? 'SP',
     home_city:         profile.home_city ?? '',
     federation:        profile.federation ?? null,
-    competitive_level: profile.competitive_level ?? 'amateur',
+    competitive_level: profile.competitive_level ?? 'pro',
   });
   // Read modality from the API response first; localStorage is only a cross-device fallback.
   const [modality, setModality] = useState(() => profile.preferred_modality || getProfileModality(profile.id));
@@ -736,7 +736,7 @@ export const AddChildForm: React.FC<{
     home_state: 'SP',
     home_city: '',
     federation: null as number | null,
-    competitive_level: 'amateur',
+    competitive_level: 'pro',
     preferred_modality: 'tennis',
   });
   const [showPwd, setShowPwd] = useState(false);
@@ -1273,7 +1273,7 @@ const ChildProfileEditor: React.FC<{
     home_state:        profile?.home_state ?? 'SP',
     home_city:         profile?.home_city ?? '',
     federation:        profile?.federation ?? null,
-    competitive_level: profile?.competitive_level ?? 'amateur',
+    competitive_level: profile?.competitive_level ?? 'pro',
     preferred_modality: profile?.preferred_modality ?? 'tennis',
   });
   const [saving, setSaving] = useState(false);

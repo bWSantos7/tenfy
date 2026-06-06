@@ -697,7 +697,7 @@ function AddDependentForm({ onSuccess, onCancel }: { onSuccess: () => Promise<vo
     home_state: 'SP',
     home_city: '',
     federation: null as number | null,
-    competitive_level: 'amateur',
+    competitive_level: 'pro',
   });
   const [cities, setCities] = useState<{ value: string; label: string }[]>([]);
   const [loadingCities, setLoadingCities] = useState(false);
@@ -956,7 +956,7 @@ function CreateChildProfileForm({ link, onSuccess, onCancel }: {
     home_state: 'SP',
     home_city: '',
     federation: null as number | null,
-    competitive_level: 'amateur',
+    competitive_level: 'pro',
   });
   const [cities, setCities] = useState<{ value: string; label: string }[]>([]);
   const [loadingCities, setLoadingCities] = useState(false);
@@ -1200,7 +1200,7 @@ function ProfileEditor({ profile, onSaved, onCancel, restrictedMode = false }: {
     home_state: profile.home_state ?? 'SP',
     home_city: profile.home_city ?? '',
     federation: profile.federation ?? null,
-    competitive_level: profile.competitive_level ?? 'amateur',
+    competitive_level: profile.competitive_level ?? 'pro',
   });
   const [modality, setModality] = React.useState(profile.preferred_modality ?? '');
 

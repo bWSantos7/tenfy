@@ -115,12 +115,12 @@ export const ROLE_LABELS: Record<string, string> = {
   admin: 'Administrador(a)',
 };
 
+// Níveis padronizados conforme CBT (Task 12) — por faixa etária.
 export const LEVEL_LABELS: Record<string, string> = {
-  beginner: 'Iniciante',
-  amateur: 'Amador',
-  federated: 'Federado',
+  kids: 'Crianças',
   youth: 'Juvenil',
   pro: 'Profissional',
+  seniors: 'Idosos',
 };
 
 

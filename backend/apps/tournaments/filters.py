@@ -42,7 +42,7 @@ class TournamentEditionFilter(filters.FilterSet):
 
     # Level-based tournament type filter derived from PlayerProfile.competitive_level.
     # Automatically applied by the frontend/mobile based on the active profile.
-    # Values: 'youth' | 'beginner' | 'amateur' | 'federated' | 'pro'
+    # Values (níveis CBT): 'kids' | 'youth' | 'pro' | 'seniors'
     player_level = filters.CharFilter(method='filter_player_level')
 
     class Meta:
@@ -117,17 +117,20 @@ class TournamentEditionFilter(filters.FilterSet):
 
     def filter_player_level(self, queryset, name, value):
         """
-        Coarse tournament-type filter based on PlayerProfile.competitive_level.
+        Coarse tournament-type filter based on PlayerProfile.competitive_level
+        (níveis CBT — Task 12):
 
-        'youth'  → is_youth=True/None, excludes circuits with 'kids' keyword
-                   (keeps Infantojuvenil, FPT Juniors etc.; removes Tennis Kids)
-
-        adult levels (beginner/amateur/federated/pro)
-                 → is_youth=False/None, excludes circuits containing
-                   'juvenil' or 'kids' keywords
+        'kids'    → is_youth=True/None (inclui torneios Tennis Kids/infantis)
+        'youth'   → is_youth=True/None, exclui circuitos 'kids'
+                    (mantém Infantojuvenil, FPT Juniors; remove Tennis Kids)
+        'pro'/'seniors' (adultos)
+                  → is_youth=False/None, exclui circuitos 'juvenil'/'kids'
         """
         if not value:
             return queryset
+
+        if value == 'kids':
+            return queryset.filter(Q(is_youth=True) | Q(is_youth__isnull=True))
 
         if value == 'youth':
             return (
@@ -136,7 +139,7 @@ class TournamentEditionFilter(filters.FilterSet):
                 .exclude(tournament__circuit__icontains='kids')
             )
 
-        if value in ('beginner', 'amateur', 'federated', 'pro'):
+        if value in ('pro', 'seniors'):
             return (
                 queryset
                 .filter(Q(is_youth=False) | Q(is_youth__isnull=True))

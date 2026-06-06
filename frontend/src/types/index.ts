@@ -158,7 +158,7 @@ export interface PlayerProfile {
   federation: number | null;     // id da federação (Organization). Fonte da verdade p/ elegibilidade
   federation_detail?: Federation | null;
   federation_state?: string;     // UF da federação (read-only)
-  competitive_level: 'beginner' | 'amateur' | 'federated' | 'youth' | 'pro';
+  competitive_level: 'kids' | 'youth' | 'pro' | 'seniors';
   dominant_hand: 'R' | 'L' | '';
   preferred_modality: string;
   is_primary: boolean;

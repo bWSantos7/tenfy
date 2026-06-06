@@ -38,9 +38,9 @@ class PlayerProfileModelTestCase(TestCase):
         with self.assertRaises(IntegrityError):
             PlayerProfile.objects.create(user=self.user, display_name='Dup Name')
 
-    def test_default_competitive_level_is_amateur(self):
+    def test_default_competitive_level_is_pro(self):
         p = PlayerProfile.objects.create(user=self.user, display_name='Level Test')
-        self.assertEqual(p.competitive_level, PlayerProfile.LEVEL_AMATEUR)
+        self.assertEqual(p.competitive_level, PlayerProfile.LEVEL_PRO)
 
     def test_default_travel_radius_is_100(self):
         p = PlayerProfile.objects.create(user=self.user, display_name='Radius Test')
@@ -94,7 +94,7 @@ class PlayerProfileAPITestCase(TestCase):
     def test_create_profile(self):
         res = self.client.post('/api/players/profiles/', {
             'display_name': 'New Profile',
-            'competitive_level': 'amateur',
+            'competitive_level': 'pro',
         }, format='json')
         self.assertEqual(res.status_code, 201)
         self.assertEqual(res.data['display_name'], 'New Profile')
@@ -142,7 +142,7 @@ class PlayerProfileAPITestCase(TestCase):
         PlayerProfile.objects.create(user=self.user, display_name='Existing')
         res = self.client.post('/api/players/profiles/', {
             'display_name': 'Another',
-            'competitive_level': 'amateur',
+            'competitive_level': 'pro',
         }, format='json')
         self.assertEqual(res.status_code, 403)
 
@@ -185,7 +185,7 @@ class FederationTestCase(TestCase):
     def test_create_profile_with_federation(self):
         res = self.client.post('/api/players/profiles/', {
             'display_name': 'Fed Player',
-            'competitive_level': 'amateur',
+            'competitive_level': 'pro',
             'federation': self.fpt.id,
         }, format='json')
         self.assertEqual(res.status_code, 201)
@@ -197,7 +197,7 @@ class FederationTestCase(TestCase):
         # Residence UF stays independent from the federation UF.
         res = self.client.post('/api/players/profiles/', {
             'display_name': 'Lives Elsewhere',
-            'competitive_level': 'amateur',
+            'competitive_level': 'pro',
             'home_state': 'MG',
             'federation': self.fpt.id,
         }, format='json')

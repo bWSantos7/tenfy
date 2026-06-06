@@ -64,17 +64,17 @@ class PlayerProfile(TimestampedModel):
     A competitive profile that belongs to a user.
     A single user may manage multiple profiles (coach / parent mode).
     """
-    LEVEL_AMATEUR = 'amateur'
-    LEVEL_FEDERATED = 'federated'
+    # Níveis padronizados conforme CBT (Task 12): faixa etária, não habilidade.
+    # ≤10 → Crianças, 11-18 → Juvenil, 19-59 → Profissional, ≥60 → Idosos.
+    LEVEL_KIDS = 'kids'
     LEVEL_YOUTH = 'youth'
     LEVEL_PRO = 'pro'
-    LEVEL_BEGINNER = 'beginner'
+    LEVEL_SENIORS = 'seniors'
     LEVEL_CHOICES = [
-        (LEVEL_BEGINNER, 'Principiante'),
-        (LEVEL_AMATEUR, 'Amador'),
-        (LEVEL_FEDERATED, 'Federado'),
+        (LEVEL_KIDS, 'Crianças'),
         (LEVEL_YOUTH, 'Juvenil'),
         (LEVEL_PRO, 'Profissional'),
+        (LEVEL_SENIORS, 'Idosos'),
     ]
 
     GENDER_M = 'M'
@@ -101,7 +101,7 @@ class PlayerProfile(TimestampedModel):
     home_city = models.CharField(max_length=120, blank=True)
     travel_radius_km = models.PositiveIntegerField(default=100)
     competitive_level = models.CharField(
-        max_length=20, choices=LEVEL_CHOICES, default=LEVEL_AMATEUR
+        max_length=20, choices=LEVEL_CHOICES, default=LEVEL_PRO
     )
     dominant_hand = models.CharField(max_length=1, choices=HAND_CHOICES, blank=True)
     is_primary = models.BooleanField(default=True)

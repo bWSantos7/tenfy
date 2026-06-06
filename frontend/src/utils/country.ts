@@ -79,11 +79,19 @@ export function resolveCountry(code?: string | null): CountryInfo | null {
   return null;
 }
 
-/** Emoji flag from an ISO alpha-2 code (works on web; not all Android render it). */
+/** Emoji flag from an ISO alpha-2 code. NB: Windows/Chrome does NOT render flag
+ *  emojis (no country flags in Segoe UI Emoji), so prefer flagUrl() for display. */
 export function flagEmoji(code2: string): string {
   const c = (code2 || '').trim().toUpperCase();
   if (c.length !== 2) return '';
   return c.replace(/./g, (ch) => String.fromCodePoint(127397 + ch.charCodeAt(0)));
+}
+
+/** Flag image URL (flagcdn) for an ISO alpha-2 code — renders on every OS, unlike
+ *  emoji which is missing on Windows. */
+export function flagUrl(code2: string): string {
+  const c = (code2 || '').trim().toLowerCase();
+  return c.length === 2 ? `https://flagcdn.com/h20/${c}.png` : '';
 }
 
 /**
@@ -94,13 +102,13 @@ export function flagEmoji(code2: string): string {
 export function editionCountry(opts: {
   venue_country?: string | null;
   venue_country_code?: string | null;
-}): { code2: string; name: string; flag: string } | null {
+}): { code2: string; name: string; flag: string; flagUrl: string } | null {
   const info = resolveCountry(opts.venue_country_code);
   if (!info) {
     // No mappable code: still show an explicit country name if present.
     const name = (opts.venue_country || '').trim();
-    return name ? { code2: '', name, flag: '' } : null;
+    return name ? { code2: '', name, flag: '', flagUrl: '' } : null;
   }
   const name = (opts.venue_country || '').trim() || info.name;
-  return { code2: info.code2, name, flag: flagEmoji(info.code2) };
+  return { code2: info.code2, name, flag: flagEmoji(info.code2), flagUrl: flagUrl(info.code2) };
 }

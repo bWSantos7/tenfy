@@ -211,11 +211,10 @@ export const TournamentDetailPage: React.FC = () => {
   const cityState = country
     ? [ed.venue_detail?.city, country.name].filter(Boolean).join(', ')
     : [ed.venue_detail?.city, ed.venue_detail?.state].filter(Boolean).join('/');
-  const locationParts = [
+  const location = [
     ed.venue_detail?.name && ed.venue_detail.name !== 'CBT' ? ed.venue_detail.name : null,
     cityState,
   ].filter(Boolean).join(' • ');
-  const location = [country?.flag, locationParts].filter(Boolean).join(' ');
   const regLink = ed.links.find((l) => l.link_type === 'registration') || null;
   const regURL = regLink?.url || ed.official_source_url;
   const regulation = ed.links.find((l) => l.link_type === 'regulation') || null;
@@ -254,7 +253,9 @@ export const TournamentDetailPage: React.FC = () => {
         <div className="grid grid-cols-2 gap-3 text-sm pt-2">
           <Stat icon={<Calendar className="w-4 h-4" />} label="Período"
             value={fmtDateRange(ed.start_date, ed.end_date)} />
-          <Stat icon={<MapPin className="w-4 h-4" />} label="Local"
+          <Stat icon={country?.flagUrl
+              ? <img src={country.flagUrl} alt="" className="w-5 h-4 rounded-[2px] object-cover" />
+              : <MapPin className="w-4 h-4" />} label="Local"
             value={location || '—'} />
           <Stat icon={<Clock className="w-4 h-4" />} label="Prazo de inscrição"
             value={ed.entry_close_at ? fmtDateTime(ed.entry_close_at) : '—'}

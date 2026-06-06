@@ -119,6 +119,28 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
             return TournamentEditionDetailSerializer
         return TournamentEditionListSerializer
 
+    @action(detail=False)
+    def countries(self, request):
+        """
+        GET /api/tournaments/editions/countries/
+
+        Distinct ISO alpha-3 country codes present among published editions, for
+        the country filter dropdown. 'BRA' is always included (BR federations
+        leave country_code empty, but those tournaments are Brazilian).
+        """
+        codes = set(
+            TournamentEdition.objects
+            .filter(is_published=True)
+            .exclude(venue__country_code='')
+            .exclude(venue__country_code__isnull=True)
+            .values_list('venue__country_code', flat=True)
+            .distinct()
+        )
+        # Brazilian federation editions have an empty code — surface Brazil when present.
+        if TournamentEdition.objects.filter(is_published=True, venue__country_code='').exists():
+            codes.add('BRA')
+        return Response(sorted(c.upper() for c in codes if c))
+
     def _build_compatible_candidate_filter(self, profile, include_category_up=False):
         from apps.players.models import PlayerCategory
         from apps.eligibility.services import YOUTH_CATEGORY_BUCKETS, official_youth_category_age

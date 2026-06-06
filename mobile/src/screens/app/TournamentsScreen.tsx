@@ -22,9 +22,10 @@ import { AppText, Button, EmptyState, Input, Screen, SelectField } from '../../c
 import { TournamentCard } from '../../components/TournamentCard';
 import { TournamentListSkeleton } from '../../components/Skeleton';
 import { Organization, PlayerProfile, TournamentEditionList } from '../../types';
-import { calendar, listEditions, listFederations, TournamentFilters } from '../../services/tournaments';
+import { calendar, listEditions, listFederations, listCountries, TournamentFilters } from '../../services/tournaments';
 import { listProfiles } from '../../services/data';
 import { pickBestProfile } from '../../utils/profile';
+import { resolveCountry } from '../../utils/country';
 import { getActiveProfileId } from '../../utils/activeProfile';
 
 type Props = BottomTabScreenProps<MainTabParamList, 'Tournaments'>;
@@ -50,6 +51,9 @@ interface FilterHeaderProps {
   federationFilter: number | undefined;
   onFederationChange: (v: string) => void;
   organizationOptions: { value: string; label: string }[];
+  countryFilter: string;
+  onCountryChange: (v: string) => void;
+  countryOptions: { value: string; label: string }[];
   categoryFilter: string;
   onCategoryChange: (v: string) => void;
   stateFilter: string;
@@ -79,6 +83,7 @@ function FilterHeader({
   statusFilter, onStatusChange,
   federationFilter, onFederationChange,
   organizationOptions,
+  countryFilter, onCountryChange, countryOptions,
   categoryFilter, onCategoryChange,
   stateFilter, onStateChange,
   cityFilter, onCityChange,
@@ -144,6 +149,17 @@ function FilterHeader({
             onSelect={onFederationChange}
             placeholder="Todas"
           />
+
+          {countryOptions.length > 0 ? (
+            <SelectField
+              label="País"
+              value={countryFilter}
+              options={countryOptions}
+              onSelect={onCountryChange}
+              placeholder="Todos"
+              searchable
+            />
+          ) : null}
 
           <SelectField
             label="Categoria (por idade)"
@@ -375,6 +391,7 @@ interface FilterCache {
   query: string;
   statusFilter: string;
   federationFilter?: number;
+  countryFilter: string;
   categoryFilter: string;
   stateFilter: string;
   cityFilter: string;
@@ -410,6 +427,8 @@ export function TournamentsScreen({ route }: Props) {
   const [statusFilter, setStatusFilter] = useState(c?.statusFilter ?? '');
   const [federations, setFederations] = useState<Organization[]>([]);
   const [federationFilter, setFederationFilter] = useState<number | undefined>(route.params?.organization ?? c?.federationFilter);
+  const [countryFilter, setCountryFilter] = useState(c?.countryFilter ?? '');
+  const [countryCodes, setCountryCodes] = useState<string[]>([]);
   const [categoryFilter, setCategoryFilter] = useState(c?.categoryFilter ?? '');
   const [stateFilter, setStateFilter] = useState(c?.stateFilter ?? '');
   const [cityFilter, setCityFilter] = useState(c?.cityFilter ?? '');
@@ -438,6 +457,7 @@ export function TournamentsScreen({ route }: Props) {
     if (trimmedQuery) f.q = trimmedQuery;
     if (statusFilter) f.status = statusFilter;
     if (federationFilter) f.organization = federationFilter;
+    if (countryFilter) f.country = countryFilter;
     if (categoryFilter) f.category = categoryFilter;
     if (stateFilter) f.state = stateFilter;
     if (cityFilter) f.city = cityFilter;
@@ -451,7 +471,7 @@ export function TournamentsScreen({ route }: Props) {
     if (level) f.player_level = level;
     return f;
   }, [
-    query, statusFilter, federationFilter, categoryFilter,
+    query, statusFilter, federationFilter, countryFilter, categoryFilter,
     stateFilter, cityFilter, fromDate, toDate, modalityFilter, surfaceFilter,
     nearMe, primaryProfileId, primaryProfile,
   ]);
@@ -463,14 +483,28 @@ export function TournamentsScreen({ route }: Props) {
 
   const hasAnyFilter = useMemo(() => Object.keys(appliedFilters).length > 0, [appliedFilters]);
   const hasAnyInput = useMemo(() => !!(
-    query || statusFilter || federationFilter || categoryFilter
+    query || statusFilter || federationFilter || countryFilter || categoryFilter
     || stateFilter || cityFilter || fromDate || toDate || modalityFilter
     || surfaceFilter || nearMe
   ), [
-    query, statusFilter, federationFilter, categoryFilter,
+    query, statusFilter, federationFilter, countryFilter, categoryFilter,
     stateFilter, cityFilter, fromDate, toDate, modalityFilter, surfaceFilter,
     nearMe,
   ]);
+
+  // Country options for the filter dropdown: Brasil first, then by name.
+  const countryOptions = useMemo(() => {
+    const opts = countryCodes.map((code) => ({
+      value: code,
+      label: resolveCountry(code)?.name || code,
+    }));
+    opts.sort((a, b) => {
+      if (a.value === 'BRA') return -1;
+      if (b.value === 'BRA') return 1;
+      return a.label.localeCompare(b.label, 'pt-BR');
+    });
+    return opts;
+  }, [countryCodes]);
 
   async function loadList(page = 1) {
     const myVersion = ++reloadVersion.current;
@@ -571,17 +605,20 @@ export function TournamentsScreen({ route }: Props) {
     listFederations()
       .then(setFederations)
       .catch(() => setFederations([]));
+    listCountries()
+      .then(setCountryCodes)
+      .catch(() => setCountryCodes([]));
   }, []);
 
   // Persist filters in module-level cache so they survive back navigation
   useEffect(() => {
     _filterCache = {
-      query, statusFilter, federationFilter, categoryFilter,
+      query, statusFilter, federationFilter, countryFilter, categoryFilter,
       stateFilter, cityFilter, fromDate, toDate, modalityFilter, surfaceFilter,
       nearMe, showAdvanced,
     };
   }, [
-    query, statusFilter, federationFilter, categoryFilter,
+    query, statusFilter, federationFilter, countryFilter, categoryFilter,
     stateFilter, cityFilter, fromDate, toDate, modalityFilter, surfaceFilter,
     nearMe, showAdvanced,
   ]);
@@ -600,7 +637,7 @@ export function TournamentsScreen({ route }: Props) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    viewMode, query, statusFilter, federationFilter, categoryFilter,
+    viewMode, query, statusFilter, federationFilter, countryFilter, categoryFilter,
     stateFilter, cityFilter, fromDate, toDate, modalityFilter, surfaceFilter,
     nearMe, primaryProfileId,
   ]);
@@ -612,6 +649,7 @@ export function TournamentsScreen({ route }: Props) {
 
   function clearFilters() {
     setQuery('');
+    setCountryFilter('');
     setStatusFilter('');
     setFederationFilter(undefined);
     setCategoryFilter('');
@@ -694,6 +732,7 @@ export function TournamentsScreen({ route }: Props) {
     statusFilter, onStatusChange: setStatusFilter,
     federationFilter, onFederationChange: handleFederationChange,
     organizationOptions,
+    countryFilter, onCountryChange: setCountryFilter, countryOptions,
     categoryFilter, onCategoryChange: setCategoryFilter,
     stateFilter, onStateChange: setStateFilter,
     cityFilter, onCityChange: setCityFilter,

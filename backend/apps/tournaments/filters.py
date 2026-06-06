@@ -29,6 +29,8 @@ class TournamentEditionFilter(filters.FilterSet):
     status = filters.CharFilter(field_name='status', lookup_expr='iexact')
     q = filters.CharFilter(method='filter_search')
     near_profile = filters.NumberFilter(method='filter_near_profile')
+    # Country filter (RF Task 7) — value is an ISO alpha-3 code (BRA, ARG, CHL...).
+    country = filters.CharFilter(method='filter_country')
 
     # Category filters (RF-009/RF-010): match by raw source text, normalized FK,
     # or normalized category code (e.g. "GA", "16M", "Gold M1").
@@ -48,7 +50,7 @@ class TournamentEditionFilter(filters.FilterSet):
         fields = [
             'from_date', 'to_date', 'state', 'venue_state', 'city', 'organization',
             'organization_slug', 'modality', 'circuit', 'surface',
-            'status', 'q', 'near_profile',
+            'status', 'q', 'near_profile', 'country',
             'category', 'category_id', 'category_code',
             'player_level',
         ]
@@ -68,6 +70,22 @@ class TournamentEditionFilter(filters.FilterSet):
             | Q(categories__normalized_category__code__iexact=value)
             | Q(categories__normalized_category__label_ptbr__icontains=value)
         )
+
+    def filter_country(self, queryset, name, value):
+        """Filter by tournament country (ISO alpha-3).
+
+        Brazil is special: international sources (UTR/ITF/COSAT) tag venues with
+        'BRA', but the Brazilian federations (CBT/FPT/FCT) leave country_code
+        empty (their venue carries a BR UF). So 'BRA' matches both.
+        """
+        if not value:
+            return queryset
+        code = value.strip().upper()
+        if code in ('BRA', 'BR', 'BRASIL'):
+            return queryset.filter(
+                Q(venue__country_code__iexact='BRA') | Q(venue__country_code='')
+            )
+        return queryset.filter(venue__country_code__iexact=code)
 
     def filter_search(self, queryset, name, value):
         if not value:

@@ -5,11 +5,13 @@ import { TournamentEditionList } from '../types';
 import {
   listEditions,
   listOrganizations,
+  listCountries,
   calendar as calendarApi,
   compatibleForProfile,
   TournamentFilters,
   OrganizationOption,
 } from '../services/tournaments';
+import { resolveCountry } from '../utils/country';
 import { listProfiles } from '../services/data';
 import { TournamentCard } from '../components/TournamentCard';
 import { pickBestProfile } from '../utils/profile';
@@ -172,7 +174,22 @@ export const TournamentsPage: React.FC = () => {
   const [profileModality, setProfileModality] = useState<string>('');
   const [profileLevel, setProfileLevel] = useState<string>('');
   const [organizations, setOrganizations] = useState<OrganizationOption[]>([]);
+  const [countryCodes, setCountryCodes] = useState<string[]>([]);
   const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Country options for the filter dropdown: Brasil first, then alphabetical by name.
+  const countryOptions = useMemo(() => {
+    const opts = countryCodes.map((code) => ({
+      code,
+      name: resolveCountry(code)?.name || code,
+    }));
+    opts.sort((a, b) => {
+      if (a.code === 'BRA') return -1;
+      if (b.code === 'BRA') return 1;
+      return a.name.localeCompare(b.name, 'pt-BR');
+    });
+    return opts;
+  }, [countryCodes]);
 
   useEffect(() => {
     listProfiles().then((profiles) => {
@@ -199,6 +216,7 @@ export const TournamentsPage: React.FC = () => {
       }
     }).catch(() => {});
     listOrganizations().then(setOrganizations).catch(() => setOrganizations([]));
+    listCountries().then(setCountryCodes).catch(() => setCountryCodes([]));
   }, [user?.id, user?.role]);
 
   // Auto-apply text search after 400ms debounce
@@ -217,7 +235,7 @@ export const TournamentsPage: React.FC = () => {
       // Modality and player_level are locked constraints, not user-applied filters.
       || (filters.modality && filters.modality !== profileModality)
       || filters.from_date || filters.to_date
-      || filters.organization || filters.category
+      || filters.organization || filters.category || filters.country
     ),
     [filters, profileModality],
   );
@@ -490,6 +508,22 @@ export const TournamentsPage: React.FC = () => {
                 ))}
               </select>
             </div>
+            {countryOptions.length > 0 && (
+              <div>
+                <label className="text-xs text-text-secondary mb-1 block">País</label>
+                <select
+                  className="input-base"
+                  value={filters.country ?? ''}
+                  onChange={(e) => { setPage(1); setFilters((f) => ({ ...f, country: e.target.value || undefined })); }}
+                  data-testid="filter-country"
+                >
+                  <option value="">Todos</option>
+                  {countryOptions.map((c) => (
+                    <option key={c.code} value={c.code}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="col-span-2">
               <label className="text-xs text-text-secondary mb-1 block">Categoria</label>
               <input

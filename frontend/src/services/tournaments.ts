@@ -24,6 +24,8 @@ export interface TournamentFilters {
   category_code?: string;
   include_category_up?: boolean | string;
   near_profile?: number;
+  /** ISO alpha-3 country code (BRA, ARG, CHL...). */
+  country?: string;
   /** Locked filter derived from active profile's competitive_level. Not user-editable. */
   player_level?: string;
   page?: number;
@@ -49,6 +51,19 @@ export async function listOrganizations(): Promise<OrganizationOption[]> {
     console.warn('[listOrganizations] falhou ao carregar organizações:', err);
   }
   return [];
+}
+
+/** Distinct ISO alpha-3 country codes available among published editions. */
+let _countriesCache: string[] | null = null;
+export async function listCountries(): Promise<string[]> {
+  if (_countriesCache) return _countriesCache;
+  try {
+    const res = await api.get<string[]>('/api/tournaments/editions/countries/');
+    _countriesCache = Array.isArray(res.data) ? res.data : [];
+  } catch {
+    _countriesCache = [];
+  }
+  return _countriesCache;
 }
 
 function qs(params: Record<string, unknown>): string {

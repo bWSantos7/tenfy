@@ -261,6 +261,17 @@ def compute_fed_status(payment_status: str, slot_position, max_participants,
     return 'pending_payment'
 
 
+def ti_id_from_external(external_id):
+    """Extrai o id numérico do Tênis Integrado de 'tenisintegrado:483342'."""
+    if not external_id:
+        return None
+    s = str(external_id).strip()
+    if s.lower().startswith('tenisintegrado:'):
+        rest = s.split(':', 1)[1]
+        return rest if rest.isdigit() else None
+    return None
+
+
 class FederationEntrySerializer(serializers.ModelSerializer):
     slot_position       = serializers.SerializerMethodField()
     in_draw             = serializers.SerializerMethodField()
@@ -268,6 +279,9 @@ class FederationEntrySerializer(serializers.ModelSerializer):
     status_label        = serializers.SerializerMethodField()
     payment_status_label = serializers.SerializerMethodField()
     source_label        = serializers.SerializerMethodField()
+    # UF/idade do atleta a partir do catálogo local do Tênis Integrado (via TI id).
+    player_uf           = serializers.SerializerMethodField()
+    player_age          = serializers.SerializerMethodField()
 
     class Meta:
         model = FederationEntry
@@ -277,9 +291,23 @@ class FederationEntrySerializer(serializers.ModelSerializer):
             'source', 'source_label', 'source_url', 'confidence',
             'removed_or_replaced', 'replacement_reason',
             'player_country_name', 'player_country_code',
+            'player_uf', 'player_age',
             'notes', 'synced_at',
             'slot_position', 'in_draw', 'status', 'status_label',
         )
+
+    def _ti_info(self, obj):
+        info = self.context.get('ti_info') or {}
+        tid = ti_id_from_external(obj.player_external_id)
+        return info.get(tid) if tid else None
+
+    def get_player_uf(self, obj):
+        d = self._ti_info(obj)
+        return (d or {}).get('uf') or ''
+
+    def get_player_age(self, obj):
+        d = self._ti_info(obj)
+        return (d or {}).get('age')
 
     def _max_p(self, obj):
         return getattr(obj, '_max_participants', None)

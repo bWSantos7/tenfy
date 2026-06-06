@@ -464,6 +464,8 @@ export interface FederationEntry {
   replacement_reason: string;
   player_country_name: string;
   player_country_code: string;
+  player_uf: string;
+  player_age: number | null;
   notes: string;
   synced_at: string;
   slot_position: number | null;

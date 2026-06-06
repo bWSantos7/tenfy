@@ -303,6 +303,12 @@ function EntryRow({ entry, maxP, colors }: { entry: FederationEntry; maxP: numbe
                 </AppText>
               </Pressable>
             ) : null}
+            {entry.player_uf ? (
+              <AppText variant="caption" style={{ color: colors.textMuted }}>· {entry.player_uf}</AppText>
+            ) : null}
+            {entry.player_age != null ? (
+              <AppText variant="caption" style={{ color: colors.textMuted }}>· {entry.player_age} anos</AppText>
+            ) : null}
             {entry.notes ? (
               <AppText variant="caption" style={{ color: colors.textMuted }}>· {entry.notes}</AppText>
             ) : null}

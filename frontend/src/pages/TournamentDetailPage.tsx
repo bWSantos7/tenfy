@@ -873,6 +873,12 @@ function EntryRow({ entry, maxP }: { entry: FederationEntryItem; maxP: number | 
               ID TI {tenisIntegradoId(entry.player_external_id)}
             </a>
           )}
+          {entry.player_uf && (
+            <span className="text-[11px] text-text-muted">· {entry.player_uf}</span>
+          )}
+          {entry.player_age != null && (
+            <span className="text-[11px] text-text-muted">· {entry.player_age} anos</span>
+          )}
           {entry.notes && (
             <span className="text-[11px] text-text-muted">· {entry.notes}</span>
           )}

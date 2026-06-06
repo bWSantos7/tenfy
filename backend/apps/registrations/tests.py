@@ -1956,3 +1956,45 @@ class WithdrawalSyncTestCase(TestCase):
         self.assertEqual(res.status_code, 200, res.data)
         reg.refresh_from_db()
         self.assertFalse(reg.is_withdrawn)
+
+
+class InscritosTiEnrichmentTestCase(TestCase):
+    """UF/idade dos inscritos vindos do catálogo do Tênis Integrado (via TI id)."""
+
+    def setUp(self):
+        from apps.sources.models import Organization
+        from apps.tournaments.models import Tournament, TournamentEdition
+        self.client = APIClient()
+        self.user = get_user_model().objects.create_user(email='ti-enrich@test.com', password='x')
+        self.client.force_authenticate(self.user)
+        org = Organization.objects.create(short_name='FPTx', name='FPTx', type='federation')
+        t = Tournament.objects.create(
+            canonical_slug='ti-enrich', canonical_name='TI Enrich',
+            modality='tennis', organization=org,
+        )
+        self.edition = TournamentEdition.objects.create(
+            tournament=t, season_year=2026, title='TI Enrich 2026', is_published=True,
+        )
+
+    def test_uf_age_filled_from_ti_catalog(self):
+        from apps.registrations.models import FederationEntry
+        from apps.players.models import ExternalPlayerRanking
+        FederationEntry.objects.create(
+            edition=self.edition, category_text='Sub-16 M', player_name='Atleta Com TI',
+            player_external_id='tenisintegrado:999001', source='fpt',
+        )
+        FederationEntry.objects.create(
+            edition=self.edition, category_text='Sub-16 M', player_name='Atleta Sem TI',
+            player_external_id='', source='fpt',
+        )
+        ExternalPlayerRanking.objects.create(
+            ti_player_id='999001', player_name='Atleta Com TI', uf='SP', age=15,
+            source='fpt', ranking_external_id='1', season=2026,
+        )
+        res = self.client.get(f'/api/registrations/edition/{self.edition.id}/public/')
+        self.assertEqual(res.status_code, 200, res.data)
+        entries = {e['player_name']: e for c in res.data['categories'] for e in c['entries']}
+        self.assertEqual(entries['Atleta Com TI']['player_uf'], 'SP')
+        self.assertEqual(entries['Atleta Com TI']['player_age'], 15)
+        self.assertEqual(entries['Atleta Sem TI']['player_uf'], '')
+        self.assertIsNone(entries['Atleta Sem TI']['player_age'])

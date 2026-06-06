@@ -7,6 +7,19 @@ export function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((email || '').trim());
 }
 
+/** Extrai o ID do Tênis Integrado de um player_external_id ("tenisintegrado:483342" → "483342"). */
+export function tenisIntegradoId(externalId?: string | null): string | null {
+  if (!externalId) return null;
+  const m = /^tenisintegrado:(\d+)$/i.exec(externalId.trim());
+  return m ? m[1] : null;
+}
+
+/** URL do perfil no Tênis Integrado a partir do player_external_id, quando aplicável. */
+export function tenisIntegradoProfileUrl(externalId?: string | null): string | null {
+  const id = tenisIntegradoId(externalId);
+  return id ? `https://www.tenisintegrado.com.br/perfil2/index/${id}` : null;
+}
+
 /** Idade calculada a partir da data (preferida) ou do ano de nascimento. */
 export function calculateAge(birthDate?: string | null, birthYear?: number | null): number | null {
   if (birthDate) {

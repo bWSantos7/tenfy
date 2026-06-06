@@ -19,6 +19,7 @@ import { editionCountry } from '../utils/country';
 import {
   STATUS_LABELS, fmtDateRange, fmtDateTime, fmtBRL, fmtRelative,
   statusBgClass, translateReason, formatChangeEventTitle, formatChangeEventDetails,
+  tenisIntegradoId, tenisIntegradoProfileUrl,
 } from '../utils/format';
 import { extractApiError } from '../services/api';
 import { pickBestProfile } from '../utils/profile';
@@ -860,6 +861,17 @@ function EntryRow({ entry, maxP }: { entry: FederationEntryItem; maxP: number | 
         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
           {entry.ranking_position != null && (
             <span className="text-[11px] text-text-muted">Ranking {entry.ranking_position}</span>
+          )}
+          {tenisIntegradoId(entry.player_external_id) && (
+            <a
+              href={tenisIntegradoProfileUrl(entry.player_external_id)!}
+              target="_blank"
+              rel="noreferrer"
+              className="text-[11px] text-accent-blue hover:underline"
+              title="Abrir perfil no Tênis Integrado"
+            >
+              ID TI {tenisIntegradoId(entry.player_external_id)}
+            </a>
           )}
           {entry.notes && (
             <span className="text-[11px] text-text-muted">· {entry.notes}</span>

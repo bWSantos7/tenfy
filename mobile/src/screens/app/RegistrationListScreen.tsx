@@ -8,7 +8,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { AppText, Card, EmptyState, LoadingBlock, Screen } from '../../components/ui';
 import { FederationCategoryGroup, FederationEntry } from '../../types';
 import { federationRegistrations } from '../../services/registrations';
-import { fmtDateTime } from '../../utils/format';
+import { fmtDateTime, tenisIntegradoId, tenisIntegradoProfileUrl } from '../../utils/format';
 
 type Props = NativeStackScreenProps<MainStackParamList, 'RegistrationList'>;
 
@@ -295,6 +295,13 @@ function EntryRow({ entry, maxP, colors }: { entry: FederationEntry; maxP: numbe
               <AppText variant="caption" style={{ color: colors.textMuted }}>
                 Ranking {entry.ranking_position}
               </AppText>
+            ) : null}
+            {tenisIntegradoId(entry.player_external_id) ? (
+              <Pressable onPress={() => Linking.openURL(tenisIntegradoProfileUrl(entry.player_external_id)!)}>
+                <AppText variant="caption" style={{ color: colors.accentBlue, fontWeight: '600' }}>
+                  ID TI {tenisIntegradoId(entry.player_external_id)}
+                </AppText>
+              </Pressable>
             ) : null}
             {entry.notes ? (
               <AppText variant="caption" style={{ color: colors.textMuted }}>· {entry.notes}</AppText>

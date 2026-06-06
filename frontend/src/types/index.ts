@@ -263,6 +263,8 @@ export interface TournamentEditionList {
   venue_name: string | null;
   venue_city: string | null;
   venue_state: string | null;
+  venue_country: string | null;
+  venue_country_code: string | null;
   base_price_brl: string | null;
   official_source_url: string;
   source_name: string;
@@ -334,6 +336,8 @@ export interface TournamentEditionDetail extends TournamentEditionList {
     city: string;
     state: string;
     address: string;
+    country: string;
+    country_code: string;
     latitude: number | null;
     longitude: number | null;
   };

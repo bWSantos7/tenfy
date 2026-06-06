@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { MapPin, Calendar, Clock, Circle, CheckCircle2, Receipt, Info } from 'lucide-react';
 import { TournamentEditionList } from '../types';
 import { STATUS_LABELS, fmtBRL, fmtDateRange, fmtRelative, fmtDateTime, statusBgClass } from '../utils/format';
+import { editionCountry } from '../utils/country';
 
 import logoFPT from '../assets/logos/FPT.jpg';
 import logoCBT from '../assets/logos/CBT.jpg';
@@ -50,7 +51,16 @@ export const TournamentCard: React.FC<Props> = ({
   const status = edition.dynamic_status || edition.status;
   const statusLabel = STATUS_LABELS[status] || status;
   const statusCls = statusBgClass(status);
-  const location = [edition.venue_city, edition.venue_state].filter(Boolean).join(' / ');
+  // International sources (UTR/ITF/COSAT) carry a country; show flag + country
+  // name instead of the BR-style "city / UF" (where UF is actually a country code).
+  const country = editionCountry({
+    venue_country: edition.venue_country,
+    venue_country_code: edition.venue_country_code,
+  });
+  const location = country
+    ? [edition.venue_city, country.name].filter(Boolean).join(', ')
+    : [edition.venue_city, edition.venue_state].filter(Boolean).join(' / ');
+  const flag = country?.flag || '';
   const orgLogo = resolveOrgLogo(edition);
 
   if (variant === 'calendar') {
@@ -112,7 +122,7 @@ export const TournamentCard: React.FC<Props> = ({
           {location && (
             <span className="flex items-center gap-1 text-text-secondary">
               <MapPin className="w-3.5 h-3.5 shrink-0" />
-              {location}
+              {flag ? `${flag} ${location}` : location}
             </span>
           )}
           {edition.base_price_brl !== null && edition.base_price_brl !== undefined && (
@@ -194,7 +204,7 @@ export const TournamentCard: React.FC<Props> = ({
         {location && (
           <span className="flex items-center gap-1">
             <MapPin className="w-3.5 h-3.5" />
-            {location}
+            {flag ? `${flag} ${location}` : location}
           </span>
         )}
         {edition.entry_close_at && (

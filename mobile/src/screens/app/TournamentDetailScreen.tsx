@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, Linking, Pressable, Share, View } from 'react-native';
+import { Alert, Image, Linking, Pressable, Share, View } from 'react-native';
+import { editionCountry } from '../../utils/country';
 import Toast from 'react-native-toast-message';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -303,12 +304,24 @@ export function TournamentDetailScreen({ route, navigation }: Props) {
             </View>
           )}
           {(() => {
-            const safeCity = (detail.venue_city && !hasEmailLike(detail.venue_city)) ? detail.venue_city : '';
-            const locationStr = [safeCity, detail.venue_state].filter(Boolean).join(' / ');
+            const v = detail.venue_detail;
+            const rawCity = v?.city || detail.venue_city || '';
+            const safeCity = (rawCity && !hasEmailLike(rawCity)) ? rawCity : '';
+            const country = editionCountry({
+              venue_country: v?.country,
+              venue_country_code: v?.country_code,
+            });
+            const locationStr = country
+              ? [safeCity, country.name].filter(Boolean).join(' / ')
+              : [safeCity, v?.state || detail.venue_state].filter(Boolean).join(' / ');
             if (!locationStr) return null;
             return (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Ionicons name="location-outline" size={14} color={colors.textMuted} />
+                {country?.flagUrl ? (
+                  <Image source={{ uri: country.flagUrl }} style={{ width: 18, height: 13, borderRadius: 2 }} />
+                ) : (
+                  <Ionicons name="location-outline" size={14} color={colors.textMuted} />
+                )}
                 <AppText variant="caption">Local: {locationStr}</AppText>
               </View>
             );

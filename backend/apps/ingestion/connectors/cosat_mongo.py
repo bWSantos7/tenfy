@@ -450,6 +450,9 @@ def _normalize_tournament(doc: dict) -> Optional[dict]:
             'city': city,
             'state': state,
             'address': '',
+            # COSAT is international: the 2-letter "state" is really the country.
+            'country': _COSAT_COUNTRY.get((state or '').upper(), ('', ''))[0],
+            'country_code': _COSAT_COUNTRY.get((state or '').upper(), ('', ''))[1],
         } if city or state else None,
         'base_price_brl': None,
         'official_source_url': source_url,
@@ -946,6 +949,28 @@ _EMAIL_RE = re.compile(r'[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}')
 def _strip_emails(text: str) -> str:
     """Remove email addresses from a string — they must not appear in venue/address fields."""
     return _EMAIL_RE.sub('', text).strip(' ,;/')
+
+
+# COSAT stores the country as a 2-letter code in the location's "state" slot.
+# Some codes are NON-standard (CH=Chile, PA=Paraguai, UR=Uruguai), so we map
+# them explicitly to (country_name_ptbr, ISO alpha-3) rather than via ISO.
+_COSAT_COUNTRY = {
+    'AR': ('Argentina', 'ARG'),
+    'BO': ('Bolívia', 'BOL'),
+    'BR': ('Brasil', 'BRA'),
+    'CH': ('Chile', 'CHL'),   # COSAT usa CH para Chile
+    'CL': ('Chile', 'CHL'),
+    'CO': ('Colômbia', 'COL'),
+    'EC': ('Equador', 'ECU'),
+    'PA': ('Paraguai', 'PRY'),  # COSAT usa PA para Paraguai
+    'PY': ('Paraguai', 'PRY'),
+    'PE': ('Peru', 'PER'),
+    'UR': ('Uruguai', 'URY'),  # COSAT usa UR para Uruguai
+    'UY': ('Uruguai', 'URY'),
+    'VE': ('Venezuela', 'VEN'),
+    'GU': ('Guiana', 'GUY'),
+    'SU': ('Suriname', 'SUR'),
+}
 
 
 def _parse_location(location: str, country: str):

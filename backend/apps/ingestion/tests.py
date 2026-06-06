@@ -145,6 +145,28 @@ class CosatMongoNormalizationTestCase(TestCase):
         self.assertEqual(len(result['categories']), 2)
         self.assertEqual(result['categories'][0]['source_text'], 'U14 Boys Singles')
         self.assertIn('Buenos Aires', result['venue']['city'])
+        # COSAT is international → venue carries country/country_code (Task 6).
+        self.assertEqual(result['venue']['country'], 'Argentina')
+        self.assertEqual(result['venue']['country_code'], 'ARG')
+
+    def test_normalize_tournament_country_mapping(self):
+        from apps.ingestion.connectors.cosat_mongo import _normalize_tournament
+        # COSAT uses some NON-standard 2-letter codes (PA=Paraguai, CH=Chile, UR=Uruguai).
+        cases = [
+            ('Lambaré, PA', 'Paraguai', 'PRY'),
+            ('Santiago, CH', 'Chile', 'CHL'),
+            ('Montevideo, UR', 'Uruguai', 'URY'),
+            ('Cali, CO', 'Colômbia', 'COL'),
+            ('Porto Alegre, BR', 'Brasil', 'BRA'),
+        ]
+        for loc, name, code in cases:
+            doc = {
+                'cosatId': 'x', 'name': 'T', 'location': loc,
+                'dateRange': '10 - 15 Nov 2025', 'lastUpdated': datetime(2025, 11, 15),
+            }
+            r = _normalize_tournament(doc)
+            self.assertEqual(r['venue']['country'], name, loc)
+            self.assertEqual(r['venue']['country_code'], code, loc)
 
     def test_normalize_tournament_with_new_fields(self):
         from apps.ingestion.connectors.cosat_mongo import _normalize_tournament

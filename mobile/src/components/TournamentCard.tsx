@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { Animated, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Image, Pressable, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { TournamentEditionList, TournamentStatus } from '../types';
 import { useTheme } from '../contexts/ThemeContext';
@@ -7,6 +7,7 @@ import { AppText } from './ui';
 import { STATUS_LABELS, fmtBRL, fmtDateRange } from '../utils/format';
 import { haptic } from '../hooks/useHaptic';
 import { hasEmailLike } from '../utils/sanitize';
+import { editionCountry } from '../utils/country';
 
 function getStatusStyle(status: TournamentStatus, colors: ReturnType<typeof useTheme>['colors']) {
   switch (status) {
@@ -56,7 +57,15 @@ export function TournamentCard({
   const status = edition.dynamic_status || edition.status;
   const { color: statusColor, icon: statusIcon } = getStatusStyle(status, colors);
   const safeCity = (edition.venue_city && !hasEmailLike(edition.venue_city)) ? edition.venue_city : '';
-  const location = [safeCity, edition.venue_state].filter(Boolean).join(' · ');
+  // International sources (UTR/ITF/COSAT) carry a country; show flag + country
+  // name instead of the BR-style "city · UF" (where UF is actually a country code).
+  const country = editionCountry({
+    venue_country: edition.venue_country,
+    venue_country_code: edition.venue_country_code,
+  });
+  const location = country
+    ? [safeCity, country.name].filter(Boolean).join(' · ')
+    : [safeCity, edition.venue_state].filter(Boolean).join(' · ');
   const daysUntil = getDaysUntil(edition.entry_close_at);
   const showDeadline = daysUntil !== null && daysUntil >= 0 && ['open', 'closing_soon'].includes(status);
 
@@ -124,7 +133,11 @@ export function TournamentCard({
           )}
           {location ? (
             <View style={styles.infoItem}>
-              <Ionicons name="location-outline" size={13} color={colors.textMuted} />
+              {country?.flagUrl ? (
+                <Image source={{ uri: country.flagUrl }} style={{ width: 16, height: 12, borderRadius: 2 }} />
+              ) : (
+                <Ionicons name="location-outline" size={13} color={colors.textMuted} />
+              )}
               <AppText variant="caption" style={{ color: colors.textSecondary }}>{location}</AppText>
             </View>
           ) : null}

@@ -15,6 +15,7 @@ import { getEdition, evaluateEdition } from '../services/tournaments';
 import { listProfiles, toggleWatchlist, listWatchlist, updateWatch } from '../services/data';
 import { getEditionRegistrants, myRegistrations, withdrawRegistration } from '../services/registrations';
 import { fmtDate } from '../utils/format';
+import { editionCountry } from '../utils/country';
 import {
   STATUS_LABELS, fmtDateRange, fmtDateTime, fmtBRL, fmtRelative,
   statusBgClass, translateReason, formatChangeEventTitle, formatChangeEventDetails,
@@ -201,10 +202,20 @@ export const TournamentDetailPage: React.FC = () => {
 
   const status = ed.dynamic_status || ed.status;
   const statusLabel = STATUS_LABELS[status];
-  const location = [
+  // International sources (UTR/ITF/COSAT) carry a country; show flag + country
+  // name instead of the BR-style "city/UF" (where UF is actually a country code).
+  const country = editionCountry({
+    venue_country: ed.venue_detail?.country,
+    venue_country_code: ed.venue_detail?.country_code,
+  });
+  const cityState = country
+    ? [ed.venue_detail?.city, country.name].filter(Boolean).join(', ')
+    : [ed.venue_detail?.city, ed.venue_detail?.state].filter(Boolean).join('/');
+  const locationParts = [
     ed.venue_detail?.name && ed.venue_detail.name !== 'CBT' ? ed.venue_detail.name : null,
-    [ed.venue_city, ed.venue_state].filter(Boolean).join('/'),
+    cityState,
   ].filter(Boolean).join(' • ');
+  const location = [country?.flag, locationParts].filter(Boolean).join(' ');
   const regLink = ed.links.find((l) => l.link_type === 'registration') || null;
   const regURL = regLink?.url || ed.official_source_url;
   const regulation = ed.links.find((l) => l.link_type === 'regulation') || null;

@@ -768,7 +768,9 @@ export const PlayerProfilePage: React.FC = () => {
                           : [item.edition_detail.venue_city, item.edition_detail.venue_state].filter(Boolean).join(' / ');
                         return loc ? (
                           <p className="text-xs text-text-muted flex items-center gap-1">
-                            <MapPin className="w-3 h-3 shrink-0" />{c?.flag ? `${c.flag} ${loc}` : loc}
+                            {c?.flagUrl
+                              ? <img src={c.flagUrl} alt="" className="w-4 h-3 rounded-[2px] object-cover shrink-0" />
+                              : <MapPin className="w-3 h-3 shrink-0" />}{loc}
                           </p>
                         ) : null;
                       })()}
@@ -807,7 +809,9 @@ export const PlayerProfilePage: React.FC = () => {
                           : [reg.edition_venue_city, reg.edition_venue_state].filter(Boolean).join(' / ');
                         return loc ? (
                           <p className="text-xs text-text-muted flex items-center gap-1">
-                            <MapPin className="w-3 h-3 shrink-0" />{c?.flag ? `${c.flag} ${loc}` : loc}
+                            {c?.flagUrl
+                              ? <img src={c.flagUrl} alt="" className="w-4 h-3 rounded-[2px] object-cover shrink-0" />
+                              : <MapPin className="w-3 h-3 shrink-0" />}{loc}
                           </p>
                         ) : null;
                       })()}

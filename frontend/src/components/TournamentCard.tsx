@@ -60,7 +60,7 @@ export const TournamentCard: React.FC<Props> = ({
   const location = country
     ? [edition.venue_city, country.name].filter(Boolean).join(', ')
     : [edition.venue_city, edition.venue_state].filter(Boolean).join(' / ');
-  const flag = country?.flag || '';
+  const flagUrl = country?.flagUrl || '';
   const orgLogo = resolveOrgLogo(edition);
 
   if (variant === 'calendar') {
@@ -121,8 +121,10 @@ export const TournamentCard: React.FC<Props> = ({
           </div>
           {location && (
             <span className="flex items-center gap-1 text-text-secondary">
-              <MapPin className="w-3.5 h-3.5 shrink-0" />
-              {flag ? `${flag} ${location}` : location}
+              {flagUrl
+                ? <img src={flagUrl} alt="" className="w-4 h-3 rounded-[2px] object-cover shrink-0" />
+                : <MapPin className="w-3.5 h-3.5 shrink-0" />}
+              {location}
             </span>
           )}
           {edition.base_price_brl !== null && edition.base_price_brl !== undefined && (
@@ -203,8 +205,10 @@ export const TournamentCard: React.FC<Props> = ({
         </span>
         {location && (
           <span className="flex items-center gap-1">
-            <MapPin className="w-3.5 h-3.5" />
-            {flag ? `${flag} ${location}` : location}
+            {flagUrl
+              ? <img src={flagUrl} alt="" className="w-4 h-3 rounded-[2px] object-cover shrink-0" />
+              : <MapPin className="w-3.5 h-3.5" />}
+            {location}
           </span>
         )}
         {edition.entry_close_at && (

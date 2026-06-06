@@ -65,8 +65,15 @@ export const LoginPage: React.FC = () => {
 
         <div className="relative flex flex-col h-full p-10 xl:p-14">
 
+          {/* Logo principal — centralizada na área livre à direita do texto */}
+          <img
+            src="/logos/logo_escura2.png"
+            alt="Tenfy"
+            className="absolute top-[46%] left-[68%] -translate-x-1/2 -translate-y-1/2 w-[42%] max-w-[400px] max-h-[36vh] object-contain drop-shadow-2xl pointer-events-none select-none"
+          />
+
           {/* Texto no topo */}
-          <div className="pt-4">
+          <div className="relative pt-4">
             {/* Badge */}
             <div className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 mb-7 border"
               style={{ background: 'rgba(198,239,33,0.08)', borderColor: 'rgba(198,239,33,0.2)' }}>
@@ -99,17 +106,8 @@ export const LoginPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Logo principal — centralizada no espaço livre do painel */}
-          <div className="flex-1 flex items-center justify-center py-8 min-h-0">
-            <img
-              src="/logos/logo_escura2.png"
-              alt="Tenfy"
-              className="w-full max-w-[360px] xl:max-w-[420px] max-h-[32vh] h-auto object-contain drop-shadow-2xl"
-            />
-          </div>
-
           {/* Card flutuante inferior */}
-          <div>
+          <div className="relative mt-auto">
             <div className="rounded-2xl p-4 backdrop-blur-sm"
               style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
               <div className="flex items-center gap-3">

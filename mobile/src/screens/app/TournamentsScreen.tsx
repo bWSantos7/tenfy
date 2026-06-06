@@ -492,18 +492,26 @@ export function TournamentsScreen({ route }: Props) {
     nearMe,
   ]);
 
-  // Country options for the filter dropdown: Brasil first, then by name.
+  // Country options grouped by name (Chile CHI/CHL → one item filtering both).
   const countryOptions = useMemo(() => {
-    const opts = countryCodes.map((code) => ({
-      value: code,
-      label: resolveCountry(code)?.name || code,
+    const byName = new Map<string, string[]>();
+    for (const code of countryCodes) {
+      const name = resolveCountry(code)?.name || code;
+      const arr = byName.get(name) || [];
+      arr.push(code);
+      byName.set(name, arr);
+    }
+    const opts = [...byName.entries()].map(([name, codes]) => ({
+      value: codes.join(','),
+      label: name,
+      isBrazil: codes.includes('BRA'),
     }));
     opts.sort((a, b) => {
-      if (a.value === 'BRA') return -1;
-      if (b.value === 'BRA') return 1;
+      if (a.isBrazil) return -1;
+      if (b.isBrazil) return 1;
       return a.label.localeCompare(b.label, 'pt-BR');
     });
-    return opts;
+    return opts.map(({ value, label }) => ({ value, label }));
   }, [countryCodes]);
 
   async function loadList(page = 1) {

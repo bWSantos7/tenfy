@@ -14,6 +14,8 @@ User = get_user_model()
 
 class RegistrationTestCase(TestCase):
     def setUp(self):
+        from django.core.cache import cache
+        cache.clear()  # reset register throttle (anon rate limit) between tests
         self.client = APIClient()
 
     @patch('apps.accounts.tasks.send_otp_email.delay')
@@ -542,3 +544,50 @@ class DependentEmailOtpTestCase(TestCase):
         res_ok = self.client.post('/api/auth/children/', self._payload(email, code), format='json')
         self.assertEqual(res_ok.status_code, 201, res_ok.data)
         self.assertTrue(User.objects.filter(email=email).exists())
+
+
+class FullNameDedupTestCase(TestCase):
+    """Task 11: bloqueio absoluto de cadastro com nome completo idêntico (normalizado)."""
+
+    def setUp(self):
+        from django.core.cache import cache
+        cache.clear()  # reset register throttle (anon rate limit) between tests
+        self.client = APIClient()
+        User.objects.create_user(
+            email='existente@example.com', password='x', full_name='Bruno Alves Pereira',
+        )
+
+    def _register(self, full_name, email):
+        return self.client.post('/api/auth/register/', {
+            'email': email, 'full_name': full_name,
+            'password': 'Str0ngPass!', 'password_confirm': 'Str0ngPass!',
+            'role': 'player', 'accept_terms': True,
+        }, format='json')
+
+    def test_normalize_full_name(self):
+        from apps.accounts.serializers import normalize_full_name
+        self.assertEqual(normalize_full_name('  Bruno   ALVES  Péreira '), 'bruno alves pereira')
+
+    def test_blocks_exact_duplicate(self):
+        res = self._register('Bruno Alves Pereira', 'novo@example.com')
+        self.assertEqual(res.status_code, 400)
+        self.assertIn('full_name', res.data)
+        self.assertFalse(User.objects.filter(email='novo@example.com').exists())
+
+    def test_blocks_case_space_accent_variants(self):
+        for variant in ['bruno alves pereira', '  Bruno   Alves   Pereira  ', 'Brúno Álves Pereira']:
+            res = self._register(variant, 'v@example.com')
+            self.assertEqual(res.status_code, 400, f'{variant!r} deveria ser bloqueado')
+            self.assertIn('full_name', res.data)
+
+    @patch('apps.accounts.tasks.send_otp_email.delay')
+    def test_allows_different_name(self, _mock):
+        res = self._register('Carlos Souza', 'carlos@example.com')
+        self.assertEqual(res.status_code, 201, res.data)
+
+    @patch('apps.accounts.tasks.send_otp_email.delay')
+    def test_allows_multiple_blank_names(self, _mock):
+        r1 = self._register('', 'a@example.com')
+        r2 = self._register('', 'b@example.com')
+        self.assertEqual(r1.status_code, 201, r1.data)
+        self.assertEqual(r2.status_code, 201, r2.data)

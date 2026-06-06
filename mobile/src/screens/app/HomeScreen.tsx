@@ -65,13 +65,16 @@ export function HomeScreen(_: Props) {
       const level = (primary as any)?.competitive_level as string | undefined;
       const filterByLevel = (items: TournamentEditionList[]): TournamentEditionList[] => {
         if (!level) return items;
+        if (level === 'kids') {
+          return items.filter((t) => t.is_youth !== false);
+        }
         if (level === 'youth') {
           return items.filter((t) => {
             if (t.is_youth === false) return false;
             return !(t.circuit || '').toLowerCase().includes('kids');
           });
         }
-        if (['beginner', 'amateur', 'federated', 'pro'].includes(level)) {
+        if (['pro', 'seniors'].includes(level)) {
           return items.filter((t) => {
             if (t.is_youth === true) return false;
             const c = (t.circuit || '').toLowerCase();

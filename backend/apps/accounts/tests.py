@@ -330,7 +330,7 @@ class DependentManagementTestCase(TestCase):
             'birth_year': 2010,
             'gender': 'M',
             'home_state': 'SP',
-            'competitive_level': 'amateur',
+            'competitive_level': 'pro',
         }, format='json')
         self.assertEqual(res.status_code, 201)
         self.assertEqual(res.data['user_id'], User.objects.get(email='profchild@example.com').id)
@@ -421,7 +421,7 @@ class DependentManagementTestCase(TestCase):
                 'gender': 'M',
                 'home_state': 'SP',
                 'home_city': 'São Paulo',
-                'competitive_level': 'amateur',
+                'competitive_level': 'pro',
                 'tennis_class': '',
                 'travel_states': ['SP', 'RJ'],
             },

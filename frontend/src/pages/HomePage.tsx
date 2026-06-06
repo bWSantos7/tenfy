@@ -72,6 +72,10 @@ export const HomePage: React.FC = () => {
   const filterByLevel = useCallback(
     (items: TournamentEditionList[], level: string | null | undefined): TournamentEditionList[] => {
       if (!level) return items;
+      if (level === 'kids') {
+        // Crianças: torneios infantis/juvenis (inclui Tennis Kids)
+        return items.filter((t) => t.is_youth !== false);
+      }
       if (level === 'youth') {
         return items.filter((t) => {
           if (t.is_youth === false) return false;
@@ -79,7 +83,7 @@ export const HomePage: React.FC = () => {
           return !circuit.includes('kids');
         });
       }
-      if (['beginner', 'amateur', 'federated', 'pro'].includes(level)) {
+      if (['pro', 'seniors'].includes(level)) {
         return items.filter((t) => {
           if (t.is_youth === true) return false;
           const circuit = (t.circuit || '').toLowerCase();

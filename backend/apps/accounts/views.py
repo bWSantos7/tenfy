@@ -574,7 +574,7 @@ class ParentChildViewSet(viewsets.ModelViewSet):
                 home_city=profile_data.get('home_city', ''),
                 federation=federation,
                 travel_states=travel_states,
-                competitive_level=profile_data.get('competitive_level', 'amateur'),
+                competitive_level=profile_data.get('competitive_level', 'pro'),
                 preferred_modality=profile_data.get('preferred_modality', ''),
                 is_primary=True,
             )
@@ -774,7 +774,7 @@ class ParentChildViewSet(viewsets.ModelViewSet):
             home_city=vd.get('home_city', ''),
             federation=vd.get('federation'),
             travel_states=vd.get('travel_states', []),
-            competitive_level=vd.get('competitive_level', 'amateur'),
+            competitive_level=vd.get('competitive_level', 'pro'),
             preferred_modality=vd.get('preferred_modality', ''),
             is_primary=True,
         )

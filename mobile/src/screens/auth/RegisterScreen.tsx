@@ -102,7 +102,7 @@ export function RegisterScreen({ navigation }: Props) {
     home_state: 'SP',
     home_city: '',
     federation: null as number | null,
-    competitive_level: 'amateur',
+    competitive_level: 'pro',
     modality: '',
   });
 

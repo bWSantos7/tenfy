@@ -80,12 +80,12 @@ export function statusBgClass(status: TournamentStatus): string {
   }
 }
 
+// Níveis padronizados conforme CBT (Task 12) — por faixa etária.
 export const LEVEL_LABELS: Record<string, string> = {
-  beginner:   'Iniciante',
-  amateur:    'Amador',
-  federated:  'Federado',
-  youth:      'Juvenil',
-  pro:        'Profissional',
+  kids:    'Crianças',
+  youth:   'Juvenil',
+  pro:     'Profissional',
+  seniors: 'Idosos',
 };
 
 /** Basic e-mail format check (mirrors the backend EmailField validation). */

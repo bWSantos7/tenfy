@@ -496,10 +496,11 @@ export function TournamentsScreen({ route }: Props) {
   const countryOptions = useMemo(() => {
     const byName = new Map<string, string[]>();
     for (const code of countryCodes) {
-      const name = resolveCountry(code)?.name || code;
-      const arr = byName.get(name) || [];
+      const info = resolveCountry(code);
+      if (!info) continue; // never show raw codes
+      const arr = byName.get(info.name) || [];
       arr.push(code);
-      byName.set(name, arr);
+      byName.set(info.name, arr);
     }
     const opts = [...byName.entries()].map(([name, codes]) => ({
       value: codes.join(','),

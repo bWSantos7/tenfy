@@ -104,10 +104,6 @@ class PlayerProfile(TimestampedModel):
         max_length=20, choices=LEVEL_CHOICES, default=LEVEL_AMATEUR
     )
     dominant_hand = models.CharField(max_length=1, choices=HAND_CHOICES, blank=True)
-    tennis_class = models.CharField(
-        max_length=10, blank=True,
-        help_text='FPT class: 1,2,3,4,5,PR,PRO'
-    )
     is_primary = models.BooleanField(default=True)
     external_ids = models.JSONField(default=dict, blank=True, help_text='CBT id, ITF id, etc')
     home_lat = models.FloatField(null=True, blank=True)

@@ -220,7 +220,6 @@ export const HomePage: React.FC = () => {
                     <User className="w-3 h-3" />{activeChildName}
                   </span>
                 )}
-                {profile.tennis_class && <span>Classe {profile.tennis_class}</span>}
                 {profile.sporting_age ? <span>• {profile.sporting_age} anos</span> : null}
                 {profile.home_state && <span>• {profile.home_state}</span>}
               </div>

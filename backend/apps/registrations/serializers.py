@@ -152,7 +152,6 @@ class AdminRegistrationSerializer(serializers.ModelSerializer):
     player_gender = serializers.CharField(source='profile.gender', read_only=True)
     player_birth_year = serializers.IntegerField(source='profile.birth_year', read_only=True)
     player_sporting_age = serializers.IntegerField(source='profile.sporting_age', read_only=True)
-    player_tennis_class = serializers.CharField(source='profile.tennis_class', read_only=True)
     category_text = serializers.SerializerMethodField()
     max_participants = serializers.SerializerMethodField()
     slot_position = serializers.SerializerMethodField()
@@ -168,7 +167,7 @@ class AdminRegistrationSerializer(serializers.ModelSerializer):
         model = TournamentRegistration
         fields = (
             'id', 'profile', 'player_name', 'player_user_email',
-            'player_gender', 'player_birth_year', 'player_sporting_age', 'player_tennis_class',
+            'player_gender', 'player_birth_year', 'player_sporting_age',
             'edition', 'category', 'category_text', 'max_participants',
             'registered_at', 'ranking_position',
             'payment_status', 'payment_status_label',

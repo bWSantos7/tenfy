@@ -18,7 +18,7 @@ import {
 } from '../../services/data';
 import { extractApiError, mediaUrl } from '../../services/api';
 import { DependentInvite, ParentChild, PlayerProfile, PlayerSearchResult } from '../../types';
-import { GENDER_LABELS, LEVEL_LABELS, ROLE_LABELS, TENNIS_CLASS_LABELS } from '../../utils/format';
+import { GENDER_LABELS, LEVEL_LABELS, ROLE_LABELS } from '../../utils/format';
 import { markProfileDirty } from '../../utils/profileRefresh';
 import { getProfileModality, setProfileModality, MODALITY_OPTIONS } from '../../utils/profileModality';
 import { getActiveProfileId, setActiveProfileId } from '../../utils/activeProfile';
@@ -47,10 +47,6 @@ const UF_OPTIONS = [
 
 const GENDER_OPTIONS = [{ value: 'M', label: 'Masculino' }, { value: 'F', label: 'Feminino' }];
 const LEVEL_OPTIONS = Object.entries(LEVEL_LABELS).map(([value, label]) => ({ value, label }));
-const CLASS_OPTIONS = [
-  { value: '', label: 'Sem classe definida' },
-  ...Object.entries(TENNIS_CLASS_LABELS).map(([value, label]) => ({ value, label })),
-];
 type DependentData = { link: ParentChild; profiles: PlayerProfile[] };
 
 export function ProfileScreen(_: Props) {
@@ -559,7 +555,6 @@ function DependentCard({ link, profile, colors, onEditProfile, onCreateProfile, 
   onRemove: () => void;
   isActive: boolean;
 }) {
-  const classLabel = profile?.tennis_class ? (TENNIS_CLASS_LABELS[profile.tennis_class] ?? `Classe ${profile.tennis_class}`) : null;
   const levelLabel = profile ? (LEVEL_LABELS[profile.competitive_level] ?? profile.competitive_level) : null;
   const genderLabel = profile?.gender ? (GENDER_LABELS[profile.gender] ?? profile.gender) : null;
 
@@ -611,7 +606,7 @@ function DependentCard({ link, profile, colors, onEditProfile, onCreateProfile, 
           {levelLabel ? (
             <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
               <Ionicons name="trophy-outline" size={13} color={colors.textMuted} />
-              <AppText variant="caption">{levelLabel}{classLabel ? ` • ${classLabel}` : ''}</AppText>
+              <AppText variant="caption">{levelLabel}</AppText>
             </View>
           ) : null}
         </View>
@@ -677,7 +672,6 @@ function AddDependentForm({ onSuccess, onCancel }: { onSuccess: () => Promise<vo
     home_city: '',
     federation: null as number | null,
     competitive_level: 'amateur',
-    tennis_class: '',
   });
   const [cities, setCities] = useState<{ value: string; label: string }[]>([]);
   const [loadingCities, setLoadingCities] = useState(false);
@@ -731,7 +725,6 @@ function AddDependentForm({ onSuccess, onCancel }: { onSuccess: () => Promise<vo
           home_city: profile.home_city,
           federation: profile.federation,
           competitive_level: profile.competitive_level,
-          tennis_class: profile.tennis_class,
         },
       );
       Toast.show({ type: 'success', text1: 'Dependente adicionado!', text2: `${account.full_name} pode fazer login com o e-mail informado.` });
@@ -892,12 +885,6 @@ function AddDependentForm({ onSuccess, onCancel }: { onSuccess: () => Promise<vo
         options={LEVEL_OPTIONS}
         onSelect={(v) => setProfile({ ...profile, competitive_level: v })}
       />
-      <SelectField
-        label="Classe"
-        value={profile.tennis_class}
-        options={CLASS_OPTIONS}
-        onSelect={(v) => setProfile({ ...profile, tennis_class: v })}
-      />
 
       <Button title="Adicionar dependente" onPress={submit} loading={submitting} style={{ marginTop: 4 }} />
       <Button title="Cancelar" variant="ghost" onPress={onCancel} />
@@ -921,7 +908,6 @@ function CreateChildProfileForm({ link, onSuccess, onCancel }: {
     home_city: '',
     federation: null as number | null,
     competitive_level: 'amateur',
-    tennis_class: '',
   });
   const [cities, setCities] = useState<{ value: string; label: string }[]>([]);
   const [loadingCities, setLoadingCities] = useState(false);
@@ -961,7 +947,6 @@ function CreateChildProfileForm({ link, onSuccess, onCancel }: {
         home_city: form.home_city,
         federation: form.federation,
         competitive_level: form.competitive_level as any,
-        tennis_class: form.tennis_class,
         is_primary: true,
       });
       Toast.show({ type: 'success', text1: 'Perfil esportivo criado!' });
@@ -1022,12 +1007,6 @@ function CreateChildProfileForm({ link, onSuccess, onCancel }: {
         value={form.competitive_level}
         options={LEVEL_OPTIONS}
         onSelect={(v) => setForm({ ...form, competitive_level: v })}
-      />
-      <SelectField
-        label="Classe"
-        value={form.tennis_class}
-        options={CLASS_OPTIONS}
-        onSelect={(v) => setForm({ ...form, tennis_class: v })}
       />
       <Button title="Criar perfil" onPress={submit} loading={submitting} style={{ marginTop: 4 }} />
       <Button title="Cancelar" variant="ghost" onPress={onCancel} />
@@ -1092,7 +1071,6 @@ function ProfileCard({ profile: p, colors, onEdit, onMakePrimary, onRemove, rest
   onRemove: () => void;
   restrictedMode?: boolean;
 }) {
-  const classLabel = p.tennis_class ? (TENNIS_CLASS_LABELS[p.tennis_class] ?? `Classe ${p.tennis_class}`) : null;
   const levelLabel = LEVEL_LABELS[p.competitive_level] ?? p.competitive_level;
   const genderLabel = p.gender ? (GENDER_LABELS[p.gender] ?? p.gender) : null;
 
@@ -1148,7 +1126,7 @@ function ProfileCard({ profile: p, colors, onEdit, onMakePrimary, onRemove, rest
         ) : null}
         <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
           <Ionicons name="trophy-outline" size={13} color={colors.textMuted} />
-          <AppText variant="caption">{levelLabel}{classLabel ? ` • ${classLabel}` : ''}</AppText>
+          <AppText variant="caption">{levelLabel}</AppText>
         </View>
       </View>
 
@@ -1173,7 +1151,6 @@ function ProfileEditor({ profile, onSaved, onCancel, restrictedMode = false }: {
     home_state: profile.home_state ?? 'SP',
     home_city: profile.home_city ?? '',
     federation: profile.federation ?? null,
-    tennis_class: profile.tennis_class ?? '',
     competitive_level: profile.competitive_level ?? 'amateur',
   });
   const [modality, setModality] = React.useState(profile.preferred_modality ?? '');
@@ -1251,7 +1228,6 @@ function ProfileEditor({ profile, onSaved, onCancel, restrictedMode = false }: {
             onChange={(id) => setForm({ ...form, federation: id })}
           />
           <SelectField label="Nível competitivo" value={form.competitive_level} options={LEVEL_OPTIONS} onSelect={(v) => setForm({ ...form, competitive_level: v as PlayerProfile['competitive_level'] })} />
-          <SelectField label="Classe" value={form.tennis_class} options={CLASS_OPTIONS} onSelect={(v) => setForm({ ...form, tennis_class: v })} />
           <SelectField label="Modalidade principal" value={modality} options={MOBILE_MODALITY_OPTIONS} onSelect={setModality} placeholder="Selecione a modalidade" />
         </>
       ) : null}

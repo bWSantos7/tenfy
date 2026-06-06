@@ -160,7 +160,6 @@ export interface PlayerProfile {
   federation_state?: string;        // UF da federação (read-only)
   competitive_level: 'beginner' | 'amateur' | 'federated' | 'youth' | 'pro';
   dominant_hand: 'R' | 'L' | '';
-  tennis_class: string;
   preferred_modality: string;
   is_primary: boolean;
   external_ids: Record<string, unknown>;

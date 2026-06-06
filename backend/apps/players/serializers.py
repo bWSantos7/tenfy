@@ -62,7 +62,7 @@ class PlayerProfileSerializer(serializers.ModelSerializer):
             'id', 'user_id', 'display_name', 'birth_year', 'birth_date',
             'gender', 'home_state', 'home_city', 'travel_radius_km', 'travel_states',
             'federation', 'federation_detail', 'federation_state',
-            'competitive_level', 'dominant_hand', 'tennis_class', 'preferred_modality',
+            'competitive_level', 'dominant_hand', 'preferred_modality',
             'is_primary', 'external_ids', 'categories', 'sporting_age',
             'created_at', 'updated_at',
             # UTR

@@ -156,7 +156,7 @@ export function HomeScreen(_: Props) {
           <View style={{ flex: 1 }}>
             <AppText variant="caption" style={{ color: colors.textMuted }}>Olá,</AppText>
             <AppText variant="body" style={{ fontWeight: '700', fontSize: 16 }}>{user?.full_name || profile?.display_name || user?.email?.split('@')[0] || 'Jogador'}</AppText>
-            {profile ? <AppText variant="caption" style={{ marginTop: 2 }}>{profile.tennis_class ? `Classe ${profile.tennis_class}` : ''}{profile.sporting_age ? ` • ${profile.sporting_age} anos esportivos` : ''}{profile.home_state ? ` • ${profile.home_state}` : ''}</AppText> : null}
+            {profile ? <AppText variant="caption" style={{ marginTop: 2 }}>{profile.sporting_age ? `${profile.sporting_age} anos esportivos` : ''}{profile.home_state ? ` • ${profile.home_state}` : ''}</AppText> : null}
           </View>
         </View>
         <Pressable onPress={() => navigation.navigate('Tabs', { screen: 'Alerts' } as never)} style={{ padding: 8 }}>

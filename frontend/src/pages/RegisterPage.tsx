@@ -55,7 +55,6 @@ const STATES = [
   'AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB',
   'PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO',
 ];
-const CLASSES = ['1', '2', '3', '4', '5', 'PR'];
 
 // ─── Component ─────────────────────────────────────────────────────────────────
 
@@ -105,7 +104,6 @@ export const RegisterPage: React.FC = () => {
     home_city: '',
     federation: null as number | null,
     competitive_level: 'amateur',
-    tennis_class: '',
     modality: '',
   });
 
@@ -267,7 +265,6 @@ export const RegisterPage: React.FC = () => {
         home_city: profile.home_city,
         federation: profile.federation,
         competitive_level: profile.competitive_level as any,
-        tennis_class: profile.tennis_class,
         preferred_modality: profile.modality || '',
         is_primary: true,
       } as any);
@@ -766,15 +763,6 @@ export const RegisterPage: React.FC = () => {
               <select className="input-base" value={profile.competitive_level}
                 onChange={(e) => setProfile({ ...profile, competitive_level: e.target.value })}>
                 {Object.entries(LEVEL_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-              </select>
-            </div>
-
-            <div>
-              <label className="text-xs text-text-secondary mb-1 block">Classe (FPT/CBT)</label>
-              <select className="input-base" value={profile.tennis_class}
-                onChange={(e) => setProfile({ ...profile, tennis_class: e.target.value })}>
-                <option value="">Sem classe definida</option>
-                {CLASSES.map((c) => <option key={c} value={c}>{c === 'PR' ? 'Pré-Ranking' : `Classe ${c}`}</option>)}
               </select>
             </div>
 

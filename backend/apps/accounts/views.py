@@ -551,7 +551,6 @@ class ParentChildViewSet(viewsets.ModelViewSet):
                 federation=federation,
                 travel_states=travel_states,
                 competitive_level=profile_data.get('competitive_level', 'amateur'),
-                tennis_class=profile_data.get('tennis_class', ''),
                 preferred_modality=profile_data.get('preferred_modality', ''),
                 is_primary=True,
             )
@@ -752,7 +751,6 @@ class ParentChildViewSet(viewsets.ModelViewSet):
             federation=vd.get('federation'),
             travel_states=vd.get('travel_states', []),
             competitive_level=vd.get('competitive_level', 'amateur'),
-            tennis_class=vd.get('tennis_class', ''),
             preferred_modality=vd.get('preferred_modality', ''),
             is_primary=True,
         )
@@ -1112,7 +1110,7 @@ def data_export(request):
         PlayerProfile.objects.filter(user=user).values(
             'id', 'display_name', 'birth_year', 'birth_date', 'gender',
             'home_state', 'home_city', 'travel_radius_km', 'travel_states', 'competitive_level',
-            'dominant_hand', 'tennis_class', 'is_primary', 'external_ids',
+            'dominant_hand', 'is_primary', 'external_ids',
             'created_at', 'updated_at',
         )
     )

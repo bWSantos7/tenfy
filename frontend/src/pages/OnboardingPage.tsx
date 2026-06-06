@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import { createProfile, listProfiles } from '../services/data';
 import { extractApiError } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
-import { LEVEL_LABELS, TENNIS_CLASS_LABELS } from '../utils/format';
+import { LEVEL_LABELS } from '../utils/format';
 import { loadCitiesForState } from '../components/StateMultiSelect';
 import { FederationSelect } from '../components/FederationSelect';
 import { MODALITY_OPTIONS } from '../utils/profileModality';
@@ -30,7 +30,6 @@ export const OnboardingPage: React.FC = () => {
     home_city: '',
     federation: null as number | null,
     competitive_level: 'amateur',
-    tennis_class: '',
     preferred_modality: '' as string,
   });
 
@@ -82,7 +81,6 @@ export const OnboardingPage: React.FC = () => {
         home_city: form.home_city,
         federation: form.federation,
         competitive_level: form.competitive_level as any,
-        tennis_class: form.tennis_class,
         preferred_modality: form.preferred_modality,
         is_primary: true,
       } as any);
@@ -227,15 +225,6 @@ export const OnboardingPage: React.FC = () => {
               <select className="input-base" value={form.competitive_level}
                 onChange={(e) => update('competitive_level', e.target.value)}>
                 {Object.entries(LEVEL_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-              </select>
-            </div>
-
-            <div>
-              <label className="text-xs text-text-secondary mb-1 block">Classe (FPT / federação)</label>
-              <select className="input-base" value={form.tennis_class}
-                onChange={(e) => update('tennis_class', e.target.value)}>
-                <option value="">Sem classe definida</option>
-                {Object.entries(TENNIS_CLASS_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>
             </div>
 

@@ -87,3 +87,33 @@ class ItfPlayersJoinTestCase(TestCase):
         entries = list(iter_player_entries(insc, 'J-J60-BRA-2026-001'))
         self.assertEqual(len(entries), 3)
         self.assertTrue(all(e.get('player_name') for e in entries))
+
+
+class ItfVenueCountryTestCase(TestCase):
+    """Card 1 (tasks2): o connector ITF deve capturar o NOME do país (pais), não só o código."""
+
+    def test_normalize_captures_country_name(self):
+        from apps.ingestion.connectors.itf_mongo import _normalize_tournament
+        doc = {
+            'slug_externo': 'j-j60-sui-2026-001',
+            'nome': 'J60 Geneva',
+            'pais': 'Switzerland',
+            'codigo_pais': 'SUI',
+            'cidade': 'Geneva',
+            'data_inicio': '2026-06-15',
+            'data_fim': '2026-06-21',
+        }
+        out = _normalize_tournament(doc)
+        self.assertIsNotNone(out)
+        self.assertEqual(out['venue']['country'], 'Switzerland')
+        self.assertEqual(out['venue']['country_code'], 'SUI')
+
+    def test_venue_created_when_only_country(self):
+        from apps.ingestion.connectors.itf_mongo import _normalize_tournament
+        doc = {
+            'slug_externo': 'j-j60-bel-2026-001', 'nome': 'J60 X',
+            'pais': 'Belgium', 'codigo_pais': 'BEL', 'cidade': '',
+        }
+        out = _normalize_tournament(doc)
+        self.assertIsNotNone(out['venue'])
+        self.assertEqual(out['venue']['country'], 'Belgium')

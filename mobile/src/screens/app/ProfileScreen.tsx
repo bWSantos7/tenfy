@@ -19,7 +19,7 @@ import {
 } from '../../services/data';
 import { extractApiError, mediaUrl } from '../../services/api';
 import { DependentInvite, ParentChild, PlayerProfile, PlayerSearchResult } from '../../types';
-import { GENDER_LABELS, LEVEL_LABELS, ROLE_LABELS, isValidEmail } from '../../utils/format';
+import { GENDER_LABELS, LEVEL_LABELS, ROLE_LABELS, isValidEmail, PASSWORD_HINT, validatePasswordRule } from '../../utils/format';
 import { markProfileDirty } from '../../utils/profileRefresh';
 import { getProfileModality, setProfileModality, MODALITY_OPTIONS } from '../../utils/profileModality';
 import { getActiveProfileId, setActiveProfileId } from '../../utils/activeProfile';
@@ -725,7 +725,7 @@ function AddDependentForm({ onSuccess, onCancel }: { onSuccess: () => Promise<vo
     if (!codeSent) return Toast.show({ type: 'error', text1: 'Confirme o e-mail', text2: 'Envie e digite o código enviado ao e-mail do dependente.' });
     if (emailCode.trim().length < 6) return Toast.show({ type: 'error', text1: 'Informe o código de 6 dígitos enviado ao e-mail' });
     if (!account.password) return Toast.show({ type: 'error', text1: 'Defina uma senha' });
-    if (account.password.length < 8) return Toast.show({ type: 'error', text1: 'Senha deve ter no mínimo 8 caracteres' });
+    { const e = validatePasswordRule(account.password); if (e) return Toast.show({ type: 'error', text1: e }); }
     if (account.password !== account.password_confirm) return Toast.show({ type: 'error', text1: 'As senhas não conferem' });
     if (!profile.birth_year) return Toast.show({ type: 'error', text1: 'Informe o ano de nascimento do dependente' });
     const birthYearNum = Number(profile.birth_year);
@@ -878,6 +878,7 @@ function AddDependentForm({ onSuccess, onCancel }: { onSuccess: () => Promise<vo
         onChangeText={(v) => setAccount({ ...account, password: v })}
         secureTextEntry
         placeholder="Mínimo 8 caracteres"
+        hint={PASSWORD_HINT}
       />
       <Input
         label="Confirmar senha *"

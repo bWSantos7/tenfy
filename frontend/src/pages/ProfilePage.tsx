@@ -17,7 +17,7 @@ import { deleteAccount, linkExistingChild, uploadAvatar } from '../services/auth
 import { extractApiError, mediaUrl } from '../services/api';
 import { resolveAvatar } from '../utils/format';
 import { createChildAccount } from '../services/data';
-import { LEVEL_LABELS, GENDER_LABELS, ROLE_LABELS, isValidEmail } from '../utils/format';
+import { LEVEL_LABELS, GENDER_LABELS, ROLE_LABELS, isValidEmail, PASSWORD_HINT, validatePasswordRule } from '../utils/format';
 import { getProfileModality, setProfileModality, MODALITY_OPTIONS } from '../utils/profileModality';
 
 // ─── Confirm Modal ─────────────────────────────────────────────────────────────
@@ -787,7 +787,7 @@ export const AddChildForm: React.FC<{
     if (!isValidEmail(account.email)) { toast.error('Informe um e-mail válido (ex.: nome@dominio.com).'); return; }
     if (!codeSent) { toast.error('Envie e confirme o código enviado ao e-mail do dependente.'); return; }
     if (emailCode.trim().length < 6) { toast.error('Informe o código de 6 dígitos enviado ao e-mail.'); return; }
-    if (account.password.length < 8) { toast.error('Senha deve ter pelo menos 8 caracteres.'); return; }
+    { const e = validatePasswordRule(account.password); if (e) { toast.error(e); return; } }
     if (account.password !== account.confirm_password) { toast.error('As senhas não conferem.'); return; }
 
     if (createProfileNow) {
@@ -940,6 +940,7 @@ export const AddChildForm: React.FC<{
               {showPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
           </div>
+          <p className="text-[11px] text-text-muted mt-1">{PASSWORD_HINT}</p>
         </div>
         <div>
           <label className="text-xs text-text-secondary mb-1 block">Confirmar senha *</label>

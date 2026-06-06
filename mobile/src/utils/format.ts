@@ -7,6 +7,23 @@ export function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((email || '').trim());
 }
 
+// Regras de senha — espelham os validadores do backend (Django AUTH_PASSWORD_VALIDATORS).
+export const PASSWORD_MIN_LENGTH = 8;
+export const PASSWORD_HINT =
+  'Use no mínimo 8 caracteres. Não pode ser só números nem uma senha muito comum.';
+
+/** Validação client-side alinhada ao backend. Retorna mensagem de erro ou null. */
+export function validatePasswordRule(pwd: string): string | null {
+  const v = pwd || '';
+  if (v.length < PASSWORD_MIN_LENGTH) {
+    return `A senha precisa ter pelo menos ${PASSWORD_MIN_LENGTH} caracteres.`;
+  }
+  if (/^\d+$/.test(v)) {
+    return 'A senha não pode conter apenas números.';
+  }
+  return null;
+}
+
 /** Extrai o ID do Tênis Integrado de um player_external_id ("tenisintegrado:483342" → "483342"). */
 export function tenisIntegradoId(externalId?: string | null): string | null {
   if (!externalId) return null;

@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api, { extractApiError } from '../services/api';
+import { PASSWORD_HINT, validatePasswordRule } from '../utils/format';
 
 export const ResetPasswordPage: React.FC = () => {
   const { uid, token } = useParams<{ uid: string; token: string }>();
@@ -17,8 +18,9 @@ export const ResetPasswordPage: React.FC = () => {
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (form.new_password.length < 8) {
-      toast.error('A senha precisa ter ao menos 8 caracteres');
+    const pwErr = validatePasswordRule(form.new_password);
+    if (pwErr) {
+      toast.error(pwErr);
       return;
     }
     if (form.new_password !== form.confirm_password) {
@@ -76,6 +78,7 @@ export const ResetPasswordPage: React.FC = () => {
                 {showPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
+            <p className="text-[11px] text-text-muted mt-1">{PASSWORD_HINT}</p>
           </div>
           <div>
             <label className="text-xs text-text-secondary font-medium mb-1 block">

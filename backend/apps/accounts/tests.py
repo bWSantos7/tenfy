@@ -162,6 +162,20 @@ class ParentChildTestCase(TestCase):
         self.assertEqual(child.role, User.ROLE_PLAYER)
         self.assertTrue(ParentChild.objects.filter(parent=self.parent, child=child).exists())
 
+    def test_create_child_rejects_invalid_email(self):
+        # Task 10: e-mail inválido deve ser bloqueado no backend com mensagem clara.
+        self.client.force_authenticate(user=self.parent)
+        for bad in ['semarroba', 'a@', '@dominio.com', 'nome@dominio']:
+            res = self.client.post('/api/auth/children/', {
+                'full_name': 'Child Player',
+                'email': bad,
+                'password': 'Str0ngPass!',
+                'password_confirm': 'Str0ngPass!',
+            }, format='json')
+            self.assertEqual(res.status_code, 400, f'{bad} deveria ser rejeitado')
+            self.assertIn('email', res.data)
+        self.assertFalse(User.objects.filter(full_name='Child Player').exists())
+
     def test_non_parent_cannot_create_child_account(self):
         player = User.objects.create_user(email='player@example.com', password='testpass123')
         self.client.force_authenticate(user=player)

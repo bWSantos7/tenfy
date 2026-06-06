@@ -88,6 +88,10 @@ export const LEVEL_LABELS: Record<string, string> = {
   pro:        'Profissional',
 };
 
+/** Basic e-mail format check (mirrors the backend EmailField validation). */
+export function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((email || '').trim());
+}
 
 export const GENDER_LABELS: Record<string, string> = {
   M: 'Masculino',

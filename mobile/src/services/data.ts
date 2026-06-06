@@ -172,8 +172,14 @@ export async function createChildProfile(linkId: number, data: Partial<PlayerPro
   const res = await api.post<PlayerProfile>(`/api/auth/children/${linkId}/profile/`, data);
   return res.data;
 }
+/** Task 10: envia um código de verificação ao e-mail do dependente antes de criar. */
+export async function requestChildEmailCode(email: string): Promise<{ detail: string }> {
+  const res = await api.post<{ detail: string }>('/api/auth/children/request-email-code/', { email });
+  return res.data;
+}
+
 export async function createChildWithProfile(
-  accountData: { full_name: string; email: string; password: string; password_confirm: string },
+  accountData: { full_name: string; email: string; password: string; password_confirm: string; email_code: string },
   profileData: {
     display_name?: string;
     birth_year: number;
@@ -202,7 +208,7 @@ export async function updateChildAccount(linkId: number, data: { full_name?: str
   const res = await api.patch<ParentChild>(`/api/auth/children/${linkId}/update-account/`, data);
   return res.data;
 }
-export async function createChildAccount(data: { full_name: string; email: string; password: string; password_confirm: string; phone?: string }): Promise<ParentChild> {
+export async function createChildAccount(data: { full_name: string; email: string; password: string; password_confirm: string; email_code: string; phone?: string }): Promise<ParentChild> {
   const res = await api.post<ParentChild>('/api/auth/children/', data);
   return res.data;
 }

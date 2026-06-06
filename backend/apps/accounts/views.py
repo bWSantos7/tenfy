@@ -89,6 +89,30 @@ def _send_email_otp_with_fallback(user, subject_key='verify') -> bool:
         return False
 
 
+def _send_dependent_email_code(email: str) -> bool:
+    """Generate + dispatch a confirmation code to a (not-yet-registered) dependent
+    e-mail. Same Celery-with-sync-fallback strategy as the user OTP. user_id=0 is a
+    placeholder — the task only uses it for logging, not a DB lookup."""
+    from .otp import generate_email_code
+    from .tasks import send_otp_email
+
+    code = generate_email_code(email)
+    args = (0, email, '', code, 'dependent')
+    try:
+        send_otp_email.delay(*args)
+        return True
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('Dependent OTP enqueue failed; sync fallback: %s', exc)
+    try:
+        result = send_otp_email.apply(args=args)
+        if hasattr(result, 'get'):
+            result.get(propagate=True)
+        return True
+    except Exception as exc:  # noqa: BLE001
+        logger.error('Dependent OTP dispatch failed: %s', exc)
+        return False
+
+
 class RegisterThrottle(AnonRateThrottle):
     rate = '10/hour'
 
@@ -783,6 +807,41 @@ class ParentChildViewSet(viewsets.ModelViewSet):
                 logger.error('Password reset dispatch failed for child %s: %s', child.id, exc2)
 
         return Response({'detail': f'E-mail de recuperação enviado para {child.email}.'})
+
+    @viewset_action(detail=False, methods=['post'], url_path='request-email-code')
+    def request_email_code(self, request):
+        """
+        Task 10: envia um código de verificação ao e-mail do dependente, ANTES de
+        criar a conta. O responsável confirma o código na criação.
+        Valida: papel de responsável, formato do e-mail e duplicidade.
+        """
+        from django.core.validators import validate_email as _validate_email
+        from django.core.exceptions import ValidationError as _DjangoValidationError
+
+        if request.user.role != User.ROLE_PARENT:
+            return Response(
+                {'detail': 'Apenas responsáveis podem cadastrar dependentes.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        email = (request.data.get('email') or '').strip().lower()
+        if not email:
+            return Response({'email': 'Informe o e-mail do dependente.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            _validate_email(email)
+        except _DjangoValidationError:
+            return Response(
+                {'email': 'Informe um e-mail válido (ex.: nome@dominio.com).'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if User.objects.filter(email=email).exists():
+            return Response({'email': 'Este e-mail já possui cadastro.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not _send_dependent_email_code(email):
+            return Response(
+                {'detail': 'Não foi possível enviar o código agora. Tente novamente em instantes.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        return Response({'detail': f'Código enviado para {email}.'})
 
     @viewset_action(detail=False, methods=['get'], url_path='search-players')
     def search_players(self, request):

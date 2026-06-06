@@ -12,7 +12,7 @@ import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { DependentInvite, ParentChild, PlayerProfile, PlayerSearchResult } from '../types';
-import { listProfiles, setPrimary, deleteProfile, updateProfile, requestDataExport, listChildren, removeChild, createChildWithProfile, listChildProfiles, createChildProfile, sendChildPasswordReset, updateChildAccount, searchPlayersForInvite, sendDependentInvite, listSentInvites, cancelDependentInvite, respondDependentInvite } from '../services/data';
+import { listProfiles, setPrimary, deleteProfile, updateProfile, requestDataExport, listChildren, removeChild, createChildWithProfile, listChildProfiles, createChildProfile, sendChildPasswordReset, updateChildAccount, searchPlayersForInvite, sendDependentInvite, listSentInvites, cancelDependentInvite, respondDependentInvite, requestChildEmailCode } from '../services/data';
 import { deleteAccount, linkExistingChild, uploadAvatar } from '../services/auth';
 import { extractApiError, mediaUrl } from '../services/api';
 import { resolveAvatar } from '../utils/format';
@@ -747,6 +747,27 @@ export const AddChildForm: React.FC<{
   const [createProfileNow, setCreateProfileNow] = useState(true);
   // TC-013/014: link existing account flow
   const [duplicateEmailDetected, setDuplicateEmailDetected] = useState(false);
+  // Task 10: confirmação do e-mail do dependente por código (OTP) antes de criar.
+  const [emailCode, setEmailCode] = useState('');
+  const [codeSent, setCodeSent] = useState(false);
+  const [sendingCode, setSendingCode] = useState(false);
+
+  async function handleSendCode() {
+    if (!account.email.trim()) { toast.error('Informe o e-mail.'); return; }
+    if (!isValidEmail(account.email)) { toast.error('Informe um e-mail válido (ex.: nome@dominio.com).'); return; }
+    setSendingCode(true);
+    setDuplicateEmailDetected(false);
+    try {
+      await requestChildEmailCode(account.email.trim());
+      setCodeSent(true);
+      toast.success('Código enviado ao e-mail do dependente.');
+    } catch (err) {
+      if (isEmailDuplicateError(err)) setDuplicateEmailDetected(true);
+      else toast.error(extractApiError(err));
+    } finally {
+      setSendingCode(false);
+    }
+  }
 
   useEffect(() => {
     setLoadingCities(true);
@@ -764,9 +785,11 @@ export const AddChildForm: React.FC<{
     if (!account.full_name.trim()) { toast.error('Informe o nome completo.'); return; }
     if (!account.email.trim()) { toast.error('Informe o e-mail.'); return; }
     if (!isValidEmail(account.email)) { toast.error('Informe um e-mail válido (ex.: nome@dominio.com).'); return; }
+    if (!codeSent) { toast.error('Envie e confirme o código enviado ao e-mail do dependente.'); return; }
+    if (emailCode.trim().length < 6) { toast.error('Informe o código de 6 dígitos enviado ao e-mail.'); return; }
     if (account.password.length < 8) { toast.error('Senha deve ter pelo menos 8 caracteres.'); return; }
     if (account.password !== account.confirm_password) { toast.error('As senhas não conferem.'); return; }
-    
+
     if (createProfileNow) {
       if (!profile.birth_year) { toast.error('Informe o ano de nascimento.'); return; }
       if (!profile.gender) { toast.error('Selecione o gênero.'); return; }
@@ -778,7 +801,7 @@ export const AddChildForm: React.FC<{
     try {
       if (createProfileNow) {
         await createChildWithProfile(
-          { full_name: account.full_name, email: account.email, password: account.password, password_confirm: account.confirm_password },
+          { full_name: account.full_name, email: account.email, password: account.password, password_confirm: account.confirm_password, email_code: emailCode.trim() },
           {
             display_name: profile.display_name || account.full_name,
             birth_year: Number(profile.birth_year),
@@ -797,6 +820,7 @@ export const AddChildForm: React.FC<{
           email: account.email,
           password: account.password,
           password_confirm: account.confirm_password,
+          email_code: emailCode.trim(),
         });
       }
       toast.success('Dependente adicionado!');
@@ -849,10 +873,31 @@ export const AddChildForm: React.FC<{
         </div>
         <div>
           <label className="text-xs text-text-secondary mb-1 block">E-mail *</label>
-          <input className="input-base" type="email" placeholder="email@exemplo.com"
-            value={account.email}
-            onChange={(e) => { setAccount({ ...account, email: e.target.value }); setDuplicateEmailDetected(false); }} />
+          <div className="flex gap-2">
+            <input className="input-base flex-1" type="email" placeholder="email@exemplo.com"
+              value={account.email}
+              onChange={(e) => { setAccount({ ...account, email: e.target.value }); setDuplicateEmailDetected(false); setCodeSent(false); setEmailCode(''); }} />
+            <button type="button" className="btn-secondary !text-xs whitespace-nowrap px-3"
+              onClick={handleSendCode} disabled={sendingCode || !account.email.trim()}>
+              {sendingCode ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : (codeSent ? 'Reenviar' : 'Enviar código')}
+            </button>
+          </div>
+          <p className="text-[11px] text-text-muted mt-1">
+            Enviaremos um código ao e-mail do dependente para confirmar que é válido.
+          </p>
         </div>
+
+        {codeSent && (
+          <div>
+            <label className="text-xs text-text-secondary mb-1 block">Código de verificação *</label>
+            <input className="input-base tracking-widest" inputMode="numeric" maxLength={6}
+              placeholder="000000" value={emailCode}
+              onChange={(e) => setEmailCode(e.target.value.replace(/\D/g, '').slice(0, 6))} />
+            <p className="text-[11px] text-text-muted mt-1">
+              Digite o código de 6 dígitos enviado para <strong>{account.email}</strong>.
+            </p>
+          </div>
+        )}
 
         {duplicateEmailDetected && (
           <div className="rounded-xl border border-blue-500/30 bg-blue-500/8 p-3 space-y-2">

@@ -25,7 +25,7 @@ class RegistrationTestCase(TestCase):
         res = self.client.post('/api/auth/register/', {
             'email': 'test@example.com',
             'password': 'Str0ngPass!',
-            'password_confirm': 'Str0ngPass!',
+            'password_confirm': 'Str0ngPass!', 'email_code': '000000',
             'full_name': 'Test User',
             'phone': '+5511999999999',
             'role': 'player',
@@ -40,7 +40,7 @@ class RegistrationTestCase(TestCase):
         res = self.client.post('/api/auth/register/', {
             'email': 'dup@example.com',
             'password': 'Str0ngPass!',
-            'password_confirm': 'Str0ngPass!',
+            'password_confirm': 'Str0ngPass!', 'email_code': '000000',
             'full_name': 'Dup',
             'phone': '+5511999999999',
             'role': 'player',
@@ -62,7 +62,7 @@ class RegistrationTestCase(TestCase):
         res = self.client.post('/api/auth/register/', {
             'email': 'fallback@example.com',
             'password': 'Str0ngPass!',
-            'password_confirm': 'Str0ngPass!',
+            'password_confirm': 'Str0ngPass!', 'email_code': '000000',
             'full_name': 'Fallback User',
             'phone': '+5511988887777',
             'role': 'player',
@@ -128,6 +128,11 @@ class OTPTestCase(TestCase):
 
 class ParentChildTestCase(TestCase):
     def setUp(self):
+        # Task 10: a confirmação por OTP do e-mail do dependente é exercitada em
+        # testes dedicados; aqui assumimos código válido para focar no resto.
+        _vp = patch('apps.accounts.otp.verify_email_code', return_value=True)
+        _vp.start()
+        self.addCleanup(_vp.stop)
         self.client = APIClient()
         self.parent = User.objects.create_user(
             email='parent@example.com',
@@ -154,7 +159,7 @@ class ParentChildTestCase(TestCase):
             'email': 'child@example.com',
             'phone': '+5511999991111',
             'password': 'Str0ngPass!',
-            'password_confirm': 'Str0ngPass!',
+            'password_confirm': 'Str0ngPass!', 'email_code': '000000',
         }, format='json')
 
         self.assertEqual(res.status_code, 201)
@@ -170,7 +175,7 @@ class ParentChildTestCase(TestCase):
                 'full_name': 'Child Player',
                 'email': bad,
                 'password': 'Str0ngPass!',
-                'password_confirm': 'Str0ngPass!',
+                'password_confirm': 'Str0ngPass!', 'email_code': '000000',
             }, format='json')
             self.assertEqual(res.status_code, 400, f'{bad} deveria ser rejeitado')
             self.assertIn('email', res.data)
@@ -183,7 +188,7 @@ class ParentChildTestCase(TestCase):
             'full_name': 'Child Player',
             'email': 'child2@example.com',
             'password': 'Str0ngPass!',
-            'password_confirm': 'Str0ngPass!',
+            'password_confirm': 'Str0ngPass!', 'email_code': '000000',
         }, format='json')
 
         self.assertEqual(res.status_code, 403)
@@ -193,6 +198,10 @@ class DependentManagementTestCase(TestCase):
     """Tests for parent/responsible creating and managing dependent accounts."""
 
     def setUp(self):
+        # Task 10: confirmação por OTP exercitada em teste dedicado.
+        _vp = patch('apps.accounts.otp.verify_email_code', return_value=True)
+        _vp.start()
+        self.addCleanup(_vp.stop)
         self.client = APIClient()
         self.tester_plan = Plan.objects.create(
             name='Tester', slug=Plan.SLUG_TESTER, max_members=4, is_active=True,
@@ -221,7 +230,7 @@ class DependentManagementTestCase(TestCase):
             'full_name': 'Child One',
             'email': 'child1@example.com',
             'password': 'Str0ngPass!',
-            'password_confirm': 'Str0ngPass!',
+            'password_confirm': 'Str0ngPass!', 'email_code': '000000',
         }, format='json')
         self.assertEqual(res.status_code, 201)
         child = User.objects.get(email='child1@example.com')
@@ -235,7 +244,7 @@ class DependentManagementTestCase(TestCase):
             'full_name': 'Child Familia',
             'email': 'childfam@example.com',
             'password': 'Str0ngPass!',
-            'password_confirm': 'Str0ngPass!',
+            'password_confirm': 'Str0ngPass!', 'email_code': '000000',
         }, format='json')
         self.assertEqual(res.status_code, 201)
 
@@ -246,7 +255,7 @@ class DependentManagementTestCase(TestCase):
             'full_name': 'Should Fail',
             'email': 'fail@example.com',
             'password': 'Str0ngPass!',
-            'password_confirm': 'Str0ngPass!',
+            'password_confirm': 'Str0ngPass!', 'email_code': '000000',
         }, format='json')
         self.assertEqual(res.status_code, 403)
 
@@ -259,7 +268,7 @@ class DependentManagementTestCase(TestCase):
             'full_name': 'Nope',
             'email': 'nope@example.com',
             'password': 'Str0ngPass!',
-            'password_confirm': 'Str0ngPass!',
+            'password_confirm': 'Str0ngPass!', 'email_code': '000000',
         }, format='json')
         self.assertEqual(res.status_code, 403)
 
@@ -272,14 +281,14 @@ class DependentManagementTestCase(TestCase):
                 'full_name': f'Child {i}',
                 'email': f'child{i}@example.com',
                 'password': 'Str0ngPass!',
-                'password_confirm': 'Str0ngPass!',
+                'password_confirm': 'Str0ngPass!', 'email_code': '000000',
             }, format='json')
             self.assertEqual(res.status_code, 201, f'Child {i} creation failed')
         res = self.client.post('/api/auth/children/', {
             'full_name': 'Child 4 blocked',
             'email': 'child4@example.com',
             'password': 'Str0ngPass!',
-            'password_confirm': 'Str0ngPass!',
+            'password_confirm': 'Str0ngPass!', 'email_code': '000000',
         }, format='json')
         self.assertIn(res.status_code, [400, 403])
 
@@ -292,7 +301,7 @@ class DependentManagementTestCase(TestCase):
             'full_name': 'Auth Child',
             'email': 'authchild@example.com',
             'password': 'Str0ngPass!',
-            'password_confirm': 'Str0ngPass!',
+            'password_confirm': 'Str0ngPass!', 'email_code': '000000',
         }, format='json')
         self.client.force_authenticate(user=None)
         res = self.client.post('/api/auth/login/', {
@@ -311,7 +320,7 @@ class DependentManagementTestCase(TestCase):
             'full_name': 'Profile Child',
             'email': 'profchild@example.com',
             'password': 'Str0ngPass!',
-            'password_confirm': 'Str0ngPass!',
+            'password_confirm': 'Str0ngPass!', 'email_code': '000000',
         }, format='json')
         link_id = res.data['id']
         res = self.client.post(f'/api/auth/children/{link_id}/profile/', {
@@ -331,7 +340,7 @@ class DependentManagementTestCase(TestCase):
             'full_name': 'Dup Child',
             'email': 'dupchild@example.com',
             'password': 'Str0ngPass!',
-            'password_confirm': 'Str0ngPass!',
+            'password_confirm': 'Str0ngPass!', 'email_code': '000000',
         }, format='json')
         link_id = res.data['id']
         self.client.post(f'/api/auth/children/{link_id}/profile/', {
@@ -404,7 +413,7 @@ class DependentManagementTestCase(TestCase):
             'full_name': 'CWP Child',
             'email': email,
             'password': 'Str0ngPass!',
-            'password_confirm': 'Str0ngPass!',
+            'password_confirm': 'Str0ngPass!', 'email_code': '000000',
             'profile': {
                 'birth_year': 2012,
                 'gender': 'M',
@@ -432,7 +441,7 @@ class DependentManagementTestCase(TestCase):
             'full_name': 'No Profile Child',
             'email': 'noprofile@example.com',
             'password': 'Str0ngPass!',
-            'password_confirm': 'Str0ngPass!',
+            'password_confirm': 'Str0ngPass!', 'email_code': '000000',
         }
         res = self.client.post('/api/auth/children/create-with-profile/', payload, format='json')
         self.assertEqual(res.status_code, 400)
@@ -486,3 +495,50 @@ class LGPDDataExportTestCase(TestCase):
         res = self.client.get('/api/auth/data-export/')
         self.assertIn('Content-Disposition', res)
         self.assertIn('attachment', res['Content-Disposition'])
+
+
+class DependentEmailOtpTestCase(TestCase):
+    """Task 10: confirmação por código (OTP) do e-mail do dependente ANTES de criar."""
+
+    def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
+        self.client = APIClient()
+        self.parent = User.objects.create_user(
+            email='parent-otp@example.com', password='x',
+            role=User.ROLE_PARENT, full_name='Pai OTP',
+        )
+        plan = Plan.objects.create(name='Familia', slug=Plan.SLUG_FAMILIA, max_members=5, is_active=True)
+        Subscription.objects.create(user=self.parent, plan=plan, status=Subscription.STATUS_ACTIVE)
+        self.client.force_authenticate(self.parent)
+
+    def _payload(self, email, code):
+        return {
+            'full_name': 'Filho OTP', 'email': email,
+            'password': 'Str0ngPass!', 'password_confirm': 'Str0ngPass!',
+            'email_code': code,
+        }
+
+    def test_request_code_rejects_invalid_email(self):
+        res = self.client.post('/api/auth/children/request-email-code/', {'email': 'invalido'}, format='json')
+        self.assertEqual(res.status_code, 400)
+        self.assertIn('email', res.data)
+
+    def test_request_code_rejects_duplicate(self):
+        User.objects.create_user(email='ja@existe.com', password='x')
+        res = self.client.post('/api/auth/children/request-email-code/', {'email': 'ja@existe.com'}, format='json')
+        self.assertEqual(res.status_code, 400)
+
+    def test_create_requires_valid_code(self):
+        from apps.accounts.otp import generate_email_code
+        email = 'novo@dependente.com'
+        code = generate_email_code(email)  # mesmo código que o endpoint geraria/enviaria
+        # Código errado → bloqueia
+        res_bad = self.client.post('/api/auth/children/', self._payload(email, '999999'), format='json')
+        self.assertEqual(res_bad.status_code, 400)
+        self.assertIn('email_code', res_bad.data)
+        self.assertFalse(User.objects.filter(email=email).exists())
+        # Código certo → cria
+        res_ok = self.client.post('/api/auth/children/', self._payload(email, code), format='json')
+        self.assertEqual(res_ok.status_code, 201, res_ok.data)
+        self.assertTrue(User.objects.filter(email=email).exists())

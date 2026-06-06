@@ -176,6 +176,9 @@ class ChildAccountCreateSerializer(serializers.Serializer):
     phone = serializers.CharField(required=False, allow_blank=True, max_length=20)
     password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
     password_confirm = serializers.CharField(write_only=True, required=True)
+    # Task 10: código enviado ao e-mail do dependente (request-email-code) que
+    # confirma o e-mail antes de criar a conta.
+    email_code = serializers.CharField(write_only=True, required=True, max_length=6)
 
     def validate_email(self, value):
         email = value.lower()
@@ -184,11 +187,17 @@ class ChildAccountCreateSerializer(serializers.Serializer):
         return email
 
     def validate(self, attrs):
+        from .otp import verify_email_code
         request = self.context['request']
         if request.user.role != User.ROLE_PARENT:
             raise serializers.ValidationError('Apenas responsáveis podem cadastrar filhos.')
         if attrs['password'] != attrs['password_confirm']:
             raise serializers.ValidationError({'password': 'As senhas não conferem.'})
+        # Confirma o código enviado ao e-mail do dependente.
+        if not verify_email_code(attrs['email'], attrs.get('email_code', '')):
+            raise serializers.ValidationError(
+                {'email_code': 'Código inválido ou expirado. Reenvie o código e tente novamente.'}
+            )
         return attrs
 
     def create(self, validated_data):

@@ -65,8 +65,8 @@ export const LoginPage: React.FC = () => {
 
         <div className="relative flex flex-col h-full p-10 xl:p-14">
 
-          {/* Conteúdo central */}
-          <div className="my-auto py-12">
+          {/* Texto no topo */}
+          <div className="pt-4">
             {/* Badge */}
             <div className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 mb-7 border"
               style={{ background: 'rgba(198,239,33,0.08)', borderColor: 'rgba(198,239,33,0.2)' }}>
@@ -97,19 +97,19 @@ export const LoginPage: React.FC = () => {
                 </div>
               ))}
             </div>
+          </div>
 
-            {/* Logo principal — centralizada no painel quadriculado */}
-            <div className="mt-10 flex items-center justify-center">
-              <img
-                src="/logos/logo_escura2.png"
-                alt="Tenfy"
-                className="w-full max-w-[400px] xl:max-w-[460px] h-auto object-contain drop-shadow-2xl"
-              />
-            </div>
+          {/* Logo principal — centralizada no espaço livre do painel */}
+          <div className="flex-1 flex items-center justify-center py-8 min-h-0">
+            <img
+              src="/logos/logo_escura2.png"
+              alt="Tenfy"
+              className="w-full max-w-[360px] xl:max-w-[420px] max-h-[32vh] h-auto object-contain drop-shadow-2xl"
+            />
           </div>
 
           {/* Card flutuante inferior */}
-          <div className="mt-auto">
+          <div>
             <div className="rounded-2xl p-4 backdrop-blur-sm"
               style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
               <div className="flex items-center gap-3">

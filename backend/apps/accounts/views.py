@@ -791,12 +791,18 @@ class ParentChildViewSet(viewsets.ModelViewSet):
         """
         Busca jogadores existentes para o responsável escolher quem convidar.
 
-        Busca tolerante: ignora acentos e maiúsculas/minúsculas (via extensão
-        unaccent do Postgres) e procura tanto no nome quanto no e-mail. Assim
-        "joao", "JOÃO" e "joão" encontram o mesmo atleta.
+        Busca tolerante (Task 8):
+          - ignora acentos e maiúsculas/minúsculas (extensão unaccent);
+          - casa por TOKENS (cada palavra como substring, em qualquer ordem) — então
+            "silva joao", "joao", "silva" e "joao silva" encontram "João Alves Silva";
+          - tolera pequenos erros de digitação via similaridade trigram (pg_trgm),
+            ex.: "joao sliva";
+          - também procura no e-mail.
+        Ordena pelos melhores casamentos primeiro.
         """
         import unicodedata
         from django.db.models import Func, Q
+        from django.contrib.postgres.search import TrigramSimilarity
 
         q = (request.data.get('q') or request.query_params.get('q') or '').strip()
         if len(q) < 2:
@@ -806,18 +812,27 @@ class ParentChildViewSet(viewsets.ModelViewSet):
             function = 'unaccent'
             arity = 1
 
-        # Dobra a query para ASCII (joão -> joao) para casar com a coluna sem acento.
-        q_norm = unicodedata.normalize('NFKD', q).encode('ascii', 'ignore').decode() or q
+        # Dobra a query para ASCII (joão -> joao) para casar com as colunas sem acento.
+        q_norm = unicodedata.normalize('NFKD', q).encode('ascii', 'ignore').decode().strip() or q
+        tokens = [t for t in q_norm.split() if t]
 
+        # Cada token precisa aparecer no nome (AND) — independente da ordem.
+        token_q = Q()
+        for t in tokens:
+            token_q &= Q(uname__icontains=t)
+
+        _SIM_THRESHOLD = 0.3  # padrão pg_trgm; tolera typos sem virar ruído
         qs = (
             User.objects
-            .annotate(uname=Unaccent('full_name'), uemail=Unaccent('email'))
-            .filter(
-                Q(uname__icontains=q_norm) | Q(uemail__icontains=q_norm),
-                is_active=True, role=User.ROLE_PLAYER,
+            .annotate(
+                uname=Unaccent('full_name'),
+                uemail=Unaccent('email'),
+                sim=TrigramSimilarity(Unaccent('full_name'), q_norm),
             )
+            .filter(is_active=True, role=User.ROLE_PLAYER)
             .exclude(pk=request.user.pk)
-            .order_by('full_name')[:20]
+            .filter(token_q | Q(uemail__icontains=q_norm) | Q(sim__gte=_SIM_THRESHOLD))
+            .order_by('-sim', 'full_name')[:20]
         )
         return Response(PlayerSearchSerializer(qs, many=True, context={'request': request}).data)
 

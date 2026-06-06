@@ -200,10 +200,25 @@ class ChildAccountCreateSerializer(serializers.Serializer):
 
 
 class PlayerSearchSerializer(serializers.ModelSerializer):
-    """Minimal public data returned when a parent searches for a player to invite."""
+    """Minimal public data returned when a parent searches for a player to invite.
+
+    The e-mail is masked (e.g. "jo***@gmail.com") so the responsável can recognise
+    the right person without the full address being exposed (Task 8: não expor
+    dados sensíveis).
+    """
+    email = serializers.SerializerMethodField()
+
     class Meta:
         model = User
         fields = ('id', 'full_name', 'email', 'avatar', 'role')
+
+    def get_email(self, obj):
+        raw = obj.email or ''
+        if '@' not in raw:
+            return ''
+        local, _, domain = raw.partition('@')
+        masked_local = (local[:2] + '***') if len(local) > 2 else (local[:1] + '***')
+        return f'{masked_local}@{domain}'
 
 
 class DependentInviteSerializer(serializers.ModelSerializer):

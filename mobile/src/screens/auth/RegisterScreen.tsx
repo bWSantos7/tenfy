@@ -12,7 +12,7 @@ import { markProfileDirty } from '../../utils/profileRefresh';
 import { createChildAccount, register, sendEmailOtp, verifyEmailOtp } from '../../services/auth';
 import { checkout, fetchPlans, Plan } from '../../services/billing';
 import { UtrCandidate, User } from '../../types';
-import { LEVEL_LABELS } from '../../utils/format';
+import { LEVEL_LABELS, PASSWORD_HINT, validatePasswordRule } from '../../utils/format';
 import { MODALITY_OPTIONS, setProfileModality } from '../../utils/profileModality';
 import { AppText, Button, Card, Checkbox, Input, Screen, SelectField } from '../../components/ui';
 import { FederationSelect } from '../../components/FederationSelect';
@@ -166,7 +166,7 @@ export function RegisterScreen({ navigation }: Props) {
     if (!form.email.trim())     return Toast.show({ type: 'error', text1: 'Informe seu e-mail' });
     if (!form.phone.trim())     return Toast.show({ type: 'error', text1: 'Informe seu celular' });
     if (!form.password)         return Toast.show({ type: 'error', text1: 'Defina uma senha' });
-    if (form.password.length < 8) return Toast.show({ type: 'error', text1: 'Senha precisa ter no minimo 8 caracteres' });
+    { const e = validatePasswordRule(form.password); if (e) return Toast.show({ type: 'error', text1: e }); }
     if (form.password !== form.password_confirm) return Toast.show({ type: 'error', text1: 'As senhas nao conferem' });
     if (!form.accept_terms)     return Toast.show({ type: 'error', text1: 'Aceite os termos para continuar' });
     setSubmitting(true);
@@ -338,7 +338,7 @@ export function RegisterScreen({ navigation }: Props) {
     if (!dependentForm.full_name.trim()) return Toast.show({ type: 'error', text1: 'Informe o nome completo do dependente' });
     if (!dependentForm.email.trim())     return Toast.show({ type: 'error', text1: 'Informe o e-mail do dependente' });
     if (!dependentForm.password)         return Toast.show({ type: 'error', text1: 'Defina uma senha para o dependente' });
-    if (dependentForm.password.length < 8) return Toast.show({ type: 'error', text1: 'A senha precisa ter no minimo 8 caracteres' });
+    { const e = validatePasswordRule(dependentForm.password); if (e) return Toast.show({ type: 'error', text1: e }); }
     if (dependentForm.password !== dependentForm.password_confirm) return Toast.show({ type: 'error', text1: 'As senhas do dependente nao conferem' });
     setSubmitting(true);
     try {
@@ -513,7 +513,7 @@ export function RegisterScreen({ navigation }: Props) {
             <Input label="Nome completo" required value={form.full_name} onChangeText={(v) => setForm({ ...form, full_name: v })} autoCapitalize="words" placeholder="Ex: Maria Silva" />
             <Input label="E-mail" required value={form.email} onChangeText={(v) => setForm({ ...form, email: v.trim() })} autoCapitalize="none" keyboardType="email-address" placeholder="seu@email.com" />
             <Input label="Celular" required value={form.phone} onChangeText={(v) => setForm({ ...form, phone: v.replace(/\D/g, '') })} keyboardType="phone-pad" placeholder="11999999999" />
-            <Input label="Senha" required value={form.password} onChangeText={(v) => setForm({ ...form, password: v })} secureTextEntry placeholder="Minimo 8 caracteres" />
+            <Input label="Senha" required value={form.password} onChangeText={(v) => setForm({ ...form, password: v })} secureTextEntry placeholder="Minimo 8 caracteres" hint={PASSWORD_HINT} />
             {form.password.length > 0 && (() => {
               const { score, label, color } = passwordStrength(form.password, colors);
               return (
@@ -785,7 +785,7 @@ export function RegisterScreen({ navigation }: Props) {
             <Input label="Nome completo do dependente" required value={dependentForm.full_name} onChangeText={(v) => setDependentForm({ ...dependentForm, full_name: v })} autoCapitalize="words" placeholder="Ex: Pedro Silva" />
             <Input label="E-mail do dependente" required value={dependentForm.email} onChangeText={(v) => setDependentForm({ ...dependentForm, email: v.trim() })} autoCapitalize="none" keyboardType="email-address" placeholder="dependente@email.com" />
             <Input label="Celular do dependente" value={dependentForm.phone} onChangeText={(v) => setDependentForm({ ...dependentForm, phone: v.replace(/\D/g, '') })} keyboardType="phone-pad" placeholder="Opcional" />
-            <Input label="Senha do dependente" required value={dependentForm.password} onChangeText={(v) => setDependentForm({ ...dependentForm, password: v })} secureTextEntry placeholder="Minimo 8 caracteres" />
+            <Input label="Senha do dependente" required value={dependentForm.password} onChangeText={(v) => setDependentForm({ ...dependentForm, password: v })} secureTextEntry placeholder="Minimo 8 caracteres" hint={PASSWORD_HINT} />
             <Input label="Confirme a senha" required value={dependentForm.password_confirm} onChangeText={(v) => setDependentForm({ ...dependentForm, password_confirm: v })} secureTextEntry placeholder="Repita a senha" />
 
             <Button title="Cadastrar dependente" onPress={onCreateDependent} loading={submitting} />

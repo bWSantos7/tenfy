@@ -95,7 +95,7 @@ export function AppText({
 
 // ─── Input ────────────────────────────────────────────────────────────────────
 
-export function Input({ label, required, style, ...props }: TextInputProps & { label?: string; required?: boolean }) {
+export function Input({ label, required, hint, style, ...props }: TextInputProps & { label?: string; required?: boolean; hint?: string }) {
   const { colors } = useTheme();
   const [focused, setFocused] = useState(false);
   return (
@@ -122,6 +122,7 @@ export function Input({ label, required, style, ...props }: TextInputProps & { l
         ]}
         {...props}
       />
+      {hint ? <AppText variant="muted" style={{ fontSize: 11 }}>{hint}</AppText> : null}
     </View>
   );
 }

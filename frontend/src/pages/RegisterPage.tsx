@@ -11,7 +11,7 @@ import { checkout, fetchPlans, Plan } from '../services/billing';
 import { useAuth } from '../contexts/AuthContext';
 import { extractApiError } from '../services/api';
 import { User as UserType } from '../types';
-import { LEVEL_LABELS } from '../utils/format';
+import { LEVEL_LABELS, PASSWORD_HINT, validatePasswordRule } from '../utils/format';
 import { loadCitiesForState } from '../components/StateMultiSelect';
 import { FederationSelect } from '../components/FederationSelect';
 import { MODALITY_OPTIONS, setProfileModality } from '../utils/profileModality';
@@ -153,7 +153,7 @@ export const RegisterPage: React.FC = () => {
     if (!form.full_name.trim()) { toast.error('Informe seu nome completo'); return; }
     if (!form.email.trim())     { toast.error('Informe seu e-mail'); return; }
     if (!form.password)         { toast.error('Defina uma senha'); return; }
-    if (form.password.length < 8) { toast.error('Senha precisa ter no mínimo 8 caracteres'); return; }
+    { const e = validatePasswordRule(form.password); if (e) { toast.error(e); return; } }
     if (form.password !== form.password_confirm) { toast.error('As senhas não conferem'); return; }
     if (!form.accept_terms) { toast.error('Aceite os termos para continuar'); return; }
 
@@ -289,7 +289,7 @@ export const RegisterPage: React.FC = () => {
     if (!depForm.full_name.trim()) { toast.error('Informe o nome do dependente'); return; }
     if (!depForm.email.trim())     { toast.error('Informe o e-mail do dependente'); return; }
     if (!depForm.password)         { toast.error('Defina uma senha para o dependente'); return; }
-    if (depForm.password.length < 8) { toast.error('Senha precisa ter no mínimo 8 caracteres'); return; }
+    { const e = validatePasswordRule(depForm.password); if (e) { toast.error(e); return; } }
     if (depForm.password !== depForm.password_confirm) { toast.error('As senhas do dependente não conferem'); return; }
     setSubmitting(true);
     try {
@@ -471,6 +471,7 @@ export const RegisterPage: React.FC = () => {
               <input type="password" autoComplete="new-password" className="input-base"
                 placeholder="Mínimo 8 caracteres" value={form.password}
                 onChange={(e) => setForm({ ...form, password: e.target.value })} />
+              <p className="text-[11px] text-text-muted mt-1">{PASSWORD_HINT}</p>
               {form.password.length > 0 && (
                 <div className="mt-1.5 space-y-1">
                   <div className="flex gap-1">
@@ -664,6 +665,7 @@ export const RegisterPage: React.FC = () => {
               <label className="text-xs text-text-secondary mb-1 block">Senha *</label>
               <input type="password" className="input-base" placeholder="Mínimo 8 caracteres" value={depForm.password}
                 onChange={(e) => setDepForm({ ...depForm, password: e.target.value })} />
+              <p className="text-[11px] text-text-muted mt-1">{PASSWORD_HINT}</p>
             </div>
             <div>
               <label className="text-xs text-text-secondary mb-1 block">Confirme a senha *</label>

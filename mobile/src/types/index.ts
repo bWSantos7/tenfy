@@ -256,6 +256,10 @@ export interface TournamentRegistration {
   edition_title: string;
   edition_start_date: string | null;
   edition_end_date: string | null;
+  edition_venue_city?: string | null;
+  edition_venue_state?: string | null;
+  edition_venue_country?: string | null;
+  edition_venue_country_code?: string | null;
   edition_status: string;
   is_past: boolean;
   category_text: string | null;

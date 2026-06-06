@@ -14,6 +14,7 @@ import { myRegistrations } from '../services/registrations';
 import { mediaUrl } from '../services/api';
 import { resolveAvatar } from '../utils/format';
 import { LEVEL_LABELS, GENDER_LABELS, ROLE_LABELS, TENNIS_CLASS_LABELS } from '../utils/format';
+import { editionCountry } from '../utils/country';
 
 const SOURCE_LABELS: Record<string, string> = {
   cbt: 'CBT – Confederação Brasileira de Tênis',
@@ -760,6 +761,17 @@ export const PlayerProfilePage: React.FC = () => {
                           {new Date(item.edition_detail.start_date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
                         </p>
                       )}
+                      {(() => {
+                        const c = editionCountry({ venue_country: item.edition_detail.venue_country, venue_country_code: item.edition_detail.venue_country_code });
+                        const loc = c
+                          ? [item.edition_detail.venue_city, c.name].filter(Boolean).join(', ')
+                          : [item.edition_detail.venue_city, item.edition_detail.venue_state].filter(Boolean).join(' / ');
+                        return loc ? (
+                          <p className="text-xs text-text-muted flex items-center gap-1">
+                            <MapPin className="w-3 h-3 shrink-0" />{c?.flag ? `${c.flag} ${loc}` : loc}
+                          </p>
+                        ) : null;
+                      })()}
                     </div>
                   ))}
                 </div>
@@ -788,6 +800,17 @@ export const PlayerProfilePage: React.FC = () => {
                           {new Date(reg.edition_start_date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
                         </p>
                       )}
+                      {(() => {
+                        const c = editionCountry({ venue_country: reg.edition_venue_country, venue_country_code: reg.edition_venue_country_code });
+                        const loc = c
+                          ? [reg.edition_venue_city, c.name].filter(Boolean).join(', ')
+                          : [reg.edition_venue_city, reg.edition_venue_state].filter(Boolean).join(' / ');
+                        return loc ? (
+                          <p className="text-xs text-text-muted flex items-center gap-1">
+                            <MapPin className="w-3 h-3 shrink-0" />{c?.flag ? `${c.flag} ${loc}` : loc}
+                          </p>
+                        ) : null;
+                      })()}
                     </div>
                   );
                 })}

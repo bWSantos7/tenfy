@@ -71,6 +71,11 @@ class MyRegistrationSerializer(serializers.ModelSerializer):
     edition_title = serializers.CharField(source='edition.title', read_only=True)
     edition_start_date = serializers.DateField(source='edition.start_date', read_only=True)
     edition_end_date = serializers.DateField(source='edition.end_date', read_only=True)
+    # Venue location (país/bandeira para torneios internacionais — UTR/ITF/COSAT).
+    edition_venue_city = serializers.CharField(source='edition.venue.city', read_only=True, default=None)
+    edition_venue_state = serializers.CharField(source='edition.venue.state', read_only=True, default=None)
+    edition_venue_country = serializers.CharField(source='edition.venue.country', read_only=True, default=None)
+    edition_venue_country_code = serializers.CharField(source='edition.venue.country_code', read_only=True, default=None)
     edition_status = serializers.SerializerMethodField()
     is_past = serializers.SerializerMethodField()
     category_text = serializers.SerializerMethodField()
@@ -85,6 +90,8 @@ class MyRegistrationSerializer(serializers.ModelSerializer):
         model = TournamentRegistration
         fields = (
             'id', 'edition_id', 'edition_title', 'edition_start_date', 'edition_end_date',
+            'edition_venue_city', 'edition_venue_state',
+            'edition_venue_country', 'edition_venue_country_code',
             'edition_status', 'is_past', 'category_text', 'max_participants',
             'registered_at', 'ranking_position',
             'payment_status', 'payment_status_label', 'payment_confirmed_at',

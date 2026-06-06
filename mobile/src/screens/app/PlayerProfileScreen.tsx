@@ -13,6 +13,7 @@ import { myRegistrations } from '../../services/registrations';
 import { extractApiError, mediaUrl } from '../../services/api';
 import { CatalogRanking, PlayerProfile, TiData, TiRankingEntry, TournamentRegistration, UtrCandidate } from '../../types';
 import { GENDER_LABELS, LEVEL_LABELS, ROLE_LABELS } from '../../utils/format';
+import { editionCountry } from '../../utils/country';
 import { AppText, Button, Card, EmptyState, LoadingBlock, Screen, SectionHeader } from '../../components/ui';
 
 type Props = BottomTabScreenProps<MainTabParamList, 'Profile'>;
@@ -530,6 +531,23 @@ export function PlayerProfileScreen(_: Props) {
                         {new Date(reg.edition_start_date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
                       </AppText>
                     ) : null}
+                    {(() => {
+                      const c = editionCountry({ venue_country: reg.edition_venue_country, venue_country_code: reg.edition_venue_country_code });
+                      const loc = c
+                        ? [reg.edition_venue_city, c.name].filter(Boolean).join(', ')
+                        : [reg.edition_venue_city, reg.edition_venue_state].filter(Boolean).join(' / ');
+                      if (!loc) return null;
+                      return (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 1 }}>
+                          {c?.flagUrl ? (
+                            <Image source={{ uri: c.flagUrl }} style={{ width: 15, height: 11, borderRadius: 2 }} />
+                          ) : (
+                            <Ionicons name="location-outline" size={11} color={colors.textMuted} />
+                          )}
+                          <AppText variant="muted" style={{ fontSize: 11 }}>{loc}</AppText>
+                        </View>
+                      );
+                    })()}
                   </View>
                 ))}
               </Card>

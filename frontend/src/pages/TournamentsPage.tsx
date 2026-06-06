@@ -177,15 +177,25 @@ export const TournamentsPage: React.FC = () => {
   const [countryCodes, setCountryCodes] = useState<string[]>([]);
   const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Country options for the filter dropdown: Brasil first, then alphabetical by name.
+  // Country options for the filter dropdown, grouped by name so a country that
+  // appears under both IOC (ITF) and ISO (COSAT) codes — e.g. Chile CHI/CHL —
+  // shows once and filters all its codes. Option value = comma-joined codes.
   const countryOptions = useMemo(() => {
-    const opts = countryCodes.map((code) => ({
-      code,
-      name: resolveCountry(code)?.name || code,
+    const byName = new Map<string, string[]>();
+    for (const code of countryCodes) {
+      const name = resolveCountry(code)?.name || code;
+      const arr = byName.get(name) || [];
+      arr.push(code);
+      byName.set(name, arr);
+    }
+    const opts = [...byName.entries()].map(([name, codes]) => ({
+      code: codes.join(','),
+      name,
+      isBrazil: codes.includes('BRA'),
     }));
     opts.sort((a, b) => {
-      if (a.code === 'BRA') return -1;
-      if (b.code === 'BRA') return 1;
+      if (a.isBrazil) return -1;
+      if (b.isBrazil) return 1;
       return a.name.localeCompare(b.name, 'pt-BR');
     });
     return opts;

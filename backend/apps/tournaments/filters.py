@@ -72,20 +72,27 @@ class TournamentEditionFilter(filters.FilterSet):
         )
 
     def filter_country(self, queryset, name, value):
-        """Filter by tournament country (ISO alpha-3).
+        """Filter by tournament country. Accepts one or more comma-separated
+        country codes (the frontend sends every code variant for a country,
+        e.g. 'CHI,CHL', because ITF uses IOC codes while COSAT uses ISO).
 
-        Brazil is special: international sources (UTR/ITF/COSAT) tag venues with
-        'BRA', but the Brazilian federations (CBT/FPT/FCT) leave country_code
-        empty (their venue carries a BR UF). So 'BRA' matches both.
+        Brazil is special: international sources tag venues with 'BRA', but the
+        Brazilian federations (CBT/FPT/FCT) leave country_code empty. So 'BRA'
+        also matches the empty code.
         """
         if not value:
             return queryset
-        code = value.strip().upper()
-        if code in ('BRA', 'BR', 'BRASIL'):
-            return queryset.filter(
-                Q(venue__country_code__iexact='BRA') | Q(venue__country_code='')
-            )
-        return queryset.filter(venue__country_code__iexact=code)
+        codes = [c.strip().upper() for c in value.split(',') if c.strip()]
+        if not codes:
+            return queryset
+        q = Q()
+        brazil = {'BRA', 'BR', 'BRASIL'}
+        if any(c in brazil for c in codes):
+            q |= Q(venue__country_code__iexact='BRA') | Q(venue__country_code='')
+        others = [c for c in codes if c not in brazil]
+        if others:
+            q |= Q(venue__country_code__in=others)
+        return queryset.filter(q)
 
     def filter_search(self, queryset, name, value):
         if not value:

@@ -1156,3 +1156,13 @@ class CountryFilterTestCase(TestCase):
         res = self.client.get('/api/tournaments/editions/countries/')
         self.assertIn('ARG', res.data)
         self.assertIn('BRA', res.data)
+
+    def test_country_filter_multi_code(self):
+        # ITF (IOC 'CHI') and COSAT (ISO 'CHL') both mean Chile; a comma-separated
+        # value must match both.
+        chi = self._edition(self.cosat, 'itf-chi', city='Santiago', country='Chile', country_code='CHI')
+        chl = self._edition(self.cosat, 'cosat-chl2', city='Viña', state='CH', country='Chile', country_code='CHL')
+        self._edition(self.cosat, 'cosat-arg3', city='Rosario', country_code='ARG')
+        res = self.client.get('/api/tournaments/editions/?country=CHI,CHL')
+        ids = {r['id'] for r in res.data['results']}
+        self.assertEqual(ids, {chi.id, chl.id})

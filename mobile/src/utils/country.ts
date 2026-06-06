@@ -52,7 +52,20 @@ const COUNTRY_BY_CODE3: Record<string, [string, string]> = {
   // África
   RSA: ['ZA', 'África do Sul'], ZAF: ['ZA', 'África do Sul'], EGY: ['EG', 'Egito'],
   MAR: ['MA', 'Marrocos'], TUN: ['TN', 'Tunísia'], ALG: ['DZ', 'Argélia'],
-  NGR: ['NG', 'Nigéria'], KEN: ['KE', 'Quênia'],
+  NGR: ['NG', 'Nigéria'], KEN: ['KE', 'Quênia'], ANG: ['AO', 'Angola'],
+  BOT: ['BW', 'Botsuana'], CIV: ['CI', 'Costa do Marfim'], CMR: ['CM', 'Camarões'],
+  DJI: ['DJ', 'Djibuti'], ETH: ['ET', 'Etiópia'], GHA: ['GH', 'Gana'],
+  MAD: ['MG', 'Madagascar'], MOZ: ['MZ', 'Moçambique'], NAM: ['NA', 'Namíbia'],
+  RWA: ['RW', 'Ruanda'], UGA: ['UG', 'Uganda'], ZAM: ['ZM', 'Zâmbia'],
+  ZIM: ['ZW', 'Zimbábue'], BDI: ['BI', 'Burundi'],
+  // Outras (cobertura de códigos IOC do ITF)
+  ALB: ['AL', 'Albânia'], ARU: ['AW', 'Aruba'], FGU: ['GF', 'Guiana Francesa'],
+  FIJ: ['FJ', 'Fiji'], GLP: ['GP', 'Guadalupe'], GUM: ['GU', 'Guam'],
+  HON: ['HN', 'Honduras'], IRI: ['IR', 'Irã'], ISV: ['VI', 'Ilhas Virgens Americanas'],
+  KGZ: ['KG', 'Quirguistão'], KOS: ['XK', 'Kosovo'], MAC: ['MO', 'Macau'],
+  MDV: ['MV', 'Maldivas'], MNP: ['MP', 'Ilhas Marianas do Norte'],
+  NCA: ['NI', 'Nicarágua'], NEP: ['NP', 'Nepal'], SMR: ['SM', 'San Marino'],
+  TJK: ['TJ', 'Tajiquistão'], VIN: ['VC', 'São Vicente e Granadinas'],
 };
 
 export function resolveCountry(code?: string | null): { code2: string; name: string } | null {

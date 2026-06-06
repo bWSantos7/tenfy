@@ -468,6 +468,9 @@ def _normalize_tournament(doc: dict) -> Optional[dict]:
         doc.get('codigo_pais') or doc.get('country_code') or doc.get('countryCode')
         or doc.get('country') or ''
     ).strip().upper()
+    pais_nome = (
+        doc.get('pais') or doc.get('country_name') or doc.get('countryName') or ''
+    ).strip()
 
     surface_raw = (
         doc.get('superficie') or doc.get('surface') or doc.get('court') or ''
@@ -549,8 +552,9 @@ def _normalize_tournament(doc: dict) -> Optional[dict]:
             'city': cidade[:120],
             'state': '',
             'address': '',
+            'country': pais_nome[:120],
             'country_code': codigo_pais[:3],
-        } if cidade else None,
+        } if (cidade or codigo_pais or pais_nome) else None,
         'base_price_brl': None,
         'official_source_url': url_oficial,
         'categories': categories,

@@ -183,7 +183,6 @@ export async function createChildWithProfile(
     federation?: number | null;
     travel_states?: string[];
     competitive_level: string;
-    tennis_class?: string;
   },
 ): Promise<ParentChild> {
   const res = await api.post<ParentChild>('/api/auth/children/create-with-profile/', {

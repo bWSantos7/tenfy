@@ -57,11 +57,11 @@ test.describe('TC-PROFILE — Perfil esportivo', () => {
     expect(hasTennis).toBeTruthy();
   });
 
-  test('PROFILE-06 — Classe/nível aparece no perfil', async ({ page }) => {
+  test('PROFILE-06 — nível aparece no perfil', async ({ page }) => {
     const profile = new ProfilePage(page);
     await profile.goto();
-    const hasClass = await page.getByText(/classe|nível|federad/i).first().isVisible({ timeout: 5000 }).catch(() => false);
-    expect(hasClass).toBeTruthy();
+    const hasLevel = await page.getByText(/nível|federad|amador|profissional/i).first().isVisible({ timeout: 5000 }).catch(() => false);
+    expect(hasLevel).toBeTruthy();
   });
 
   test('PROFILE-07 — Estado (UF) aparece no perfil', async ({ page }) => {

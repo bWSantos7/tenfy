@@ -12,7 +12,7 @@ import { markProfileDirty } from '../../utils/profileRefresh';
 import { createChildAccount, register, sendEmailOtp, verifyEmailOtp } from '../../services/auth';
 import { checkout, fetchPlans, Plan } from '../../services/billing';
 import { UtrCandidate, User } from '../../types';
-import { LEVEL_LABELS, TENNIS_CLASS_LABELS } from '../../utils/format';
+import { LEVEL_LABELS } from '../../utils/format';
 import { MODALITY_OPTIONS, setProfileModality } from '../../utils/profileModality';
 import { AppText, Button, Card, Checkbox, Input, Screen, SelectField } from '../../components/ui';
 import { FederationSelect } from '../../components/FederationSelect';
@@ -62,10 +62,6 @@ const UF_OPTIONS = [
   { value: 'TO', label: 'TO - Tocantins' },
 ];
 const LEVEL_OPTIONS = Object.entries(LEVEL_LABELS).map(([value, label]) => ({ value, label }));
-const CLASS_OPTIONS = [
-  { value: '', label: 'Sem classe definida' },
-  ...Object.entries(TENNIS_CLASS_LABELS).map(([value, label]) => ({ value, label })),
-];
 const MOBILE_MODALITY_OPTIONS = MODALITY_OPTIONS.map(({ value, label }) => ({ value, label }));
 const GENDER_OPTIONS = [{ value: 'M', label: 'Masculino' }, { value: 'F', label: 'Feminino' }];
 
@@ -107,7 +103,6 @@ export function RegisterScreen({ navigation }: Props) {
     home_city: '',
     federation: null as number | null,
     competitive_level: 'amateur',
-    tennis_class: '',
     modality: '',
   });
 
@@ -274,7 +269,6 @@ export function RegisterScreen({ navigation }: Props) {
         home_city: profile.home_city,
         federation: profile.federation,
         competitive_level: profile.competitive_level as any,
-        tennis_class: profile.tennis_class || '',
         preferred_modality: profile.modality || '',
         is_primary: true,
       } as any);
@@ -671,7 +665,6 @@ export function RegisterScreen({ navigation }: Props) {
             <FederationSelect value={profile.federation} onChange={(id) => setProfile({ ...profile, federation: id })} />
             <SelectField label="Modalidade principal" value={profile.modality} options={MOBILE_MODALITY_OPTIONS} onSelect={(v) => setProfile({ ...profile, modality: v })} placeholder="Selecione a modalidade" />
             <SelectField label="Nivel competitivo" value={profile.competitive_level} options={LEVEL_OPTIONS} onSelect={(v) => setProfile({ ...profile, competitive_level: v })} />
-            <SelectField label="Classe (FPT/CBT)" value={profile.tennis_class} options={CLASS_OPTIONS} onSelect={(v) => setProfile({ ...profile, tennis_class: v })} placeholder="Opcional" />
 
             <Button title="Finalizar cadastro" onPress={onFinish} loading={submitting} />
             <Button title="Pular (configurar depois)" variant="ghost" onPress={() => { if (registeredUser) setUser(registeredUser); }} />

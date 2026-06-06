@@ -36,10 +36,6 @@ const MODALITY_LABELS: Record<string, string> = {
   wheelchair: 'Tênis em cadeira de rodas',
 };
 
-const CLASS_LABELS: Record<string, string> = {
-  '1': 'Classe 1', '2': 'Classe 2', '3': 'Classe 3',
-  '4': 'Classe 4', '5': 'Classe 5', 'PR': 'PR', 'PRO': 'PRO',
-};
 
 function extractTiId(value: unknown): string | null {
   if (!value) return null;
@@ -212,13 +208,6 @@ export function PlayerProfileScreen(_: Props) {
                       <Ionicons name="calendar-outline" size={13} color={colors.textMuted} />
                       <AppText variant="muted" style={{ fontSize: 12 }}>
                         Nasc. {primary.birth_year}{primary.sporting_age != null ? ` (${primary.sporting_age} anos)` : ''}
-                      </AppText>
-                    </View>
-                  ) : null}
-                  {primary.tennis_class ? (
-                    <View style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20, backgroundColor: `${colors.accentNeon}18`, borderWidth: 1, borderColor: `${colors.accentNeon}30` }}>
-                      <AppText style={{ fontSize: 11, color: colors.accentNeon, fontWeight: '700' }}>
-                        {CLASS_LABELS[primary.tennis_class] ?? `Classe ${primary.tennis_class}`}
                       </AppText>
                     </View>
                   ) : null}

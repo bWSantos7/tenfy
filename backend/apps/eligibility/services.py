@@ -576,7 +576,10 @@ class EligibilityEngine:
         t = cat.taxonomy
 
         if t == PlayerCategory.TAXONOMY_FPT_CLASS:
-            return self._check_fpt_class(cat, reasons)
+            # Task 9: a classe do jogador foi removida — não é mais critério de
+            # compatibilidade. Categorias por classe passam a casar apenas por
+            # gênero (verificado em evaluate_player_category) e idade quando houver.
+            return STATUS_COMPATIBLE
 
         if t in (PlayerCategory.TAXONOMY_FPT_AGE, PlayerCategory.TAXONOMY_CBT_AGE,
                  PlayerCategory.TAXONOMY_KIDS):
@@ -590,40 +593,6 @@ class EligibilityEngine:
 
         reasons.append(REASON_NO_RULE)
         return STATUS_UNKNOWN
-
-    def _check_fpt_class(self, cat: PlayerCategory, reasons: list) -> str:
-        player_class_str = (self.profile.tennis_class or '').upper().strip()
-        if not player_class_str:
-            reasons.append(REASON_NO_CLASS)
-            return STATUS_UNKNOWN
-        try:
-            player_class = int(player_class_str)
-        except ValueError:
-            # PR (principiante), PRO — not comparable numerically
-            if player_class_str == 'PR':
-                # principiante may play only 5th class
-                if cat.class_level == 5:
-                    return STATUS_COMPATIBLE
-                reasons.append(REASON_CLASS_TOO_HIGH)
-                return STATUS_INCOMPATIBLE
-            return STATUS_UNKNOWN
-
-        if cat.class_level is None:
-            reasons.append(REASON_NO_RULE)
-            return STATUS_UNKNOWN
-
-        # Rule: may play own class OR one class above (class_level - 1)
-        # lower class_level = higher technical level.
-        if cat.class_level == player_class:
-            return STATUS_COMPATIBLE
-        if cat.class_level == player_class - 1:
-            return STATUS_COMPATIBLE
-        if cat.class_level < player_class - 1:
-            reasons.append(REASON_CLASS_TOO_HIGH)
-            return STATUS_INCOMPATIBLE
-        # cat.class_level > player_class: descending forbidden
-        reasons.append(REASON_CLASS_TOO_LOW)
-        return STATUS_INCOMPATIBLE
 
     def _check_exact_age(self, cat: PlayerCategory, reasons: list) -> str:
         # Base age rule: player must be <= max_age (e.g. "14 anos" = up to 14 years old).

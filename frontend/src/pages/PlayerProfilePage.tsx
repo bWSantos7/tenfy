@@ -13,7 +13,7 @@ import { fetchTiData, linkUtr, listChildProfiles, listChildWatchlist, listChildr
 import { myRegistrations } from '../services/registrations';
 import { mediaUrl } from '../services/api';
 import { resolveAvatar } from '../utils/format';
-import { LEVEL_LABELS, GENDER_LABELS, ROLE_LABELS, TENNIS_CLASS_LABELS } from '../utils/format';
+import { LEVEL_LABELS, GENDER_LABELS, ROLE_LABELS } from '../utils/format';
 import { editionCountry } from '../utils/country';
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -460,14 +460,6 @@ export const PlayerProfilePage: React.FC = () => {
                         {primary.sporting_age != null && (
                           <span className="text-text-muted">({primary.sporting_age} anos)</span>
                         )}
-                      </div>
-                    )}
-                    {primary.tennis_class && (
-                      <div className="flex items-center gap-1.5 text-xs">
-                        <Trophy className="w-3.5 h-3.5 text-text-muted shrink-0" />
-                        <span className="font-semibold px-2 py-0.5 rounded-full bg-accent-neon/12 text-accent-neon border border-accent-neon/25 text-[11px]">
-                          {TENNIS_CLASS_LABELS[primary.tennis_class] ?? `Classe ${primary.tennis_class}`}
-                        </span>
                       </div>
                     )}
                   </div>

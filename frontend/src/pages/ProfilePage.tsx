@@ -17,7 +17,7 @@ import { deleteAccount, linkExistingChild, uploadAvatar } from '../services/auth
 import { extractApiError, mediaUrl } from '../services/api';
 import { resolveAvatar } from '../utils/format';
 import { createChildAccount } from '../services/data';
-import { LEVEL_LABELS, GENDER_LABELS, TENNIS_CLASS_LABELS, ROLE_LABELS } from '../utils/format';
+import { LEVEL_LABELS, GENDER_LABELS, ROLE_LABELS } from '../utils/format';
 import { getProfileModality, setProfileModality, MODALITY_OPTIONS } from '../utils/profileModality';
 
 // ─── Confirm Modal ─────────────────────────────────────────────────────────────
@@ -511,7 +511,6 @@ const ProfileCard: React.FC<{
   readOnly?: boolean;
 }> = ({ profile: p, onEdit, onMakePrimary, onRemove, readOnly = false }) => {
   const levelLabel = LEVEL_LABELS[p.competitive_level] ?? p.competitive_level;
-  const classLabel = p.tennis_class ? (TENNIS_CLASS_LABELS[p.tennis_class] ?? `Classe ${p.tennis_class}`) : null;
   const genderLabel = p.gender ? (GENDER_LABELS[p.gender] ?? p.gender) : null;
 
   return (
@@ -557,7 +556,7 @@ const ProfileCard: React.FC<{
         )}
         <div className="flex items-center gap-2 text-xs text-text-secondary">
           <Trophy className="w-3.5 h-3.5 text-text-muted shrink-0" />
-          <span>{levelLabel}{classLabel ? ` • ${classLabel}` : ''}</span>
+          <span>{levelLabel}</span>
         </div>
         {p.preferred_modality && (
           <div className="flex items-center gap-2 text-xs text-text-secondary">
@@ -601,7 +600,6 @@ const ProfileEditor: React.FC<{
     home_state:        profile.home_state ?? 'SP',
     home_city:         profile.home_city ?? '',
     federation:        profile.federation ?? null,
-    tennis_class:      profile.tennis_class ?? '',
     competitive_level: profile.competitive_level ?? 'amateur',
   });
   // Read modality from the API response first; localStorage is only a cross-device fallback.
@@ -705,14 +703,6 @@ const ProfileEditor: React.FC<{
             {Object.entries(LEVEL_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
         </div>
-        <div>
-          <label className="text-xs text-text-secondary mb-1 block">Classe (FPT/CBT)</label>
-          <select className="input-base" value={form.tennis_class}
-            onChange={(e) => setForm({ ...form, tennis_class: e.target.value })}>
-            <option value="">Sem classe</option>
-            {Object.entries(TENNIS_CLASS_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-          </select>
-        </div>
       </div>
 
       <div className="flex gap-2">
@@ -747,7 +737,6 @@ export const AddChildForm: React.FC<{
     home_city: '',
     federation: null as number | null,
     competitive_level: 'amateur',
-    tennis_class: '',
     preferred_modality: 'tennis',
   });
   const [showPwd, setShowPwd] = useState(false);
@@ -797,7 +786,6 @@ export const AddChildForm: React.FC<{
             home_city: profile.home_city,
             federation: profile.federation,
             competitive_level: profile.competitive_level as any,
-            tennis_class: profile.tennis_class,
             preferred_modality: profile.preferred_modality,
             is_primary: true,
           },
@@ -1006,14 +994,6 @@ export const AddChildForm: React.FC<{
             {MODALITY_OPTIONS.filter((o) => o.value).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         </div>
-        <div>
-          <label className="text-xs text-text-secondary mb-1 block">Classe (FPT/CBT)</label>
-          <select className="input-base" value={profile.tennis_class}
-            onChange={(e) => setProfile({ ...profile, tennis_class: e.target.value })}>
-            <option value="">Sem classe definida</option>
-            {Object.entries(TENNIS_CLASS_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-          </select>
-        </div>
         </div>
       )}
 
@@ -1186,7 +1166,6 @@ const DependentCard: React.FC<{
                       {p.sporting_age && <span>{p.sporting_age} anos</span>}
                       {p.gender && <span>{p.gender === 'M' ? 'Masculino' : 'Feminino'}</span>}
                       {p.home_state && <span>{[p.home_city, p.home_state].filter(Boolean).join('/')}</span>}
-                      {p.tennis_class && <span>Classe {p.tennis_class}</span>}
                       {p.preferred_modality && (
                         <span>{MODALITY_OPTIONS.find(o => o.value === p.preferred_modality)?.label || p.preferred_modality}</span>
                       )}
@@ -1248,7 +1227,6 @@ const ChildProfileEditor: React.FC<{
     home_state:        profile?.home_state ?? 'SP',
     home_city:         profile?.home_city ?? '',
     federation:        profile?.federation ?? null,
-    tennis_class:      profile?.tennis_class ?? '',
     competitive_level: profile?.competitive_level ?? 'amateur',
     preferred_modality: profile?.preferred_modality ?? 'tennis',
   });
@@ -1334,14 +1312,6 @@ const ChildProfileEditor: React.FC<{
           <select className="input-base !py-1.5 text-sm" value={form.competitive_level}
             onChange={(e) => setForm({ ...form, competitive_level: e.target.value as any })}>
             {Object.entries(LEVEL_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="text-xs text-text-secondary mb-0.5 block">Classe</label>
-          <select className="input-base !py-1.5 text-sm" value={form.tennis_class}
-            onChange={(e) => setForm({ ...form, tennis_class: e.target.value })}>
-            <option value="">Sem classe</option>
-            {Object.entries(TENNIS_CLASS_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
         </div>
       </div>

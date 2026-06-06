@@ -180,23 +180,11 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
                 categories__normalized_category__min_age__lte=sporting_age,
             )
 
-        # FPT class (informational — not a blocker, but still include as candidates)
-        tennis_class = (profile.tennis_class or '').upper().strip()
-        if tennis_class:
-            if tennis_class == 'PR':
-                category_filter |= Q(
-                    categories__normalized_category__taxonomy=PlayerCategory.TAXONOMY_FPT_CLASS,
-                    categories__normalized_category__class_level=5,
-                )
-            elif tennis_class.isdigit():
-                player_class = int(tennis_class)
-                allowed_levels = [player_class]
-                if player_class > 1:
-                    allowed_levels.append(player_class - 1)
-                category_filter |= Q(
-                    categories__normalized_category__taxonomy=PlayerCategory.TAXONOMY_FPT_CLASS,
-                    categories__normalized_category__class_level__in=allowed_levels,
-                )
+        # FPT class categories: class is no longer a compatibility criterion (Task 9).
+        # Include them all as candidates; gender (below) and the engine decide.
+        category_filter |= Q(
+            categories__normalized_category__taxonomy=PlayerCategory.TAXONOMY_FPT_CLASS,
+        )
 
         # Gender filter: allow match, wildcard, or unknown-gender normalized cats.
         # Do NOT apply gender filter globally — unnormalized categories handled by engine.

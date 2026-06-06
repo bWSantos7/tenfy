@@ -14,7 +14,7 @@ const TEST_USERS = [
     profile: {
       display_name: 'Carlos Jogador', birth_year: 2008, gender: 'M',
       home_state: 'SP', home_city: 'São Paulo', travel_states: ['SP', 'RJ', 'MG'],
-      competitive_level: 'federated', tennis_class: '4',
+      competitive_level: 'federated',
       preferred_modality: 'tennis', is_primary: true,
     },
   },
@@ -29,7 +29,7 @@ const TEST_USERS = [
     profile: {
       display_name: 'Ana Silva', birth_year: 2012, gender: 'F',
       home_state: 'SP', home_city: 'Campinas', travel_states: ['SP'],
-      competitive_level: 'federated', tennis_class: '3',
+      competitive_level: 'federated',
       preferred_modality: 'tennis', is_primary: true,
     },
   },
@@ -39,7 +39,7 @@ const TEST_USERS = [
     profile: {
       display_name: 'Bruno Lima', birth_year: 2010, gender: 'M',
       home_state: 'RJ', home_city: 'Rio de Janeiro', travel_states: ['RJ', 'SP'],
-      competitive_level: 'amateur', tennis_class: '',
+      competitive_level: 'amateur',
       preferred_modality: 'beach_tennis', is_primary: true,
     },
   },

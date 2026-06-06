@@ -8,7 +8,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { createProfile, linkUtr, searchUtr } from '../../services/data';
 import { extractApiError } from '../../services/api';
 import { UtrCandidate } from '../../types';
-import { LEVEL_LABELS, TENNIS_CLASS_LABELS } from '../../utils/format';
+import { LEVEL_LABELS } from '../../utils/format';
 import { AppText, Button, Card, Input, Screen, SectionHeader, SelectField } from '../../components/ui';
 import { FederationSelect } from '../../components/FederationSelect';
 
@@ -50,10 +50,6 @@ const UF_OPTIONS = [
 ];
 
 const LEVEL_OPTIONS = Object.entries(LEVEL_LABELS).map(([value, label]) => ({ value, label }));
-const CLASS_OPTIONS = [
-  { value: '', label: 'Sem classe definida' },
-  ...Object.entries(TENNIS_CLASS_LABELS).map(([value, label]) => ({ value, label })),
-];
 
 export function OnboardingScreen({ navigation }: Props) {
   const { colors } = useTheme();
@@ -77,7 +73,6 @@ export function OnboardingScreen({ navigation }: Props) {
     home_city: '',
     federation: null as number | null,
     competitive_level: 'amateur',
-    tennis_class: '',
   });
 
   useEffect(() => {
@@ -117,7 +112,6 @@ export function OnboardingScreen({ navigation }: Props) {
         home_city: form.home_city,
         federation: form.federation,
         competitive_level: form.competitive_level as any,
-        tennis_class: form.tennis_class || '',
         is_primary: true,
       } as any);
 
@@ -326,13 +320,6 @@ export function OnboardingScreen({ navigation }: Props) {
           value={form.competitive_level}
           options={LEVEL_OPTIONS}
           onSelect={(v) => setForm({ ...form, competitive_level: v })}
-        />
-        <SelectField
-          label="Classe (FPT/CBT)"
-          value={form.tennis_class}
-          options={CLASS_OPTIONS}
-          onSelect={(v) => setForm({ ...form, tennis_class: v })}
-          placeholder="Selecione a classe (opcional)"
         />
       </Card>
 

@@ -88,15 +88,6 @@ export const LEVEL_LABELS: Record<string, string> = {
   pro:        'Profissional',
 };
 
-export const TENNIS_CLASS_LABELS: Record<string, string> = {
-  '1':   'Classe 1',
-  '2':   'Classe 2',
-  '3':   'Classe 3',
-  '4':   'Classe 4',
-  '5':   'Classe 5',
-  'PR':  'Pré-Ranking',
-  'PRO': 'Profissional',
-};
 
 export const GENDER_LABELS: Record<string, string> = {
   M: 'Masculino',

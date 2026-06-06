@@ -2,6 +2,11 @@ import { format, formatDistanceToNow, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { TournamentChangeEvent, TournamentStatus } from '../types';
 
+/** Basic e-mail format check (mirrors the backend EmailField validation). */
+export function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((email || '').trim());
+}
+
 export function fmtRadius(km: number | null | undefined): string {
   if (km == null) return '100 km';
   return km >= 1000 ? 'Todo o Brasil' : `${km} km`;

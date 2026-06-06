@@ -18,7 +18,7 @@ import {
 } from '../../services/data';
 import { extractApiError, mediaUrl } from '../../services/api';
 import { DependentInvite, ParentChild, PlayerProfile, PlayerSearchResult } from '../../types';
-import { GENDER_LABELS, LEVEL_LABELS, ROLE_LABELS } from '../../utils/format';
+import { GENDER_LABELS, LEVEL_LABELS, ROLE_LABELS, isValidEmail } from '../../utils/format';
 import { markProfileDirty } from '../../utils/profileRefresh';
 import { getProfileModality, setProfileModality, MODALITY_OPTIONS } from '../../utils/profileModality';
 import { getActiveProfileId, setActiveProfileId } from '../../utils/activeProfile';
@@ -695,6 +695,7 @@ function AddDependentForm({ onSuccess, onCancel }: { onSuccess: () => Promise<vo
   async function submit() {
     if (!account.full_name.trim()) return Toast.show({ type: 'error', text1: 'Informe o nome do dependente' });
     if (!account.email.trim()) return Toast.show({ type: 'error', text1: 'Informe o e-mail do dependente' });
+    if (!isValidEmail(account.email)) return Toast.show({ type: 'error', text1: 'E-mail inválido', text2: 'Use o formato nome@dominio.com.' });
     if (!account.password) return Toast.show({ type: 'error', text1: 'Defina uma senha' });
     if (account.password.length < 8) return Toast.show({ type: 'error', text1: 'Senha deve ter no mínimo 8 caracteres' });
     if (account.password !== account.password_confirm) return Toast.show({ type: 'error', text1: 'As senhas não conferem' });

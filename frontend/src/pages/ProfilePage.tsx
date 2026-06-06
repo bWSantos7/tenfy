@@ -17,7 +17,7 @@ import { deleteAccount, linkExistingChild, uploadAvatar } from '../services/auth
 import { extractApiError, mediaUrl } from '../services/api';
 import { resolveAvatar } from '../utils/format';
 import { createChildAccount } from '../services/data';
-import { LEVEL_LABELS, GENDER_LABELS, ROLE_LABELS } from '../utils/format';
+import { LEVEL_LABELS, GENDER_LABELS, ROLE_LABELS, isValidEmail } from '../utils/format';
 import { getProfileModality, setProfileModality, MODALITY_OPTIONS } from '../utils/profileModality';
 
 // ─── Confirm Modal ─────────────────────────────────────────────────────────────
@@ -763,6 +763,7 @@ export const AddChildForm: React.FC<{
   async function handleSubmit() {
     if (!account.full_name.trim()) { toast.error('Informe o nome completo.'); return; }
     if (!account.email.trim()) { toast.error('Informe o e-mail.'); return; }
+    if (!isValidEmail(account.email)) { toast.error('Informe um e-mail válido (ex.: nome@dominio.com).'); return; }
     if (account.password.length < 8) { toast.error('Senha deve ter pelo menos 8 caracteres.'); return; }
     if (account.password !== account.confirm_password) { toast.error('As senhas não conferem.'); return; }
     

@@ -165,7 +165,14 @@ class ParentChildSerializer(serializers.ModelSerializer):
 
 class ChildAccountCreateSerializer(serializers.Serializer):
     full_name = serializers.CharField(required=True, max_length=150)
-    email = serializers.EmailField(required=True)
+    email = serializers.EmailField(
+        required=True,
+        error_messages={
+            'required': 'Informe o e-mail do dependente.',
+            'blank': 'Informe o e-mail do dependente.',
+            'invalid': 'Informe um e-mail válido (ex.: nome@dominio.com).',
+        },
+    )
     phone = serializers.CharField(required=False, allow_blank=True, max_length=20)
     password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
     password_confirm = serializers.CharField(write_only=True, required=True)

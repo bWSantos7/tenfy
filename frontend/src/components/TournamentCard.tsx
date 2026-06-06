@@ -16,6 +16,7 @@ const LOCAL_ORG_LOGOS: Record<string, string> = {
   COSAT: logoCOSAT,
   FCT:   logoFCT,
   ITF:   logoITF,
+  UTR:   '/logo_federacao/utr.png',  // served from public/
 };
 
 function findLocalLogo(edition: TournamentEditionList): string | null {

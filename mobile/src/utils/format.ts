@@ -7,10 +7,11 @@ export function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((email || '').trim());
 }
 
-// Regras de senha — espelham os validadores do backend (Django AUTH_PASSWORD_VALIDATORS).
+// Regras de senha — espelham os validadores do backend (Django AUTH_PASSWORD_VALIDATORS
+// + StrongPasswordValidator): mínimo 8 caracteres, 1 maiúscula, 1 número e 1 caractere especial.
 export const PASSWORD_MIN_LENGTH = 8;
 export const PASSWORD_HINT =
-  'Use no mínimo 8 caracteres. Não pode ser só números nem uma senha muito comum.';
+  'Use no mínimo 8 caracteres, com ao menos 1 letra maiúscula, 1 número e 1 caractere especial.';
 
 /** Validação client-side alinhada ao backend. Retorna mensagem de erro ou null. */
 export function validatePasswordRule(pwd: string): string | null {
@@ -18,8 +19,14 @@ export function validatePasswordRule(pwd: string): string | null {
   if (v.length < PASSWORD_MIN_LENGTH) {
     return `A senha precisa ter pelo menos ${PASSWORD_MIN_LENGTH} caracteres.`;
   }
-  if (/^\d+$/.test(v)) {
-    return 'A senha não pode conter apenas números.';
+  if (!/[A-Z]/.test(v)) {
+    return 'A senha precisa ter ao menos uma letra maiúscula.';
+  }
+  if (!/\d/.test(v)) {
+    return 'A senha precisa ter ao menos um número.';
+  }
+  if (!/[^A-Za-z0-9]/.test(v)) {
+    return 'A senha precisa ter ao menos um caractere especial.';
   }
   return null;
 }

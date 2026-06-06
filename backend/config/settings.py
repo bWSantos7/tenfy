@@ -172,6 +172,8 @@ AUTH_PASSWORD_VALIDATORS = [
      'OPTIONS': {'min_length': 8}},
     {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
+    # Task 14: exige maiúscula + número + caractere especial.
+    {'NAME': 'apps.accounts.validators.StrongPasswordValidator'},
 ]
 
 AUTH_USER_MODEL = 'accounts.User'

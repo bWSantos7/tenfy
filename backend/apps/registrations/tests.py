@@ -2054,3 +2054,52 @@ class MatchProfileNowTestCase(TestCase):
         p = self._profile(display_name='Pessoa Totalmente Diferente')
         out = match_profile_now(p.id)
         self.assertEqual(out['registrations_created'], 0)
+
+
+class MatchRespectsWithdrawalTestCase(TestCase):
+    """Match não cria inscrição ativa para entry removida/cancelada; não ressuscita."""
+
+    def setUp(self):
+        from apps.sources.models import Organization
+        from apps.tournaments.models import Tournament, TournamentEdition
+        from datetime import date
+        User = get_user_model()
+        self.user = User.objects.create_user(email='wd@test.com', password='x')
+        org = Organization.objects.create(short_name='CBT', name='CBT', type='confederation')
+        t = Tournament.objects.create(canonical_name='Y', canonical_slug='y-wd', organization=org, modality='tennis')
+        self.ed = TournamentEdition.objects.create(
+            tournament=t, season_year=2027, title='Y 2027',
+            start_date=date(2027, 6, 1), end_date=date(2027, 6, 7), is_published=True,
+        )
+
+    def _profile(self, **kw):
+        from apps.players.models import PlayerProfile
+        return PlayerProfile.objects.create(user=self.user, **kw)
+
+    def test_removed_entry_creates_withdrawn_registration(self):
+        from apps.registrations.models import FederationEntry, TournamentRegistration
+        from apps.registrations.tasks import match_profile_now
+        FederationEntry.objects.create(
+            edition=self.ed, category_text='16 F', player_name='Maria Silva',
+            player_external_id='', source='cbt', removed_or_replaced=True,
+        )
+        p = self._profile(display_name='Maria Silva')
+        match_profile_now(p.id)
+        reg = TournamentRegistration.objects.filter(profile=p, edition=self.ed).first()
+        self.assertIsNotNone(reg)
+        self.assertTrue(reg.is_withdrawn, 'entry removida deve gerar inscrição cancelada (histórico)')
+
+    def test_does_not_resurrect_manually_withdrawn(self):
+        from apps.registrations.models import FederationEntry, TournamentRegistration
+        from apps.registrations.tasks import match_profile_now
+        p = self._profile(display_name='Joao Souza')
+        # usuário já cancelou manualmente
+        reg = TournamentRegistration.objects.create(profile=p, edition=self.ed, is_withdrawn=True)
+        FederationEntry.objects.create(
+            edition=self.ed, category_text='16 M', player_name='Joao Souza',
+            player_external_id='', source='cbt', removed_or_replaced=False,
+        )
+        match_profile_now(p.id)
+        # não deve criar uma segunda inscrição ativa
+        self.assertEqual(TournamentRegistration.objects.filter(profile=p, edition=self.ed).count(), 1)
+        self.assertTrue(TournamentRegistration.objects.get(pk=reg.pk).is_withdrawn)

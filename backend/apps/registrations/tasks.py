@@ -17,13 +17,13 @@ def _normalize(text: str) -> str:
     return normalized.encode('ascii', 'ignore').decode('ascii').lower().strip()
 
 
-def _ensure_watchlist(user_id: int, edition) -> None:
-    """Create a WatchlistItem(registered_declared) for user+edition if one does not exist."""
+def _ensure_watchlist(user_id: int, edition, status: str = 'registered_declared') -> None:
+    """Create a WatchlistItem for user+edition if one does not exist (status configurável)."""
     from apps.watchlist.models import WatchlistItem
     WatchlistItem.objects.get_or_create(
         user_id=user_id,
         edition=edition,
-        defaults={'user_status': 'registered_declared'},
+        defaults={'user_status': status},
     )
 
 
@@ -75,13 +75,18 @@ def _do_match(entries, profiles, edition, registrations_created_ref: list) -> li
         # ── Act on a confirmed match ──────────────────────────────────────────
         reg_created = False
         if matched_profile:
+            # Considera QUALQUER inscrição existente (inclusive cancelada): não
+            # recriamos/ressuscitamos uma inscrição que o usuário já cancelou.
             already_registered = TournamentRegistration.objects.filter(
                 profile=matched_profile,
                 edition=edition,
-                is_withdrawn=False,
             ).exists()
 
             if not already_registered:
+                # removed_or_replaced (desistência/remoção na federação) prevalece:
+                # a inscrição é criada como CANCELADA (vai p/ Histórico, não aparece
+                # como ativa nem na agenda como inscrita).
+                is_removed = bool(entry.removed_or_replaced)
                 try:
                     with transaction.atomic():
                         TournamentRegistration.objects.create(
@@ -94,9 +99,12 @@ def _do_match(entries, profiles, edition, registrations_created_ref: list) -> li
                                 else TournamentRegistration.PAYMENT_PENDING
                             ),
                             ranking_position=entry.ranking_position,
+                            is_withdrawn=is_removed,
+                            withdrawn_at=timezone.now() if is_removed else None,
                             notes=(
                                 f'Auto-matched via {method}'
                                 + (f' (score={score:.3f})' if score is not None else '')
+                                + (' [removed_or_replaced]' if is_removed else '')
                             ),
                         )
                         reg_created = True
@@ -119,8 +127,12 @@ def _do_match(entries, profiles, edition, registrations_created_ref: list) -> li
 
                             transaction.on_commit(enqueue_ti_bootstrap)
 
-                        # Guarantee the tournament appears in the user's agenda
-                        _ensure_watchlist(matched_profile.user_id, edition)
+                        # Agenda: inscrita normalmente, ou 'withdrawn' quando a
+                        # entry foi removida/substituída (desistência).
+                        _ensure_watchlist(
+                            matched_profile.user_id, edition,
+                            'withdrawn' if is_removed else 'registered_declared',
+                        )
 
                 except Exception as exc:
                     logger.warning(
@@ -196,11 +208,10 @@ def match_profile_now(profile_id: int) -> dict:
         except Exception as exc:  # noqa: BLE001 — unaccent indisponível não deve quebrar
             logger.warning('match_profile_now: name query failed: %s', exc)
 
-    # Apenas edições não finalizadas/canceladas (não inscrever em torneio passado).
-    entries = [
-        e for e in candidates.values()
-        if e.edition and e.edition.compute_dynamic_status() not in ('finished', 'canceled')
-    ]
+    # Inclui TODAS as edições do atleta (passadas e futuras) para trazer o
+    # histórico completo na hora. A exibição classifica ativa/passada (is_past) e
+    # desistências (removed_or_replaced) vão para o Histórico.
+    entries = [e for e in candidates.values() if e.edition]
     if not entries:
         return {'registrations_created': 0}
 

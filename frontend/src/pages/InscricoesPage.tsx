@@ -115,10 +115,17 @@ export const InscricoesPage: React.FC = () => {
     if (ds === 'finished' || ds === 'canceled') return true;
     return !!(ed.end_date && ed.end_date < todayStr);
   };
+  // Evita duplicar o mesmo torneio em "declaradas por você" e "oficiais":
+  // se já existe uma inscrição OFICIAL (registration) para a edição, a declaração
+  // (watchlist) é redundante e não deve aparecer — a oficial é a fonte da verdade.
+  const officialEditionIds = new Set(registrations.map((r) => r.edition_id));
+  const notOfficial = (it: WatchlistItem) =>
+    !(it.edition_detail && officialEditionIds.has(it.edition_detail.id));
+
   const activeChildGroups = childGroups
-    .map((g) => ({ ...g, items: g.items.filter((it) => !isDeclaredPast(it)) }))
+    .map((g) => ({ ...g, items: g.items.filter((it) => !isDeclaredPast(it) && notOfficial(it)) }))
     .filter((g) => g.items.length > 0);
-  const pastDeclared = childGroups.flatMap((g) => g.items.filter(isDeclaredPast));
+  const pastDeclared = childGroups.flatMap((g) => g.items.filter((it) => isDeclaredPast(it) && notOfficial(it)));
   const totalDeclared = activeChildGroups.reduce((acc, g) => acc + g.items.length, 0);
 
   // Avoid showing a desistência twice when both an official registration and a

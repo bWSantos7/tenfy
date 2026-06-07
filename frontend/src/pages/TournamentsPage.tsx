@@ -14,6 +14,7 @@ import {
 import { resolveCountry } from '../utils/country';
 import { listProfiles } from '../services/data';
 import { TournamentCard } from '../components/TournamentCard';
+import { SearchableSelect } from '../components/SearchableSelect';
 import { pickBestProfile } from '../utils/profile';
 import { useAuth } from '../contexts/AuthContext';
 import { getActiveProfileId } from '../utils/activeProfile';
@@ -460,19 +461,15 @@ export const TournamentsPage: React.FC = () => {
       {showFilters && (
         <div className="card space-y-3">
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-text-secondary mb-1 block">UF</label>
-              <select
-                className="input-base"
-                value={filters.state || ''}
-                onChange={(e) => { setPage(1); setFilters((f) => ({ ...f, state: e.target.value })); }}
-                data-testid="filter-state"
-              >
-                {STATES.map((s) => (
-                  <option key={s} value={s}>{s || 'Todos'}</option>
-                ))}
-              </select>
-            </div>
+            <SearchableSelect
+              label="UF"
+              value={filters.state || ''}
+              onChange={(v) => { setPage(1); setFilters((f) => ({ ...f, state: v })); }}
+              options={STATES.map((s) => ({ value: s, label: s || 'Todos' }))}
+              placeholder="Todos"
+              allowClear
+              data-testid="filter-state"
+            />
             <div>
               <label className="text-xs text-text-secondary mb-1 block">Status</label>
               <select
@@ -503,38 +500,24 @@ export const TournamentsPage: React.FC = () => {
                 onChange={(e) => { setPage(1); setFilters((f) => ({ ...f, to_date: e.target.value || undefined })); }}
               />
             </div>
-            <div>
-              <label className="text-xs text-text-secondary mb-1 block">Entidade / fonte</label>
-              <select
-                className="input-base"
-                value={filters.organization ?? ''}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setPage(1);
-                  setFilters((f) => ({ ...f, organization: v ? Number(v) : undefined }));
-                }}
-              >
-                <option value="">Todas</option>
-                {organizations.map((o) => (
-                  <option key={o.id} value={o.id}>{o.short_name || o.name}</option>
-                ))}
-              </select>
-            </div>
+            <SearchableSelect
+              label="Entidade / fonte"
+              value={filters.organization != null ? String(filters.organization) : ''}
+              onChange={(v) => { setPage(1); setFilters((f) => ({ ...f, organization: v ? Number(v) : undefined })); }}
+              options={[{ value: '', label: 'Todas' }, ...organizations.map((o) => ({ value: String(o.id), label: o.short_name || o.name }))]}
+              placeholder="Todas"
+              allowClear
+            />
             {countryOptions.length > 0 && (
-              <div>
-                <label className="text-xs text-text-secondary mb-1 block">País</label>
-                <select
-                  className="input-base"
-                  value={filters.country ?? ''}
-                  onChange={(e) => { setPage(1); setFilters((f) => ({ ...f, country: e.target.value || undefined })); }}
-                  data-testid="filter-country"
-                >
-                  <option value="">Todos</option>
-                  {countryOptions.map((c) => (
-                    <option key={c.code} value={c.code}>{c.name}</option>
-                  ))}
-                </select>
-              </div>
+              <SearchableSelect
+                label="País"
+                value={filters.country ?? ''}
+                onChange={(v) => { setPage(1); setFilters((f) => ({ ...f, country: v || undefined })); }}
+                options={[{ value: '', label: 'Todos' }, ...countryOptions.map((c) => ({ value: c.code, label: c.name }))]}
+                placeholder="Todos"
+                allowClear
+                data-testid="filter-country"
+              />
             )}
             <div className="col-span-2">
               <label className="text-xs text-text-secondary mb-1 block">Categoria</label>

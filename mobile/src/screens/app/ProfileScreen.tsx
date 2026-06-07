@@ -930,6 +930,7 @@ function AddDependentForm({ onSuccess, onCancel }: { onSuccess: () => Promise<vo
         value={profile.home_state}
         options={UF_OPTIONS}
         onSelect={(v) => setProfile({ ...profile, home_state: v, home_city: '' })}
+        searchable
       />
       <SelectField
         label="Cidade"
@@ -1276,6 +1277,7 @@ function ProfileEditor({ profile, onSaved, onCancel, restrictedMode = false }: {
         value={form.home_state}
         options={UF_OPTIONS}
         onSelect={(v) => setForm({ ...form, home_state: v, home_city: '' })}
+        searchable
       />
       <SelectField
         label="Cidade"

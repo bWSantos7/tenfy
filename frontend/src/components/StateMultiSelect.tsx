@@ -127,7 +127,13 @@ export const StateMultiSelect: React.FC<Props> = ({
   );
 };
 
-export { ALL_UFS };
+export { ALL_UFS, UF_LABELS };
+
+/** Opções de UF rotuladas (ex.: "SP – São Paulo") para selects com busca. */
+export const UF_SELECT_OPTIONS = ALL_UFS.map((uf) => ({
+  value: uf,
+  label: `${uf} – ${UF_LABELS[uf]}`,
+}));
 export async function loadCitiesForState(uf: string): Promise<{ value: string; label: string }[]> {
   if (!uf) return [];
   try {

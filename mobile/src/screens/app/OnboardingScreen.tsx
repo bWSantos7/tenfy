@@ -284,6 +284,7 @@ export function OnboardingScreen({ navigation }: Props) {
           value={form.home_state}
           options={UF_OPTIONS}
           onSelect={(v) => setForm({ ...form, home_state: v, home_city: '' })}
+          searchable
         />
         <SelectField
           label="Cidade"

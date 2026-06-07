@@ -148,6 +148,7 @@ function FilterHeader({
             options={organizationOptions}
             onSelect={onFederationChange}
             placeholder="Todas"
+            searchable
           />
 
           {countryOptions.length > 0 ? (
@@ -167,6 +168,7 @@ function FilterHeader({
             options={AGE_CATEGORY_OPTIONS}
             onSelect={onCategoryChange}
             placeholder="Todas as idades"
+            searchable
           />
 
           <View style={{ flexDirection: 'row', gap: 10 }}>

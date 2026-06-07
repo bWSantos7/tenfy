@@ -130,6 +130,16 @@ export function tenisIntegradoProfileUrl(externalId?: string | null): string | n
   return id ? `https://www.tenisintegrado.com.br/perfil2/index/${id}` : null;
 }
 
+/** Extrai o ID numérico do Tênis Integrado dos external_ids do perfil (qualquer fonte). */
+export function tiIdFromExternalIds(externalIds?: Record<string, unknown> | null): string | null {
+  if (!externalIds) return null;
+  for (const v of Object.values(externalIds)) {
+    const id = tenisIntegradoId(typeof v === 'string' ? v : null);
+    if (id) return id;
+  }
+  return null;
+}
+
 /** Idade calculada a partir da data (preferida) ou do ano de nascimento. */
 export function calculateAge(birthDate?: string | null, birthYear?: number | null): number | null {
   if (birthDate) {

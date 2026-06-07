@@ -12,7 +12,7 @@ import { fetchTiData, linkUtr, listProfiles, searchUtr, syncTiData, syncUtr, unl
 import { myRegistrations } from '../../services/registrations';
 import { extractApiError, mediaUrl } from '../../services/api';
 import { CatalogRanking, PlayerProfile, TiData, TiRankingEntry, TournamentRegistration, UtrCandidate } from '../../types';
-import { GENDER_LABELS, LEVEL_LABELS, ROLE_LABELS, calculateAge } from '../../utils/format';
+import { GENDER_LABELS, LEVEL_LABELS, ROLE_LABELS, calculateAge, tiIdFromExternalIds } from '../../utils/format';
 import { editionCountry } from '../../utils/country';
 import { AppText, Button, Card, EmptyState, LoadingBlock, Screen, SectionHeader } from '../../components/ui';
 
@@ -202,12 +202,14 @@ export function PlayerProfileScreen(_: Props) {
                   ))}
                 </View>
 
-                {/* Secondary info — ID, UF/federação, idade (Task 13) */}
+                {/* Secondary info — ID (Tênis Integrado), UF/federação, idade */}
                 <View style={{ paddingHorizontal: 16, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                    <Ionicons name="pricetag-outline" size={13} color={colors.textMuted} />
-                    <AppText variant="muted" style={{ fontSize: 12 }}>ID {primary.user_id}</AppText>
-                  </View>
+                  {tiIdFromExternalIds(primary.external_ids) ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                      <Ionicons name="pricetag-outline" size={13} color={colors.textMuted} />
+                      <AppText variant="muted" style={{ fontSize: 12 }}>ID {tiIdFromExternalIds(primary.external_ids)}</AppText>
+                    </View>
+                  ) : null}
                   {(primary.federation_detail || primary.federation_state || primary.home_state) ? (
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
                       <Ionicons name="flag-outline" size={13} color={colors.textMuted} />

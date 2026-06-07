@@ -366,16 +366,23 @@ export const PlayerProfilePage: React.FC = () => {
             isParent ? (
               <div className="space-y-3">
                 {showAddChild && (
-                  <AddChildForm
-                    onAdded={() => {
-                      setShowAddChild(false);
-                      listChildren().then((kids) => {
-                        setChildren(kids);
-                        if (kids[0]) setSelectedChildId(kids[0].child);
-                      });
-                    }}
-                    onCancel={() => setShowAddChild(false)}
-                  />
+                  <div
+                    className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 p-4 py-8 overflow-y-auto"
+                    onClick={() => setShowAddChild(false)}
+                  >
+                    <div className="w-full max-w-lg my-auto" onClick={(e) => e.stopPropagation()}>
+                      <AddChildForm
+                        onAdded={() => {
+                          setShowAddChild(false);
+                          listChildren().then((kids) => {
+                            setChildren(kids);
+                            if (kids[0]) setSelectedChildId(kids[0].child);
+                          });
+                        }}
+                        onCancel={() => setShowAddChild(false)}
+                      />
+                    </div>
+                  </div>
                 )}
                 {showInviteModal && (
                   <LinkPlayerModal

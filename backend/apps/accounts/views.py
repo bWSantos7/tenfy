@@ -579,7 +579,13 @@ class ParentChildViewSet(viewsets.ModelViewSet):
                 is_primary=True,
             )
 
-        from apps.registrations.tasks import match_new_profile_to_entries
+        from apps.registrations.tasks import (
+            match_new_profile_to_entries, match_profile_now,
+        )
+        try:
+            match_profile_now(new_profile.pk)
+        except Exception:  # noqa: BLE001
+            logger.exception('match_profile_external_id_now failed for profile %s', new_profile.pk)
         match_new_profile_to_entries.delay(new_profile.pk)
 
         return Response(
@@ -778,7 +784,13 @@ class ParentChildViewSet(viewsets.ModelViewSet):
             preferred_modality=vd.get('preferred_modality', ''),
             is_primary=True,
         )
-        from apps.registrations.tasks import match_new_profile_to_entries
+        from apps.registrations.tasks import (
+            match_new_profile_to_entries, match_profile_now,
+        )
+        try:
+            match_profile_now(profile.pk)
+        except Exception:  # noqa: BLE001
+            logger.exception('match_profile_external_id_now failed for profile %s', profile.pk)
         match_new_profile_to_entries.delay(profile.pk)
         return Response(PlayerProfileSerializer(profile).data, status=status.HTTP_201_CREATED)
 

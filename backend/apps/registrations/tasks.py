@@ -140,6 +140,82 @@ def _do_match(entries, profiles, edition, registrations_created_ref: list) -> li
     return logs_to_create
 
 
+def match_profile_now(profile_id: int) -> dict:
+    """
+    Match SÍNCRONO e DIRECIONADO, para rodar na criação do perfil e dar acesso
+    IMEDIATO às inscrições/agenda (sem esperar a fila do Celery).
+
+    Diferente de match_new_profile_to_entries (que varre TODAS as entries de
+    edições ativas em background), aqui consultamos apenas as entries candidatas
+    do próprio atleta:
+      - por external_id (ex.: id do Tênis Integrado), quando o perfil já tem; e
+      - por NOME (unaccent+lower igual ao display_name) — caminho comum de um
+        perfil novo, que ainda não tem external_id.
+    São consultas filtradas (retornam só a mão-cheia de entries do atleta), seguras
+    no caminho da requisição. O match fuzzy completo segue via .delay().
+    """
+    from django.db.models import Q, Func
+    from django.db.models.functions import Lower
+    from apps.players.models import PlayerProfile
+    from itertools import groupby
+
+    try:
+        profile = PlayerProfile.objects.get(pk=profile_id)
+    except PlayerProfile.DoesNotExist:
+        return {'error': f'Profile {profile_id} not found', 'registrations_created': 0}
+
+    candidates = {}
+
+    # ── Candidatos por external_id ───────────────────────────────────────────
+    ext_ids = profile.external_ids or {}
+    q = Q()
+    has_ext = False
+    for source, ext in ext_ids.items():
+        if ext:
+            q |= Q(source=source, player_external_id__iexact=str(ext))
+            has_ext = True
+    if has_ext:
+        for e in FederationEntry.objects.filter(q).select_related('edition'):
+            candidates[e.pk] = e
+
+    # ── Candidatos por nome (unaccent + lower == display_name normalizado) ────
+    norm_name = _normalize(profile.display_name or '')
+    if norm_name:
+        class _Unaccent(Func):
+            function = 'unaccent'
+            arity = 1
+        try:
+            by_name = (
+                FederationEntry.objects
+                .annotate(_un=Lower(_Unaccent('player_name')))
+                .filter(_un=norm_name)
+                .select_related('edition')
+            )
+            for e in by_name:
+                candidates[e.pk] = e
+        except Exception as exc:  # noqa: BLE001 — unaccent indisponível não deve quebrar
+            logger.warning('match_profile_now: name query failed: %s', exc)
+
+    # Apenas edições não finalizadas/canceladas (não inscrever em torneio passado).
+    entries = [
+        e for e in candidates.values()
+        if e.edition and e.edition.compute_dynamic_status() not in ('finished', 'canceled')
+    ]
+    if not entries:
+        return {'registrations_created': 0}
+
+    entries.sort(key=lambda e: e.edition_id)
+    counter = [0]
+    logs = []
+    for _eid, grp in groupby(entries, key=lambda e: e.edition_id):
+        grp_list = list(grp)
+        edition = grp_list[0].edition
+        logs.extend(_do_match(grp_list, [profile], edition, counter))
+    if logs:
+        MatchingLog.objects.bulk_create(logs)
+    return {'registrations_created': counter[0], 'entries_matched': len(entries)}
+
+
 @shared_task(bind=True, max_retries=2, default_retry_delay=60)
 def match_federation_entries(self, edition_id: int) -> dict:
     """

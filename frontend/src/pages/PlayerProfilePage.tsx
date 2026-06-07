@@ -13,7 +13,7 @@ import { fetchTiData, linkUtr, listChildProfiles, listChildWatchlist, listChildr
 import { myRegistrations } from '../services/registrations';
 import { mediaUrl } from '../services/api';
 import { resolveAvatar } from '../utils/format';
-import { LEVEL_LABELS, GENDER_LABELS, ROLE_LABELS, calculateAge } from '../utils/format';
+import { LEVEL_LABELS, GENDER_LABELS, ROLE_LABELS, calculateAge, tiIdFromExternalIds } from '../utils/format';
 import { editionCountry } from '../utils/country';
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -452,12 +452,14 @@ export const PlayerProfilePage: React.FC = () => {
                     ))}
                   </div>
 
-                  {/* Secondary info row — ID, UF/federação, idade (Task 13) */}
+                  {/* Secondary info row — ID (Tênis Integrado), UF/federação, idade */}
                   <div className="px-5 py-3 flex items-center gap-4 flex-wrap">
-                    <div className="flex items-center gap-1.5 text-xs text-text-secondary">
-                      <Hash className="w-3.5 h-3.5 text-text-muted shrink-0" />
-                      <span>ID <span className="font-semibold">{primary.user_id}</span></span>
-                    </div>
+                    {tiIdFromExternalIds(primary.external_ids) && (
+                      <div className="flex items-center gap-1.5 text-xs text-text-secondary">
+                        <Hash className="w-3.5 h-3.5 text-text-muted shrink-0" />
+                        <span>ID <span className="font-semibold">{tiIdFromExternalIds(primary.external_ids)}</span></span>
+                      </div>
+                    )}
                     {(primary.federation_detail || primary.federation_state || primary.home_state) && (
                       <div className="flex items-center gap-1.5 text-xs text-text-secondary">
                         <MapPin className="w-3.5 h-3.5 text-text-muted shrink-0" />

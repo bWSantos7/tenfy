@@ -198,7 +198,7 @@ export function HomeScreen(_: Props) {
             title={user?.role === 'parent' ? `Compatíveis com ${profile.display_name}` : 'Compatíveis com você'}
             subtitle="Baseado no perfil e categoria"
             action={
-              <Pressable onPress={() => { haptic.select(); navigation.navigate('Tabs', { screen: 'Tournaments' } as never); }}>
+              <Pressable onPress={() => { haptic.select(); navigation.navigate('Tabs', { screen: 'Tournaments', params: { compat: true } } as never); }}>
                 <AppText variant="caption" style={{ color: colors.accentNeon, fontWeight: '700' }}>Ver todos</AppText>
               </Pressable>
             }

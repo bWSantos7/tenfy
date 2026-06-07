@@ -8,7 +8,7 @@ export type AuthStackParamList = {
 
 export type MainTabParamList = {
   Home: undefined;
-  Tournaments: { circuit?: string; organization?: number } | undefined;
+  Tournaments: { circuit?: string; organization?: number; compat?: boolean } | undefined;
   Watchlist: undefined;
   Results: undefined;
   Alerts: undefined;

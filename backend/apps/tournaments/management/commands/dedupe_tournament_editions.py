@@ -73,9 +73,9 @@ class Command(BaseCommand):
         # são candidatos a remoção se ficarem órfãos (não mexemos em órfãos pré-existentes).
         self._affected_tournaments: set[int] = set()
 
-        # ── Passo 1: external_id exato ───────────────────────────────────────
+        # ── Passo 1: external_id (case-insensitive) ──────────────────────────
         self._dedupe_by_key(
-            lambda e: (e.season_year, e.external_id) if e.external_id else None,
+            lambda e: (e.season_year, e.external_id.lower()) if e.external_id else None,
             'external_id', dry, stats,
         )
         # ── Passo 2: id TI normalizado (prefixos de federação) ───────────────

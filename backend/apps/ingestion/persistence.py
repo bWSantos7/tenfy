@@ -198,9 +198,11 @@ class TournamentPersister:
         # instead of creating a duplicate. external_id is source-stable, so an exact
         # match for the same season is the same event.
         if not ed and external_id:
+            # iexact: o mesmo evento pode vir com caixa diferente de conectores
+            # distintos (ex.: ITF "itf:J-J60-JPN" vs "itf:j-j60-jpn").
             ed = (
                 TournamentEdition.objects
-                .filter(season_year=season_year, external_id=external_id)
+                .filter(season_year=season_year, external_id__iexact=external_id)
                 .order_by('id')
                 .first()
             )

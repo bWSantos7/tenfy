@@ -192,6 +192,25 @@ class TournamentPersister:
             external_id=external_id,
         ).first()
 
+        # Dedup by external_id across tournaments/connectors (Card 3): the same
+        # source record (e.g. "cbt:22777") may have been imported under a different
+        # Tournament/canonical_slug (cbt_public vs cbt_youth) — reuse that edition
+        # instead of creating a duplicate. external_id is source-stable, so an exact
+        # match for the same season is the same event.
+        if not ed and external_id:
+            ed = (
+                TournamentEdition.objects
+                .filter(season_year=season_year, external_id=external_id)
+                .order_by('id')
+                .first()
+            )
+            if ed and ed.tournament_id != tournament.id:
+                logger.info(
+                    'Dedup: reusing edition %s (external_id=%s) instead of creating '
+                    'under tournament %s',
+                    ed.id, external_id, tournament.canonical_slug,
+                )
+
         # Cross-source deduplication: if no edition found by external_id, look for a
         # fingerprint match from any other source to avoid creating duplicates.
         if not ed and external_id:

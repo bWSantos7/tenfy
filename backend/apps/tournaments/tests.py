@@ -1,6 +1,7 @@
 """
 Tests for tournament filters, views, modality isolation and UF validation.
 """
+import io
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.test import TestCase
@@ -1166,3 +1167,58 @@ class CountryFilterTestCase(TestCase):
         res = self.client.get('/api/tournaments/editions/?country=CHI,CHL')
         ids = {r['id'] for r in res.data['results']}
         self.assertEqual(ids, {chi.id, chl.id})
+
+
+class DedupeTournamentEditionsTestCase(TestCase):
+    """Card 3 (tasks2): merge de edições duplicadas por external_id e id TI."""
+
+    def setUp(self):
+        from apps.sources.models import Organization
+        self.org = Organization.objects.create(name='CBT D', short_name='CBT', type='confederation')
+
+    def _edition(self, slug, ext_id, *, published=True, season=2026, title='Copa X'):
+        t = Tournament.objects.create(
+            canonical_name=title, canonical_slug=slug, organization=self.org, modality='tennis',
+        )
+        return TournamentEdition.objects.create(
+            tournament=t, season_year=season, title=title, external_id=ext_id, is_published=published,
+        )
+
+    def _entry(self, ed, name, ext):
+        from apps.registrations.models import FederationEntry
+        return FederationEntry.objects.create(
+            edition=ed, category_text='Sub-16 M', player_name=name,
+            player_external_id=ext, source='cbt',
+        )
+
+    def test_merges_same_external_id(self):
+        from django.core.management import call_command
+        from apps.registrations.models import FederationEntry
+        e1 = self._edition('copa-x-a', 'cbt:999')
+        e2 = self._edition('copa-x-b', 'cbt:999')
+        self._entry(e1, 'Ana', 'p1')
+        self._entry(e2, 'Bruno', 'p2')
+        call_command('dedupe_tournament_editions', '--no-dry-run', stdout=io.StringIO())
+        remaining = TournamentEdition.objects.filter(external_id='cbt:999')
+        self.assertEqual(remaining.count(), 1, 'deve restar 1 edição')
+        surv = remaining.first()
+        self.assertEqual(FederationEntry.objects.filter(edition=surv).count(), 2,
+                         'inscritos das duas edições devem ir para a sobrevivente')
+        self.assertEqual(Tournament.objects.filter(canonical_slug__in=['copa-x-a', 'copa-x-b']).count(), 1,
+                         'tournament órfão deve ser removido')
+
+    def test_merges_same_ti_id_different_prefix(self):
+        from django.core.management import call_command
+        self._edition('flor-cbt', 'cbt:23120')
+        self._edition('flor-fct', 'fct:23120')
+        call_command('dedupe_tournament_editions', '--no-dry-run', stdout=io.StringIO())
+        # mesma temporada + mesmo número TI → funde para 1
+        self.assertEqual(
+            TournamentEdition.objects.filter(external_id__in=['cbt:23120', 'fct:23120']).count(), 1)
+
+    def test_does_not_merge_different_events(self):
+        from django.core.management import call_command
+        self._edition('copa-a', 'cbt:111', title='Copa A')
+        self._edition('copa-b', 'cbt:222', title='Copa B')
+        call_command('dedupe_tournament_editions', '--no-dry-run', stdout=io.StringIO())
+        self.assertEqual(TournamentEdition.objects.filter(external_id__in=['cbt:111', 'cbt:222']).count(), 2)

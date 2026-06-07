@@ -1,4 +1,5 @@
 from django.db import models
+from django.contrib.postgres.indexes import GinIndex
 from django.utils import timezone
 from apps.core.models import TimestampedModel
 
@@ -235,6 +236,9 @@ class FederationEntry(TimestampedModel):
             models.Index(fields=['edition', 'category_text']),
             models.Index(fields=['payment_status']),
             models.Index(fields=['edition', 'source']),
+            # Índice trigram para busca por nome (criado na migration 0009);
+            # declarado aqui para o estado do model bater com o do banco.
+            GinIndex(fields=['player_name'], name='fedentry_player_name_gin_idx', opclasses=['gin_trgm_ops']),
         ]
 
     def __str__(self):

@@ -212,7 +212,10 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
 # REST Framework
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        # Silenciosa: token expirado/inválido → anônimo (a permissão decide o 401).
+        # Mantém endpoints públicos (cadastro/login/planos) funcionando mesmo com
+        # token antigo no header. Endpoints protegidos seguem retornando 401.
+        'apps.core.authentication.SilentJWTAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',

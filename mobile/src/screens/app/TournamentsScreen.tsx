@@ -22,7 +22,7 @@ import { AppText, Button, EmptyState, Input, Screen, SelectField } from '../../c
 import { TournamentCard } from '../../components/TournamentCard';
 import { TournamentListSkeleton } from '../../components/Skeleton';
 import { Organization, PlayerProfile, TournamentEditionList } from '../../types';
-import { calendar, listEditions, listFederations, listCountries, TournamentFilters } from '../../services/tournaments';
+import { calendar, listEditions, listFederations, listCountries, compatibleForProfile, TournamentFilters } from '../../services/tournaments';
 import { listProfiles } from '../../services/data';
 import { pickBestProfile } from '../../utils/profile';
 import { resolveCountry } from '../../utils/country';
@@ -415,6 +415,9 @@ export function TournamentsScreen({ route }: Props) {
   const flatListPadding = tabBarHeight > 0 ? tabBarHeight + 8 : insets.bottom + 16;
 
   const [viewMode, setViewMode] = useState<ViewMode>('list');
+  // Modo "compatíveis" — espelha o web /torneios?compat=1 (vindo do "Ver todos"
+  // da seção Compatíveis na Home). Lista compatibleForProfile em vez de listEditions.
+  const [compatMode, setCompatMode] = useState<boolean>(!!route.params?.compat);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -529,16 +532,21 @@ export function TournamentsScreen({ route }: Props) {
       setLoadingMore(true);
     }
     try {
-      const data = await listEditions({
-        ...appliedFilters,
-        page,
-        page_size: 20,
-        ordering: 'status_priority,start_date',
-      });
+      const data = (compatMode && primaryProfileId)
+        ? await compatibleForProfile(primaryProfileId, {
+            ...appliedFilters, page, page_size: 20,
+          } as TournamentFilters)
+        : await listEditions({
+            ...appliedFilters,
+            page,
+            page_size: 20,
+            ordering: 'status_priority,start_date',
+          });
       if (myVersion !== reloadVersion.current) return;
       const results = sortTournaments(data.results || []);
       setItems((prev) => page === 1 ? results : [...prev, ...sortTournaments(results)]);
-      setNextPage(data.next ? page + 1 : null);
+      const hasNext = (data as { next?: string | null }).next;
+      setNextPage(hasNext ? page + 1 : null);
       if (page === 1) setTotalCount(data.count ?? results.length);
     } catch {
       if (myVersion === reloadVersion.current) {
@@ -650,8 +658,16 @@ export function TournamentsScreen({ route }: Props) {
   }, [
     viewMode, query, statusFilter, federationFilter, countryFilter, categoryFilter,
     stateFilter, cityFilter, fromDate, toDate, modalityFilter, surfaceFilter,
-    nearMe, primaryProfileId,
+    nearMe, primaryProfileId, compatMode,
   ]);
+
+  // Sincroniza o modo compatível quando a navegação chega com ?compat
+  useEffect(() => {
+    if (route.params?.compat) {
+      setCompatMode(true);
+      setViewMode('list');
+    }
+  }, [route.params?.compat]);
 
   // Apply incoming route params (deep-link / cross-screen navigation)
   useEffect(() => {
@@ -792,6 +808,19 @@ export function TournamentsScreen({ route }: Props) {
           </View>
         </View>
       </View>
+
+      {compatMode && (
+        <Pressable
+          onPress={() => setCompatMode(false)}
+          style={{ marginHorizontal: 16, marginBottom: 10, padding: 10, borderRadius: 12, backgroundColor: `${colors.accentNeon}12`, borderWidth: 1, borderColor: `${colors.accentNeon}30`, flexDirection: 'row', alignItems: 'center', gap: 8 }}
+        >
+          <Ionicons name="sparkles-outline" size={16} color={colors.accentNeon} />
+          <AppText variant="caption" style={{ flex: 1, color: colors.textSecondary }}>
+            Mostrando apenas torneios compatíveis com o seu perfil.
+          </AppText>
+          <AppText variant="caption" style={{ color: colors.accentNeon, fontWeight: '700' }}>Ver todos</AppText>
+        </Pressable>
+      )}
 
       {viewMode === 'list' ? (
         <>

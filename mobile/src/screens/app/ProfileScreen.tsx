@@ -3,11 +3,10 @@ import { Alert, FlatList, Image, Modal, Pressable, ScrollView, Share, TextInput,
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
 import Toast from 'react-native-toast-message';
-import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import { MainStackParamList, MainTabParamList } from '../../navigation/types';
+import { MainStackParamList } from '../../navigation/types';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { deleteAccount, linkExistingChild, uploadAvatar } from '../../services/auth';
@@ -26,7 +25,6 @@ import { getActiveProfileId, setActiveProfileId } from '../../utils/activeProfil
 import { AppText, Button, Card, EmptyState, Input, LoadingBlock, Screen, SectionHeader, SelectField } from '../../components/ui';
 import { FederationSelect } from '../../components/FederationSelect';
 
-type Props = BottomTabScreenProps<MainTabParamList, 'Profile'>;
 type StackNav = NativeStackNavigationProp<MainStackParamList>;
 
 const UF_OPTIONS = [
@@ -50,7 +48,7 @@ const GENDER_OPTIONS = [{ value: 'M', label: 'Masculino' }, { value: 'F', label:
 const LEVEL_OPTIONS = Object.entries(LEVEL_LABELS).map(([value, label]) => ({ value, label }));
 type DependentData = { link: ParentChild; profiles: PlayerProfile[] };
 
-export function ProfileScreen(_: Props) {
+export function ProfileScreen() {
   const { colors, theme, toggle } = useTheme();
   const { user, setUser, logout } = useAuth();
   const navigation = useNavigation<StackNav>();

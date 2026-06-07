@@ -1,7 +1,20 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { loadCitiesForState, ALL_UFS } from '../components/StateMultiSelect';
+import { loadCitiesForState, ALL_UFS, UF_SELECT_OPTIONS } from '../components/StateMultiSelect';
 import { FederationSelect } from '../components/FederationSelect';
+import { SearchableSelect } from '../components/SearchableSelect';
+
+/** Opções de cidade para o SearchableSelect, garantindo que a cidade atual apareça. */
+function cityOptions(
+  cities: { value: string; label: string }[],
+  current: string,
+): { value: string; label: string }[] {
+  const opts = cities.map((c) => ({ value: c.value, label: c.label }));
+  if (current && !cities.some((c) => c.value === current)) {
+    opts.unshift({ value: current, label: current });
+  }
+  return opts;
+}
 import {
   Loader2, Trash2, Mail, Edit2, CheckCircle2, Camera, AlertTriangle,
   Sun, Moon, CreditCard, Ticket, Users, ShieldCheck, Bell, LogOut,
@@ -665,24 +678,24 @@ const ProfileEditor: React.FC<{
 
       <div className="grid grid-cols-3 gap-2">
         <div>
-          <label className="text-xs text-text-secondary mb-1 block">UF</label>
-          <select className="input-base" value={form.home_state}
-            onChange={(e) => setForm({ ...form, home_state: e.target.value, home_city: '' })}>
-            {UF_OPTIONS_EDITOR.map((uf) => <option key={uf} value={uf}>{uf}</option>)}
-          </select>
+          <SearchableSelect
+            label="UF"
+            value={form.home_state}
+            onChange={(v) => setForm({ ...form, home_state: v, home_city: '' })}
+            options={UF_SELECT_OPTIONS}
+            placeholder="UF"
+          />
         </div>
         <div className="col-span-2">
-          <label className="text-xs text-text-secondary mb-1 block">Cidade</label>
-          {cities.length > 0 ? (
-            <select className="input-base" value={form.home_city}
-              onChange={(e) => setForm({ ...form, home_city: e.target.value })}>
-              <option value="">{loadingCities ? 'Carregando...' : 'Selecione'}</option>
-              {cities.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-            </select>
-          ) : (
-            <input className="input-base" placeholder={loadingCities ? 'Carregando...' : 'Cidade'} value={form.home_city}
-              onChange={(e) => setForm({ ...form, home_city: e.target.value })} />
-          )}
+          <SearchableSelect
+            label="Cidade"
+            value={form.home_city}
+            onChange={(v) => setForm({ ...form, home_city: v })}
+            options={cityOptions(cities, form.home_city)}
+            placeholder={loadingCities ? 'Carregando...' : 'Selecione a cidade'}
+            disabled={loadingCities && cities.length === 0}
+            emptyText="Nenhuma cidade encontrada"
+          />
         </div>
       </div>
 
@@ -1018,24 +1031,24 @@ export const AddChildForm: React.FC<{
 
         <div className="grid grid-cols-3 gap-2">
           <div>
-            <label className="text-xs text-text-secondary mb-1 block">Estado (UF) *</label>
-            <select className="input-base" value={profile.home_state}
-              onChange={(e) => setProfile({ ...profile, home_state: e.target.value, home_city: '' })}>
-              {UF_OPTIONS.map((uf) => <option key={uf} value={uf}>{uf}</option>)}
-            </select>
+            <SearchableSelect
+              label="Estado (UF) *"
+              value={profile.home_state}
+              onChange={(v) => setProfile({ ...profile, home_state: v, home_city: '' })}
+              options={UF_SELECT_OPTIONS}
+              placeholder="UF"
+            />
           </div>
           <div className="col-span-2">
-            <label className="text-xs text-text-secondary mb-1 block">Cidade</label>
-            {cities.length > 0 ? (
-              <select className="input-base" value={profile.home_city}
-                onChange={(e) => setProfile({ ...profile, home_city: e.target.value })}>
-                <option value="">{loadingCities ? 'Carregando...' : 'Selecione a cidade'}</option>
-                {cities.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-              </select>
-            ) : (
-              <input className="input-base" placeholder={loadingCities ? 'Carregando...' : 'Cidade'} value={profile.home_city}
-                onChange={(e) => setProfile({ ...profile, home_city: e.target.value })} />
-            )}
+            <SearchableSelect
+              label="Cidade"
+              value={profile.home_city}
+              onChange={(v) => setProfile({ ...profile, home_city: v })}
+              options={cityOptions(cities, profile.home_city)}
+              placeholder={loadingCities ? 'Carregando...' : 'Selecione a cidade'}
+              disabled={loadingCities && cities.length === 0}
+              emptyText="Nenhuma cidade encontrada"
+            />
           </div>
         </div>
 
@@ -1295,6 +1308,15 @@ const ChildProfileEditor: React.FC<{
     preferred_modality: profile?.preferred_modality ?? 'tennis',
   });
   const [saving, setSaving] = useState(false);
+  const [cities, setCities] = useState<{ value: string; label: string }[]>([]);
+  const [loadingCities, setLoadingCities] = useState(false);
+
+  useEffect(() => {
+    setLoadingCities(true);
+    loadCitiesForState(form.home_state)
+      .then(setCities)
+      .finally(() => setLoadingCities(false));
+  }, [form.home_state]);
 
   async function save() {
     setSaving(true);
@@ -1343,17 +1365,24 @@ const ChildProfileEditor: React.FC<{
 
       <div className="grid grid-cols-3 gap-2">
         <div>
-          <label className="text-xs text-text-secondary mb-0.5 block">UF</label>
-          <select className="input-base !py-1.5 text-sm" value={form.home_state}
-            onChange={(e) => setForm({ ...form, home_state: e.target.value, home_city: '' })}>
-            {['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']
-              .map((uf) => <option key={uf} value={uf}>{uf}</option>)}
-          </select>
+          <SearchableSelect
+            label="UF"
+            value={form.home_state}
+            onChange={(v) => setForm({ ...form, home_state: v, home_city: '' })}
+            options={UF_SELECT_OPTIONS}
+            placeholder="UF"
+          />
         </div>
         <div className="col-span-2">
-          <label className="text-xs text-text-secondary mb-0.5 block">Cidade</label>
-          <input className="input-base !py-1.5 text-sm" placeholder="Cidade" value={form.home_city}
-            onChange={(e) => setForm({ ...form, home_city: e.target.value })} />
+          <SearchableSelect
+            label="Cidade"
+            value={form.home_city}
+            onChange={(v) => setForm({ ...form, home_city: v })}
+            options={cityOptions(cities, form.home_city)}
+            placeholder={loadingCities ? 'Carregando...' : 'Selecione a cidade'}
+            disabled={loadingCities && cities.length === 0}
+            emptyText="Nenhuma cidade encontrada"
+          />
         </div>
       </div>
 

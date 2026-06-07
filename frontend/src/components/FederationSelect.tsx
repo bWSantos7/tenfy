@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Federation } from '../types';
 import { listFederations } from '../services/data';
+import { SearchableSelect } from './SearchableSelect';
 
 interface Props {
   label?: string;
@@ -31,26 +32,23 @@ export const FederationSelect: React.FC<Props> = ({
     return () => { active = false; };
   }, []);
 
+  const options = useMemo(
+    () => federations.map((f) => ({
+      value: String(f.id),
+      label: `${f.name}${f.state ? ` (${f.state})` : ''}`,
+    })),
+    [federations],
+  );
+
   return (
-    <div>
-      {label && (
-        <label className="text-xs text-text-secondary mb-1 block">
-          {label}{required && ' *'}
-        </label>
-      )}
-      <select
-        className="input-base"
-        value={value ?? ''}
-        onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}
-        disabled={loading}
-      >
-        <option value="">{loading ? 'Carregando federações...' : 'Selecione a federação'}</option>
-        {federations.map((f) => (
-          <option key={f.id} value={f.id}>
-            {f.name}{f.state ? ` (${f.state})` : ''}
-          </option>
-        ))}
-      </select>
-    </div>
+    <SearchableSelect
+      label={label ? `${label}${required ? ' *' : ''}` : undefined}
+      value={value != null ? String(value) : ''}
+      onChange={(v) => onChange(v ? Number(v) : null)}
+      options={options}
+      placeholder={loading ? 'Carregando federações...' : 'Selecione a federação'}
+      disabled={loading}
+      allowClear={!required}
+    />
   );
 };

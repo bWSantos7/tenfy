@@ -69,6 +69,9 @@ class Command(BaseCommand):
 
         stats = {'groups': 0, 'merged': 0, 'relations_moved': 0, 'relations_dropped': 0,
                  'tournaments_removed': 0}
+        # Tournaments cujas edições duplicadas foram removidas neste run — só esses
+        # são candidatos a remoção se ficarem órfãos (não mexemos em órfãos pré-existentes).
+        self._affected_tournaments: set[int] = set()
 
         # ── Passo 1: external_id exato ───────────────────────────────────────
         self._dedupe_by_key(
@@ -81,10 +84,18 @@ class Command(BaseCommand):
             'ti_id', dry, stats,
         )
 
-        # ── Limpa Tournaments órfãos (sem edições) ───────────────────────────
-        orphans = Tournament.objects.filter(editions__isnull=True)
-        stats['tournaments_removed'] = orphans.count()
-        if not dry:
+        # ── Limpa apenas Tournaments que ficaram órfãos POR ESTE merge ───────
+        # (não tocamos em órfãos pré-existentes, fora do escopo da deduplicação).
+        if dry:
+            # Em dry-run, estima quantos dos tournaments dos duplicados ficariam órfãos.
+            stats['tournaments_removed'] = Tournament.objects.filter(
+                id__in=self._affected_tournaments, editions__isnull=True,
+            ).count()
+        else:
+            orphans = Tournament.objects.filter(
+                id__in=self._affected_tournaments, editions__isnull=True,
+            )
+            stats['tournaments_removed'] = orphans.count()
             orphans.delete()
 
         self.stdout.write('\n=== Resultado ===')
@@ -115,6 +126,7 @@ class Command(BaseCommand):
             if dry:
                 continue
             for dup in dups:
+                self._affected_tournaments.add(dup.tournament_id)
                 self._merge_into(dup, survivor, stats)
                 stats['merged'] += 1
 

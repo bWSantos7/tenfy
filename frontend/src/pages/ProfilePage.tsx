@@ -6,7 +6,7 @@ import {
   Loader2, Trash2, Mail, Edit2, CheckCircle2, Camera, AlertTriangle,
   Sun, Moon, CreditCard, Ticket, Users, ShieldCheck, Bell, LogOut,
   MapPin, Trophy, Calendar, User, ChevronRight, Shield, Download, Plus, Eye, EyeOff,
-  KeyRound, ChevronDown, ChevronUp,
+  KeyRound, ChevronDown, ChevronUp, X,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
@@ -369,10 +369,17 @@ export const ProfilePage: React.FC = () => {
           </div>
 
           {showAddChild && (
-            <AddChildForm
-              onAdded={() => { setShowAddChild(false); loadChildren(); }}
-              onCancel={() => setShowAddChild(false)}
-            />
+            <div
+              className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 p-4 py-8 overflow-y-auto"
+              onClick={() => setShowAddChild(false)}
+            >
+              <div className="w-full max-w-lg my-auto" onClick={(e) => e.stopPropagation()}>
+                <AddChildForm
+                  onAdded={() => { setShowAddChild(false); loadChildren(); }}
+                  onCancel={() => setShowAddChild(false)}
+                />
+              </div>
+            </div>
           )}
 
           {/* Pending sent invites */}
@@ -856,10 +863,20 @@ export const AddChildForm: React.FC<{
   }
 
   return (
-    <div className="card space-y-4 mb-3">
-      <div>
-        <h3 className="font-bold text-base">Novo dependente</h3>
-        <p className="text-xs text-text-secondary mt-1">Preencha os dados de acesso e o perfil esportivo. Campos com * são obrigatórios.</p>
+    <div className="card space-y-4 mb-3 shadow-xl">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="font-bold text-base">Novo dependente</h3>
+          <p className="text-xs text-text-secondary mt-1">Preencha os dados de acesso e o perfil esportivo. Campos com * são obrigatórios.</p>
+        </div>
+        <button
+          type="button"
+          onClick={onCancel}
+          aria-label="Fechar"
+          className="shrink-0 text-text-muted hover:text-text-primary p-1 -mr-1"
+        >
+          <X className="w-5 h-5" />
+        </button>
       </div>
       <hr className="border-border-subtle" />
 

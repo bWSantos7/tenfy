@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, FlatList, Image, Modal, Pressable, Share, TextInput, View } from 'react-native';
+import { Alert, FlatList, Image, Modal, Pressable, ScrollView, Share, TextInput, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
 import Toast from 'react-native-toast-message';
@@ -364,12 +364,29 @@ export function ProfileScreen(_: Props) {
             </View>
           </View>
 
-          {showAddForm ? (
-            <AddDependentForm
-              onSuccess={async () => { setShowAddForm(false); await load(); }}
-              onCancel={() => setShowAddForm(false)}
-            />
-          ) : null}
+          <Modal
+            visible={showAddForm}
+            animationType="slide"
+            presentationStyle="pageSheet"
+            onRequestClose={() => setShowAddForm(false)}
+          >
+            <View style={{ flex: 1, backgroundColor: colors.bgBase }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.borderSubtle }}>
+                <Pressable onPress={() => setShowAddForm(false)} hitSlop={10}>
+                  <Ionicons name="close" size={24} color={colors.textPrimary} />
+                </Pressable>
+                <AppText variant="body" style={{ fontWeight: '700', fontSize: 17 }}>Novo dependente</AppText>
+              </View>
+              <ScrollView contentContainerStyle={{ padding: 16 }} keyboardShouldPersistTaps="handled">
+                {showAddForm ? (
+                  <AddDependentForm
+                    onSuccess={async () => { setShowAddForm(false); await load(); }}
+                    onCancel={() => setShowAddForm(false)}
+                  />
+                ) : null}
+              </ScrollView>
+            </View>
+          </Modal>
 
           {/* Sent invites pending */}
           {sentInvites.length > 0 ? (
@@ -799,12 +816,10 @@ function AddDependentForm({ onSuccess, onCancel }: { onSuccess: () => Promise<vo
 
   return (
     <Card style={{ marginBottom: 12 }}>
-      <AppText variant="body" style={{ fontWeight: '700', marginBottom: 4 }}>Novo dependente</AppText>
       <AppText variant="muted" style={{ marginBottom: 12 }}>
         Preencha os dados de acesso e o perfil esportivo. Campos com * são obrigatórios.
       </AppText>
 
-      <View style={{ height: 1, backgroundColor: colors.borderSubtle, marginBottom: 12 }} />
       <AppText variant="caption" style={{ fontWeight: '700', color: colors.textSecondary, marginBottom: 8 }}>Dados de acesso</AppText>
 
       <Input

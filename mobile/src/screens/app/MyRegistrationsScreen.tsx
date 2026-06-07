@@ -150,10 +150,16 @@ export function MyRegistrationsScreen({ navigation }: Props) {
     if (ds === 'finished' || ds === 'canceled') return true;
     return !!(ed.end_date && ed.end_date < todayStr);
   };
+  // Evita duplicar o mesmo torneio em "declaradas" e "oficiais": se já há
+  // inscrição OFICIAL para a edição, a declaração (watchlist) é redundante.
+  const officialEditionIds = new Set(registrations.map((r) => r.edition_id));
+  const notOfficial = (it: WatchlistItem) =>
+    !(it.edition_detail && officialEditionIds.has(it.edition_detail.id));
+
   const activeChildGroups = childGroups
-    .map((g) => ({ ...g, items: g.items.filter((it) => !isDeclaredPast(it)) }))
+    .map((g) => ({ ...g, items: g.items.filter((it) => !isDeclaredPast(it) && notOfficial(it)) }))
     .filter((g) => g.items.length > 0);
-  const pastDeclared = childGroups.flatMap((g) => g.items.filter(isDeclaredPast));
+  const pastDeclared = childGroups.flatMap((g) => g.items.filter((it) => isDeclaredPast(it) && notOfficial(it)));
   const totalWatchlistInscribed = activeChildGroups.reduce((acc, g) => acc + g.items.length, 0);
   const withdrawnRegEditionIds = new Set(withdrawn.map((r) => r.edition_id));
   const declaredWithdrawnOnly = declaredWithdrawn.filter(

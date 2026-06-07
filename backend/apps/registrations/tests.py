@@ -1998,3 +1998,59 @@ class InscritosTiEnrichmentTestCase(TestCase):
         self.assertEqual(entries['Atleta Com TI']['player_age'], 15)
         self.assertEqual(entries['Atleta Sem TI']['player_uf'], '')
         self.assertIsNone(entries['Atleta Sem TI']['player_age'])
+
+
+class MatchProfileNowTestCase(TestCase):
+    """Match síncrono imediato na criação do perfil (external_id + nome)."""
+
+    def setUp(self):
+        from apps.sources.models import Organization
+        from apps.tournaments.models import Tournament, TournamentEdition
+        from datetime import date
+        User = get_user_model()
+        self.user = User.objects.create_user(email='matchnow@test.com', password='x')
+        org = Organization.objects.create(short_name='CBT', name='CBT', type='confederation')
+        t = Tournament.objects.create(canonical_name='Open X', canonical_slug='open-x-mn', organization=org, modality='tennis')
+        self.ed = TournamentEdition.objects.create(
+            tournament=t, season_year=2027, title='Open X 2027',
+            start_date=date(2027, 6, 1), end_date=date(2027, 6, 7), is_published=True,
+        )
+
+    def _profile(self, **kw):
+        from apps.players.models import PlayerProfile
+        return PlayerProfile.objects.create(user=self.user, **kw)
+
+    def test_matches_by_name_immediately(self):
+        from apps.registrations.models import FederationEntry, TournamentRegistration
+        from apps.registrations.tasks import match_profile_now
+        FederationEntry.objects.create(
+            edition=self.ed, category_text='16 Anos F', player_name='Julia Alves Nardy',
+            player_external_id='', source='cbt',
+        )
+        p = self._profile(display_name='Júlia Alves Nardy')  # com acento
+        out = match_profile_now(p.id)
+        self.assertEqual(out['registrations_created'], 1, out)
+        self.assertTrue(TournamentRegistration.objects.filter(profile=p, edition=self.ed).exists())
+
+    def test_matches_by_external_id_immediately(self):
+        from apps.registrations.models import FederationEntry, TournamentRegistration
+        from apps.registrations.tasks import match_profile_now
+        FederationEntry.objects.create(
+            edition=self.ed, category_text='16 Anos F', player_name='Nome Diferente',
+            player_external_id='tenisintegrado:375614', source='cbt',
+        )
+        p = self._profile(display_name='Outro Nome', external_ids={'cbt': 'tenisintegrado:375614'})
+        out = match_profile_now(p.id)
+        self.assertEqual(out['registrations_created'], 1, out)
+        self.assertTrue(TournamentRegistration.objects.filter(profile=p, edition=self.ed).exists())
+
+    def test_no_match_no_registration(self):
+        from apps.registrations.models import FederationEntry, TournamentRegistration
+        from apps.registrations.tasks import match_profile_now
+        FederationEntry.objects.create(
+            edition=self.ed, category_text='16 Anos F', player_name='Fulano de Tal',
+            player_external_id='', source='cbt',
+        )
+        p = self._profile(display_name='Pessoa Totalmente Diferente')
+        out = match_profile_now(p.id)
+        self.assertEqual(out['registrations_created'], 0)

@@ -108,7 +108,15 @@ class PlayerProfileViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         profile = serializer.save()
-        from apps.registrations.tasks import match_new_profile_to_entries
+        from apps.registrations.tasks import (
+            match_new_profile_to_entries, match_profile_now,
+        )
+        # Match imediato (síncrono) por external_id → inscrições/agenda na hora.
+        try:
+            match_profile_now(profile.pk)
+        except Exception:  # noqa: BLE001 — nunca falhar a criação por causa do match
+            logger.exception('match_profile_external_id_now failed for profile %s', profile.pk)
+        # Match completo (fuzzy por nome) em background.
         match_new_profile_to_entries.delay(profile.pk)
 
     def destroy(self, request, *args, **kwargs):

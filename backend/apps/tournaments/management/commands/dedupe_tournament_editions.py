@@ -74,13 +74,16 @@ class Command(BaseCommand):
         self._affected_tournaments: set[int] = set()
 
         # ── Passo 1: external_id (case-insensitive) ──────────────────────────
+        # Ignoramos season_year: o external_id já identifica a instância única do
+        # torneio (o ano costuma estar no próprio id). Conectores diferentes podem
+        # calcular season_year diferente para eventos que viram o ano (ex.: 31/dez).
         self._dedupe_by_key(
-            lambda e: (e.season_year, e.external_id.lower()) if e.external_id else None,
+            lambda e: e.external_id.lower() if e.external_id else None,
             'external_id', dry, stats,
         )
         # ── Passo 2: id TI normalizado (prefixos de federação) ───────────────
         self._dedupe_by_key(
-            lambda e: (e.season_year, 'ti:' + _ti_key(e.external_id)) if _ti_key(e.external_id) else None,
+            lambda e: ('ti:' + _ti_key(e.external_id)) if _ti_key(e.external_id) else None,
             'ti_id', dry, stats,
         )
 

@@ -1,4 +1,5 @@
 """Tests for players app: PlayerProfile CRUD, permissions, categories, sporting_age, actions."""
+from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from rest_framework.test import APIClient
@@ -952,3 +953,38 @@ class TIFederationDiscoveryTestCase(TestCase):
         self.assertEqual(row.source, ExternalPlayerRanking.SOURCE_FED)
         self.assertEqual(row.federation, 'FPT (SP)')
         self.assertEqual(row.category_label, '12 Anos Masculino Simples')
+
+
+class CityValidationTestCase(TestCase):
+    """Card 8 (tasks2): cidade deve pertencer à UF (validação backend, graciosa)."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user = make_user(email='cityval@example.com')
+        self.client.force_authenticate(user=self.user)
+
+    @patch('apps.players.geo.city_belongs_to_uf', return_value=False)
+    def test_rejects_city_not_in_uf(self, _m):
+        res = self.client.post('/api/players/profiles/', {
+            'display_name': 'P', 'competitive_level': 'pro',
+            'home_state': 'SP', 'home_city': 'Cidade Inexistente XYZ',
+        }, format='json')
+        self.assertEqual(res.status_code, 400)
+        self.assertIn('home_city', res.data)
+
+    @patch('apps.players.geo.city_belongs_to_uf', return_value=True)
+    def test_accepts_valid_city(self, _m):
+        res = self.client.post('/api/players/profiles/', {
+            'display_name': 'P', 'competitive_level': 'pro',
+            'home_state': 'SP', 'home_city': 'São Paulo',
+        }, format='json')
+        self.assertEqual(res.status_code, 201, res.data)
+
+    @patch('apps.players.geo.city_belongs_to_uf', return_value=None)
+    def test_accepts_when_ibge_unavailable(self, _m):
+        # Degradação graciosa: IBGE fora → não bloqueia.
+        res = self.client.post('/api/players/profiles/', {
+            'display_name': 'P', 'competitive_level': 'pro',
+            'home_state': 'SP', 'home_city': 'Qualquer Coisa',
+        }, format='json')
+        self.assertEqual(res.status_code, 201, res.data)

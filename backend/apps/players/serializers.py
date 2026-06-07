@@ -107,6 +107,23 @@ class PlayerProfileSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('UF deve ter 2 caracteres.')
         return value.upper() if value else value
 
+    def validate(self, attrs):
+        """Card 8: cidade deve pertencer à UF (quando ambos informados).
+
+        Usa a lista de municípios do IBGE (cacheada). Se o IBGE estiver
+        indisponível, não bloqueia o save (degradação graciosa)."""
+        city = attrs.get('home_city')
+        uf = attrs.get('home_state')
+        if uf is None and self.instance is not None:
+            uf = self.instance.home_state
+        if city and uf:
+            from .geo import city_belongs_to_uf
+            if city_belongs_to_uf(city, uf) is False:
+                raise serializers.ValidationError(
+                    {'home_city': f'Cidade inválida para a UF {uf}. Selecione uma cidade da lista.'}
+                )
+        return attrs
+
     _VALID_MODALITIES = frozenset({'tennis', 'beach_tennis', 'padel', 'wheelchair'})
 
     def validate_preferred_modality(self, value):

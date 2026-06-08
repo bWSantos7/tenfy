@@ -5,7 +5,7 @@ App mobile em React Native + Expo para o Tenfy - plataforma de calendario e eleg
 ## Variaveis de ambiente
 
 ```env
-EXPO_PUBLIC_API_BASE_URL=https://api.tennis.app.br
+EXPO_PUBLIC_API_BASE_URL=https://api.tenfy.com.br
 ```
 
 ## Rodar localmente

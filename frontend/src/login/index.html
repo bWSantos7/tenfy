@@ -178,7 +178,7 @@ form{display:flex;flex-direction:column;gap:18px}
               <svg id="eyeOff" width="20" height="20" viewBox="0 0 24 24" fill="none" style="display:none"><path d="M3 3l18 18M10.6 10.6a3 3 0 004.2 4.2M9.4 5.2A10 10 0 0112 5c6.4 0 10 7 10 7a18 18 0 01-3.2 3.9M6.2 6.2A18 18 0 002 12s3.6 7 10 7c1 0 2-.1 2.9-.4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
           </div>
-          <div class="err">Sua senha deve ter ao menos 6 caracteres.</div>
+          <div class="err">Sua senha deve ter ao menos 8 caracteres.</div>
         </div>
 
         <div class="row an d5">
@@ -240,7 +240,7 @@ form.addEventListener('submit', (e) => {
   e.preventDefault();
   let ok = true;
   if (!emailRe.test(email.value.trim())) { fEmail.classList.add('invalid'); ok = false; }
-  if (pass.value.length < 6) { fPass.classList.add('invalid'); ok = false; }
+  if (pass.value.length < 8) { fPass.classList.add('invalid'); ok = false; }
   if (!ok) return;
 
   btn.classList.add('loading');

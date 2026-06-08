@@ -33,15 +33,33 @@ export const LandingPage: React.FC = () => {
         navigate(path);
       };
 
+      // Âncoras internas (#recursos, #como, #app, #top): num iframe srcDoc o href "#x"
+      // resolve contra a URL da página pai, então o scroll nativo não funciona.
+      // Rolamos manualmente para o elemento dentro do documento do iframe.
+      const scrollToHash = (hash: string) => (ev: Event) => {
+        const id = (hash || '').replace('#', '');
+        const target = id ? doc.getElementById(id) : null;
+        if (target) {
+          ev.preventDefault();
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      };
+
+      doc.querySelectorAll<HTMLAnchorElement>('.nav-links a, .nav-logo, a.btn-ghost').forEach((a) =>
+        a.addEventListener('click', scrollToHash(a.getAttribute('href') || '#top')),
+      );
+
       doc.querySelectorAll('.nav-cta .login').forEach((a) => a.addEventListener('click', go('/login')));
       doc.querySelectorAll('.signup, .btn-lime, .split-copy .more').forEach((a) =>
         a.addEventListener('click', go('/register')),
       );
       doc.querySelectorAll<HTMLAnchorElement>('.foot-col a').forEach((a) => {
         const t = (a.textContent || '').trim().toLowerCase();
+        const href = a.getAttribute('href') || '';
         if (t === 'privacidade' || t === 'termos') a.addEventListener('click', go('/politica-privacidade'));
         else if (t === 'criar conta') a.addEventListener('click', go('/register'));
         else if (t === 'web') a.addEventListener('click', go('/login'));
+        else if (href.startsWith('#')) a.addEventListener('click', scrollToHash(href));
       });
     },
     [navigate],

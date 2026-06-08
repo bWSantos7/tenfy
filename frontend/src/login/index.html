@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Tenfy — Acesse sua conta</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+:root{
+  --ink:#06090F; --ink2:#0A0F18; --panel:#0B111B; --navy:#0A1330;
+  --lime:#C6EF21; --lime2:#D6F94A;
+  --text:#F4F6FA; --muted:#7E8BA0; --faint:rgba(255,255,255,.10);
+  --field:#101725; --field-br:rgba(255,255,255,.12);
+  --err:#FF5A5A; --ease:cubic-bezier(.19,1,.22,1);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Poppins',system-ui,sans-serif;background:var(--ink);color:var(--text);
+  -webkit-font-smoothing:antialiased;min-height:100vh;overflow-x:hidden}
+a{color:inherit;text-decoration:none}
+img{display:block;max-width:100%}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+.mono{font-family:'JetBrains Mono',monospace}
+::selection{background:var(--lime);color:var(--ink)}
+.eyebrow{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:500;letter-spacing:.28em;
+  text-transform:uppercase;color:var(--lime);display:inline-flex;align-items:center;gap:12px}
+.eyebrow::before{content:"";width:26px;height:1px;background:var(--lime)}
+
+.shell{display:grid;grid-template-columns:1.05fr .95fr;min-height:100vh}
+
+/* ── LEFT: brand panel (racket image) ── */
+.brandside{position:relative;overflow:hidden;display:flex;flex-direction:column;padding:40px 48px 44px;background:#0A0F18}
+.brandside .bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 56%;z-index:0;
+  transform:scale(1.06);animation:kb 22s ease-in-out infinite alternate;will-change:transform}
+@keyframes kb{from{transform:scale(1.06) translateY(0)}to{transform:scale(1.14) translateY(-1.5%)}}
+.brandside::after{content:"";position:absolute;inset:0;z-index:1;pointer-events:none;
+  background:linear-gradient(180deg,rgba(6,9,15,.82) 0%,rgba(6,9,15,.42) 38%,rgba(6,9,15,.12) 64%,rgba(6,9,15,.55) 100%),
+             linear-gradient(102deg,rgba(6,9,15,.62),transparent 62%)}
+.brand-head{position:relative;z-index:3;display:flex;align-items:center;justify-content:space-between;gap:24px}
+.brand-mark{height:56px;width:auto;transition:.4s}
+.brand-text{position:relative;z-index:3;margin-top:46px;max-width:460px}
+.brand-text .eyebrow{margin-bottom:20px}
+.brand-text h2{font-size:clamp(30px,3.4vw,50px);font-weight:800;line-height:.98;letter-spacing:-.025em;text-transform:uppercase}
+.brand-text h2 .hl{color:var(--lime)}
+.brand-text p{font-size:15px;color:var(--text);opacity:.86;margin-top:16px;font-weight:300;max-width:390px;line-height:1.6}
+.back{font-size:13px;color:var(--text);opacity:.85;display:inline-flex;align-items:center;gap:8px;transition:.25s;white-space:nowrap;flex:none}
+.back:hover{opacity:1;color:var(--lime)}
+.brand-foot{position:relative;z-index:3;margin-top:auto;font-family:'JetBrains Mono',monospace;font-size:11px;
+  letter-spacing:.22em;text-transform:uppercase;color:var(--text);opacity:.7}
+
+/* ── RIGHT: form ── */
+.formside{display:flex;align-items:center;justify-content:center;padding:48px 40px;background:var(--ink);position:relative}
+.formwrap{width:100%;max-width:392px}
+.an{opacity:0;transform:translateY(18px);animation:rise .8s var(--ease) forwards}
+.an.d1{animation-delay:.08s}.an.d2{animation-delay:.16s}.an.d3{animation-delay:.24s}
+.an.d4{animation-delay:.32s}.an.d5{animation-delay:.4s}.an.d6{animation-delay:.48s}.an.d7{animation-delay:.56s}
+@keyframes rise{to{opacity:1;transform:none}}
+.formwrap h1{font-size:34px;font-weight:800;letter-spacing:-.02em;line-height:1.05;margin:20px 0 12px}
+.formwrap .sub{font-size:14.5px;color:var(--muted);font-weight:300;line-height:1.6;margin-bottom:34px}
+
+form{display:flex;flex-direction:column;gap:18px}
+.field{position:relative}
+.field label{display:block;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--muted);margin-bottom:9px;transition:.25s}
+.field .ctrl{position:relative}
+.field input{width:100%;background:var(--field);border:1px solid var(--field-br);border-radius:13px;
+  color:var(--text);font-size:15px;font-family:inherit;padding:15px 16px;outline:none;
+  transition:.3s var(--ease)}
+.field input::placeholder{color:#4d5b71}
+.field input:focus{border-color:var(--lime);box-shadow:0 0 0 4px rgba(198,239,33,.12)}
+.field.focus label{color:var(--lime)}
+.field.invalid input{border-color:var(--err);box-shadow:0 0 0 4px rgba(255,90,90,.1)}
+.field .toggle{position:absolute;right:12px;top:50%;transform:translateY(-50%);width:34px;height:34px;
+  display:grid;place-items:center;color:var(--muted);border-radius:9px;transition:.2s}
+.field .toggle:hover{color:var(--text);background:rgba(255,255,255,.06)}
+.field .err{font-size:12px;color:var(--err);margin-top:8px;height:0;opacity:0;overflow:hidden;transition:.3s var(--ease)}
+.field.invalid .err{height:16px;opacity:1}
+
+.row{display:flex;align-items:center;justify-content:space-between;margin-top:-4px}
+.check{display:inline-flex;align-items:center;gap:10px;font-size:13.5px;color:var(--muted);cursor:pointer;user-select:none}
+.check input{position:absolute;opacity:0;pointer-events:none}
+.check .box{width:19px;height:19px;border:1px solid var(--field-br);border-radius:6px;display:grid;place-items:center;
+  transition:.25s var(--ease);background:var(--field)}
+.check .box svg{opacity:0;transform:scale(.5);transition:.25s var(--ease);color:var(--ink)}
+.check input:checked + .box{background:var(--lime);border-color:var(--lime)}
+.check input:checked + .box svg{opacity:1;transform:scale(1)}
+.check:hover{color:var(--text)}
+.forgot{font-size:13.5px;color:var(--text);opacity:.85;transition:.2s}
+.forgot:hover{color:var(--lime);opacity:1}
+
+.submit{margin-top:8px;width:100%;background:var(--lime);color:var(--ink);font-weight:600;font-size:15.5px;
+  border-radius:13px;padding:16px;display:inline-flex;align-items:center;justify-content:center;gap:12px;
+  transition:.4s var(--ease);position:relative;overflow:hidden}
+.submit:hover{box-shadow:0 16px 40px -12px rgba(198,239,33,.5)}
+.submit .arrow{display:inline-flex;transition:.4s var(--ease)}
+.submit:hover .arrow{transform:translateX(4px)}
+.submit.loading{color:transparent;pointer-events:none}
+.submit .spin{position:absolute;width:22px;height:22px;border:2.5px solid rgba(6,9,15,.3);border-top-color:var(--ink);
+  border-radius:50%;opacity:0;animation:none}
+.submit.loading .spin{opacity:1;animation:spin .7s linear infinite}
+.submit.done{background:var(--lime2)}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.divider{display:flex;align-items:center;gap:16px;margin:28px 0;color:var(--muted);font-size:12px;
+  font-family:'JetBrains Mono',monospace;letter-spacing:.12em;text-transform:uppercase}
+.divider::before,.divider::after{content:"";flex:1;height:1px;background:var(--faint)}
+.socials{display:flex;gap:12px}
+.social{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:10px;border:1px solid var(--faint);
+  border-radius:13px;padding:13px;font-size:14px;font-weight:500;color:var(--text);transition:.3s var(--ease)}
+.social:hover{border-color:rgba(255,255,255,.28);background:rgba(255,255,255,.04);transform:translateY(-2px)}
+.foot{text-align:center;margin-top:30px;font-size:14px;color:var(--muted)}
+.foot a{color:var(--lime);font-weight:600}
+.foot a:hover{text-decoration:underline}
+
+.toast{position:fixed;top:24px;left:50%;background:var(--field);
+  border:1px solid rgba(198,239,33,.4);border-radius:13px;padding:14px 20px;display:flex;align-items:center;gap:12px;
+  font-size:14px;z-index:50;opacity:0;transition:.5s var(--ease);box-shadow:0 20px 50px -16px rgba(0,0,0,.6);
+  translate:-50% -80px}
+.toast.show{translate:-50% 0;opacity:1}
+.toast .ic{width:24px;height:24px;border-radius:50%;background:var(--lime);color:var(--ink);display:grid;place-items:center;flex:none}
+
+@media(max-width:880px){
+  .shell{grid-template-columns:1fr}
+  .brandside{padding:24px 22px 28px;min-height:312px}
+  .brand-text{margin-top:30px}
+  .brand-text h2{font-size:27px}
+  .brand-text p{font-size:14px;max-width:none}
+  .brand-mark{height:44px}
+  .brand-foot{display:none}
+  .formside{padding:36px 24px 48px}
+}
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <!-- LEFT BRAND PANEL -->
+  <div class="brandside">
+    <img class="bg" src="assets/racket.jpg" alt="Raquete e bola de tênis" />
+    <div class="brand-head">
+      <img class="brand-mark" src="assets/tenfy-logo-light.png" alt="Tenfy" />
+      <a href="Tenfy Landing v2.html" class="back">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M19 12H5M11 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Voltar ao início
+      </a>
+    </div>
+    <div class="brand-text">
+      <span class="eyebrow">Seu calendário de torneios</span>
+      <h2>Todos os torneios.<br><span class="hl">Um só app.</span></h2>
+      <p>Acompanhe o calendário do tênis brasileiro, as categorias em que pode competir e seus alertas — tudo em um só lugar.</p>
+    </div>
+    <div class="brand-foot">Seu jogo começa aqui</div>
+  </div>
+
+  <!-- RIGHT FORM -->
+  <div class="formside">
+    <div class="formwrap">
+      <span class="eyebrow an">Acesso · Tenfy</span>
+      <h1 class="an d1">Bem-vindo de volta.</h1>
+      <p class="sub an d2">Acesse sua conta para acompanhar o calendário e gerenciar seus alertas.</p>
+
+      <form id="loginForm" novalidate>
+        <div class="field an d3" id="f-email">
+          <label for="email">E-mail</label>
+          <div class="ctrl">
+            <input type="email" id="email" name="email" placeholder="voce@exemplo.com.br" autocomplete="email" />
+          </div>
+          <div class="err">Informe um e-mail válido.</div>
+        </div>
+
+        <div class="field an d4" id="f-pass">
+          <label for="password">Senha</label>
+          <div class="ctrl">
+            <input type="password" id="password" name="password" placeholder="••••••••" autocomplete="current-password" />
+            <button type="button" class="toggle" id="togglePass" aria-label="Mostrar senha">
+              <svg id="eyeOpen" width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/></svg>
+              <svg id="eyeOff" width="20" height="20" viewBox="0 0 24 24" fill="none" style="display:none"><path d="M3 3l18 18M10.6 10.6a3 3 0 004.2 4.2M9.4 5.2A10 10 0 0112 5c6.4 0 10 7 10 7a18 18 0 01-3.2 3.9M6.2 6.2A18 18 0 002 12s3.6 7 10 7c1 0 2-.1 2.9-.4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
+          <div class="err">Sua senha deve ter ao menos 6 caracteres.</div>
+        </div>
+
+        <div class="row an d5">
+          <label class="check">
+            <input type="checkbox" id="remember" checked />
+            <span class="box"><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            Manter conectado
+          </label>
+          <a href="#" class="forgot">Esqueci minha senha</a>
+        </div>
+
+        <button type="submit" class="submit an d6" id="submitBtn">
+          <span class="lbl">Entrar</span>
+          <span class="arrow"><svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          <span class="spin"></span>
+        </button>
+      </form>
+
+      <p class="foot an d7">Ainda não tem uma conta? <a href="#" class="signup-link">Criar conta grátis</a></p>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast">
+  <span class="ic"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+  <span>Acesso autorizado. Redirecionando…</span>
+</div>
+
+<script>
+const form = document.getElementById('loginForm');
+const email = document.getElementById('email');
+const pass = document.getElementById('password');
+const fEmail = document.getElementById('f-email');
+const fPass = document.getElementById('f-pass');
+const btn = document.getElementById('submitBtn');
+const toast = document.getElementById('toast');
+
+/* focus styling */
+[[email, fEmail], [pass, fPass]].forEach(([inp, wrap]) => {
+  inp.addEventListener('focus', () => wrap.classList.add('focus'));
+  inp.addEventListener('blur', () => wrap.classList.remove('focus'));
+  inp.addEventListener('input', () => wrap.classList.remove('invalid'));
+});
+
+/* password toggle */
+const togglePass = document.getElementById('togglePass');
+const eyeOpen = document.getElementById('eyeOpen');
+const eyeOff = document.getElementById('eyeOff');
+togglePass.addEventListener('click', () => {
+  const show = pass.type === 'password';
+  pass.type = show ? 'text' : 'password';
+  eyeOpen.style.display = show ? 'none' : 'block';
+  eyeOff.style.display = show ? 'block' : 'none';
+});
+
+/* validation + submit */
+const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+form.addEventListener('submit', (e) => {
+  e.preventDefault();
+  let ok = true;
+  if (!emailRe.test(email.value.trim())) { fEmail.classList.add('invalid'); ok = false; }
+  if (pass.value.length < 6) { fPass.classList.add('invalid'); ok = false; }
+  if (!ok) return;
+
+  btn.classList.add('loading');
+  // Delega a autenticação ao app (React), que chama a API real e redireciona.
+  try {
+    window.parent.postMessage({
+      type: 'tenfy-login',
+      email: email.value.trim(),
+      password: pass.value,
+      remember: document.getElementById('remember').checked,
+    }, '*');
+  } catch (_) {}
+});
+
+/* o app avisa em caso de erro de autenticação */
+window.addEventListener('message', (ev) => {
+  if (!ev.data || ev.data.type !== 'tenfy-login-error') return;
+  btn.classList.remove('loading');
+  fPass.classList.add('invalid');
+  const er = fPass.querySelector('.err');
+  if (er) er.textContent = ev.data.message || 'E-mail ou senha incorretos.';
+});
+
+/* magnetic submit */
+btn.addEventListener('mousemove', (e) => {
+  const r = btn.getBoundingClientRect();
+  const x = (e.clientX - r.left - r.width / 2) * 0.06;
+  btn.style.transform = `translate(${x}px, -1px)`;
+});
+btn.addEventListener('mouseleave', () => { btn.style.transform = ''; });
+</script>
+</body>
+</html>

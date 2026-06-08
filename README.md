@@ -2,7 +2,7 @@
 
 **Tenfy** é uma plataforma centrada no jogador para agregar torneios de tênis no Brasil, consolidando calendário, regras de inscrição, categorias, elegibilidade, listas de inscritos, rankings e alertas em um único ecossistema.
 
-O projeto é composto por backend Django, frontend web, aplicativo mobile Expo/React Native, PostgreSQL, Redis/Celery, integrações de pagamento, notificações, pipelines de ingestão e automações externas via n8n.
+O projeto é composto por backend Django, frontend web, aplicativo mobile (casca nativa Expo que carrega o app web dentro de uma WebView), PostgreSQL, Redis/Celery, integrações de pagamento, notificações, pipelines de ingestão e automações externas via n8n.
 
 ---
 
@@ -56,7 +56,7 @@ A proposta do app é ser uma camada de inteligência e organização, sem substi
 - Integrações com fontes externas.
 - Importação de inscrições por fonte.
 - Pipeline de qualidade com `dry_run`, `quality_gate`, warnings e errors.
-- App mobile em Expo/React Native.
+- App mobile como casca WebView (Expo) que carrega o app web.
 - Backend Django REST API em produção.
 - Deploy no Railway.
 
@@ -76,10 +76,10 @@ A proposta do app é ser uma camada de inteligência e organização, sem substi
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
-│                    Aplicativo Mobile                         │
-│              Expo · React Native · TypeScript                │
+│                  Aplicativo Mobile (Expo)                    │
+│        WebView que carrega o app web (frontend)              │
 └──────────────────────────────┬───────────────────────────────┘
-                               │ HTTPS / REST
+                               │ carrega o app web · HTTPS / REST
 ┌──────────────────────────────▼───────────────────────────────┐
 │                     Backend Django REST                       │
 │       Django · DRF · Celery · PostgreSQL · Redis              │
@@ -136,12 +136,13 @@ A proposta do app é ser uma camada de inteligência e organização, sem substi
 
 ### Mobile
 
+O app mobile é uma casca nativa Expo que renderiza o app web dentro de uma WebView — a experiência é o próprio frontend web, garantindo paridade total. Toda a lógica (auth, navegação, dados) vive no web; o app trata apenas do chrome nativo, loading e erro de conexão.
+
 | Camada | Tecnologia |
 |---|---|
-| Framework | React Native / Expo |
+| Runtime | Expo / React Native |
+| Renderização | WebView (`react-native-webview`) carregando o app web |
 | Linguagem | TypeScript |
-| Navegação | React Navigation |
-| Storage seguro | expo-secure-store |
 | Build | EAS Build |
 
 ### Infraestrutura
@@ -365,8 +366,10 @@ celery -A config beat --loglevel=info
 ```bash
 cd mobile
 npm install
-npx expo start --tunnel
+npx expo start
 ```
+
+> O app abre uma WebView apontando para `EXPO_PUBLIC_WEB_URL` (padrão `https://tenfy.com.br`). Não há telas nativas a desenvolver — ajustes de UI são feitos no `frontend/`.
 
 ### Frontend
 
@@ -387,22 +390,22 @@ Nunca commitar valores reais. Use apenas `.env` local e variáveis do Railway.
 ```env
 SECRET_KEY=
 DEBUG=False
-ALLOWED_HOSTS=api.tennis.app.br,www.tennis.app.br,healthcheck.railway.app
+ALLOWED_HOSTS=api.tenfy.com.br,tenfy.com.br,healthcheck.railway.app
 DATABASE_URL=
 REDIS_URL=
-FRONTEND_URL=https://www.tennis.app.br
-CORS_ALLOWED_ORIGINS=https://www.tennis.app.br
-CSRF_TRUSTED_ORIGINS=https://www.tennis.app.br,https://api.tennis.app.br
+FRONTEND_URL=https://tenfy.com.br
+CORS_ALLOWED_ORIGINS=https://tenfy.com.br
+CSRF_TRUSTED_ORIGINS=https://tenfy.com.br,https://api.tenfy.com.br
 
 RESEND_API_KEY=
-DEFAULT_FROM_EMAIL=no-reply@tennis.app.br
-RESEND_FROM_EMAIL=no-reply@tennis.app.br
+DEFAULT_FROM_EMAIL=no-reply@tenfy.com.br
+RESEND_FROM_EMAIL=no-reply@tenfy.com.br
 
 CLOUDINARY_URL=
 
 VAPID_PRIVATE_KEY=
 VAPID_PUBLIC_KEY=
-VAPID_CLAIMS_EMAIL=no-reply@tennis.app.br
+VAPID_CLAIMS_EMAIL=no-reply@tenfy.com.br
 
 ASAAS_API_KEY=
 ASAAS_ENVIRONMENT=sandbox
@@ -429,8 +432,11 @@ COSAT_MONGO_CONNECT_TIMEOUT_MS=5000
 ### Frontend/mobile
 
 ```env
-VITE_API_BASE_URL=https://api.tennis.app.br
-EXPO_PUBLIC_API_BASE_URL=https://api.tennis.app.br
+# Frontend web
+VITE_API_BASE_URL=https://api.tenfy.com.br
+
+# Mobile (WebView): URL do app web que o app carrega
+EXPO_PUBLIC_WEB_URL=https://tenfy.com.br
 ```
 
 ---
@@ -511,7 +517,7 @@ python manage.py makemigrations --check --dry-run
 Após deploy:
 
 ```bash
-curl https://api.tennis.app.br/health/
+curl https://api.tenfy.com.br/health/
 ```
 
 ---

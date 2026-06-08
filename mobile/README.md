@@ -1,11 +1,14 @@
 # Tenfy Mobile
 
-App mobile em React Native + Expo para o Tenfy - plataforma de calendario e elegibilidade de torneios de tenis no Brasil.
+Casca nativa Expo que carrega o app web do Tenfy (`https://tenfy.com.br`) dentro de uma **WebView**. A experiência é o próprio frontend web, garantindo paridade total — toda a lógica (auth, navegação, dados) vive no web; o app trata apenas do chrome nativo, estado de loading e erro de conexão.
 
-## Variaveis de ambiente
+> Ajustes de UI/funcionalidade são feitos no `frontend/`, não aqui.
+
+## Variáveis de ambiente
 
 ```env
-EXPO_PUBLIC_API_BASE_URL=https://api.tenfy.com.br
+# URL do app web que a WebView carrega
+EXPO_PUBLIC_WEB_URL=https://tenfy.com.br
 ```
 
 ## Rodar localmente
@@ -14,4 +17,12 @@ EXPO_PUBLIC_API_BASE_URL=https://api.tenfy.com.br
 cd mobile
 npm install
 npx expo start
+```
+
+## Build (EAS)
+
+```bash
+npm run build:android:preview   # APK de teste
+npm run build:android:prod      # produção Android (app bundle)
+npm run build:ios:prod          # produção iOS
 ```

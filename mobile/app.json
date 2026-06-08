@@ -45,12 +45,6 @@
     },
     "plugins": [
       [
-        "expo-image-picker",
-        {
-          "microphonePermission": false
-        }
-      ],
-      [
         "expo-build-properties",
         {
           "android": {
@@ -62,9 +56,7 @@
             "deploymentTarget": "15.1"
           }
         }
-      ],
-      "expo-font",
-      "expo-secure-store"
+      ]
     ],
     "owner": "bwsantos7",
     "extra": {

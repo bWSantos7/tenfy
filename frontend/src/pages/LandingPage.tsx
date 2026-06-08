@@ -1,16 +1,27 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+// HTML original da landing (src/landing/index.html), importado como texto cru.
+// Mantido sem alterações; aqui só ajustamos os caminhos relativos para absolutos.
+import rawHtml from '../landing/index.html?raw';
 
 /**
- * A landing page é servida exatamente como a pasta original (frontend/public/tenfy-landing/),
- * exibida num iframe em tela cheia. Isso garante que o HTML/CSS/JS originais rendam
- * idênticos — sem qualquer interferência do CSS do app (Tailwind/globals.css).
+ * A landing é o documento original (src/landing/index.html) renderizado dentro de um
+ * iframe via `srcDoc`. Isso o isola 100% do CSS do app (Tailwind/globals.css) — então
+ * o layout, espaçamentos, imagens, fontes e animações ficam idênticos ao arquivo original.
  *
- * Os arquivos da pasta NÃO são modificados: a navegação dos botões de login/cadastro
- * é conectada aqui, por cima, acessando o documento do iframe (mesma origem) no onLoad.
+ * Os assets e scripts (imagens, landing-v2.js, image-slot.js) são servidos estaticamente
+ * de /tenfy-landing/. Só reescrevemos os caminhos relativos do HTML para absolutos.
+ * A navegação dos botões de login/cadastro é conectada por cima (mesmo documento), sem
+ * modificar o HTML da landing.
  */
+const SRC_DOC = rawHtml
+  .replace(/(["'(])assets\//g, '$1/tenfy-landing/assets/')
+  .replace(/src=(["'])image-slot\.js\1/g, 'src=$1/tenfy-landing/image-slot.js$1')
+  .replace(/src=(["'])landing-v2\.js\1/g, 'src=$1/tenfy-landing/landing-v2.js$1');
+
 export const LandingPage: React.FC = () => {
   const navigate = useNavigate();
+  const srcDoc = useMemo(() => SRC_DOC, []);
 
   const onLoad = useCallback(
     (e: React.SyntheticEvent<HTMLIFrameElement>) => {
@@ -22,15 +33,10 @@ export const LandingPage: React.FC = () => {
         navigate(path);
       };
 
-      // Entrar → /login
       doc.querySelectorAll('.nav-cta .login').forEach((a) => a.addEventListener('click', go('/login')));
-
-      // Criar conta grátis / CTAs principais → /register
       doc.querySelectorAll('.signup, .btn-lime, .split-copy .more').forEach((a) =>
         a.addEventListener('click', go('/register')),
       );
-
-      // Rodapé: rotas reais por texto do link
       doc.querySelectorAll<HTMLAnchorElement>('.foot-col a').forEach((a) => {
         const t = (a.textContent || '').trim().toLowerCase();
         if (t === 'privacidade' || t === 'termos') a.addEventListener('click', go('/politica-privacidade'));
@@ -44,7 +50,7 @@ export const LandingPage: React.FC = () => {
   return (
     <iframe
       title="Tenfy — A quadra te espera"
-      src="/tenfy-landing/index.html"
+      srcDoc={srcDoc}
       onLoad={onLoad}
       style={{ position: 'fixed', inset: 0, width: '100%', height: '100%', border: 0 }}
     />

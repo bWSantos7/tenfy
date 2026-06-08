@@ -70,8 +70,8 @@ header.nav.solid{background:rgba(6,9,15,.72);backdrop-filter:blur(16px);border-b
 .hero{position:relative;height:100vh;min-height:680px;overflow:hidden;display:flex;align-items:flex-end}
 .hero-media{position:absolute;inset:0;z-index:0;overflow:hidden}
 .hero-media img{width:100%;height:100%;object-fit:cover;object-position:58% 72%;
-  transform:scale(1.12);animation:kenburns 18s ease-in-out infinite alternate;will-change:transform}
-@keyframes kenburns{from{transform:scale(1.12) translate(0,0)}to{transform:scale(1.22) translate(-1.5%,-1.5%)}}
+  transform:scale(1);animation:kenburns 18s ease-in-out infinite alternate;will-change:transform}
+@keyframes kenburns{from{transform:scale(1) translate(0,0)}to{transform:scale(1.05) translate(-1.2%,-1.2%)}}
 .hero-media::after{content:"";position:absolute;inset:0;
   background:linear-gradient(180deg,rgba(6,9,15,.55) 0%,rgba(6,9,15,.15) 30%,rgba(6,9,15,.55) 68%,var(--ink) 100%),
   linear-gradient(90deg,rgba(6,9,15,.8) 0%,rgba(6,9,15,.15) 55%,rgba(6,9,15,0) 100%)}

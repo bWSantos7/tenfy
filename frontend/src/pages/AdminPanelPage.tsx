@@ -1092,6 +1092,8 @@ const humanizeLeadLabel = (col: string): string => {
 
 const isLeadDateCol = (col: string) => /(_at$|^created|^updated|date|data|criad|atualizad)/i.test(col);
 const isLeadEmailCol = (col: string) => /e-?mail/i.test(col);
+// Colunas que não devem ser exibidas na tabela de leads (ex.: preço, descontinuado).
+const isHiddenLeadCol = (col: string) => /pre[çc]o|price|valor/i.test(col);
 
 const formatLeadValue = (col: string, v: unknown): string => {
   if (v === null || v === undefined || v === '') return '—';
@@ -1128,6 +1130,8 @@ const WaitlistLeadsTab: React.FC = () => {
   };
 
   useEffect(() => { load(); }, []);
+
+  const visibleColumns = (data?.columns ?? []).filter((c) => !isHiddenLeadCol(c));
 
   if (loading) return <div className="card text-center py-8 text-text-muted text-sm">Carregando…</div>;
   if (error) return <div className="card text-center py-8 text-sm text-red-400">{error}</div>;
@@ -1170,7 +1174,7 @@ const WaitlistLeadsTab: React.FC = () => {
               <thead>
                 <tr className="bg-bg-elevated/70 border-b border-border">
                   <th className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-text-muted whitespace-nowrap">#</th>
-                  {data.columns.map((c) => (
+                  {visibleColumns.map((c) => (
                     <th
                       key={c}
                       className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-text-muted whitespace-nowrap"
@@ -1187,7 +1191,7 @@ const WaitlistLeadsTab: React.FC = () => {
                     className="border-b border-border/40 last:border-0 even:bg-bg-elevated/20 hover:bg-accent-neon/5 transition-colors"
                   >
                     <td className="px-4 py-2.5 text-text-muted text-xs tabular-nums whitespace-nowrap">{i + 1}</td>
-                    {data.columns.map((c) => {
+                    {visibleColumns.map((c) => {
                       const val = formatLeadValue(c, row[c]);
                       const isEmail = isLeadEmailCol(c) && val !== '—';
                       return (

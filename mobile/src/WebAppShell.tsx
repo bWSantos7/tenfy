@@ -18,6 +18,9 @@ import type { WebViewErrorEvent, ShouldStartLoadRequest } from 'react-native-web
 const WEB_URL = (process.env.EXPO_PUBLIC_WEB_URL || 'https://tenfy.com.br').trim();
 // Host considerado "interno" (navega dentro da WebView). Demais abrem no navegador do sistema.
 const APP_HOST = 'tenfy.com.br';
+// Caminho inicial do app: abre direto no login. Quem já está logado é redirecionado
+// para /inicio pelo próprio web (PublicOnlyRoute), então não trava o usuário autenticado.
+const INITIAL_URL = `${WEB_URL.replace(/\/+$/, '')}/login`;
 
 // Cores de marca para o chrome nativo (loading/erro). Espelham o tema do web.
 const BG = '#F6F7FA';
@@ -93,7 +96,7 @@ export function WebAppShell() {
         <View style={styles.flex}>
           <WebView
             ref={webRef}
-            source={{ uri: WEB_URL }}
+            source={{ uri: INITIAL_URL }}
             applicationNameForUserAgent="TenfyMobileApp"
             originWhitelist={['*']}
             javaScriptEnabled

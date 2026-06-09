@@ -3,6 +3,7 @@ import {
   AlertTriangle, Database, Loader2, Link2,
   Play, RefreshCcw, Search, Shield, ShieldOff,
   Trash2, UserCog, X, BarChart2,
+  KeyRound, Unlock, CreditCard, Users, Eye, Trophy,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
@@ -44,6 +45,14 @@ interface AdminUser {
   full_name: string;
   phone: string;
   role: string;
+  profile_type?: string;
+  profile_label?: string;
+  plan?: string | null;
+  plan_slug?: string | null;
+  plan_status?: string;
+  plan_is_blocked?: boolean;
+  billing_period?: string | null;
+  is_login_locked?: boolean;
   is_active: boolean;
   is_staff: boolean;
   is_superuser: boolean;
@@ -52,6 +61,37 @@ interface AdminUser {
   created_at: string;
   last_login: string | null;
 }
+
+interface LinkUser { link_id: number; id: number; full_name: string; email: string; role: string }
+
+interface AdminUserDetail extends AdminUser {
+  consent_version?: string;
+  last_login_ip?: string | null;
+  failed_login_attempts?: number;
+  login_locked_until?: string | null;
+  lock_seconds_remaining?: number;
+  sport_profile?: {
+    display_name: string; modality: string; competitive_level: string;
+    competitive_level_label: string; birth_year: number | null; birth_date: string | null;
+    age: number | null; gender: string; gender_label: string;
+    federation: { id: number; name: string; uf: string } | null;
+    home_state: string; home_city: string; travel_states: string[];
+    dominant_hand: string; ti_player_id: string | null;
+    utr_singles: string; utr_doubles: string; utr_profile_url: string;
+    ti_rankings: unknown[]; external_rankings: Record<string, unknown>[]; profiles_count: number;
+  } | null;
+  tournaments?: {
+    registered: { id: number; edition: string; payment_status: string; is_withdrawn: boolean; registered_at: string }[];
+    watching: { id: number; edition: string; user_status: string }[];
+    results: { id: number; category_played: string; position: number | null; wins: number; losses: number }[];
+  };
+  links?: { responsibles: LinkUser[]; dependents: LinkUser[] };
+}
+
+const PLAN_STATUS_LABELS: Record<string, string> = {
+  active: 'Ativo', trial: 'Tester/Trial', pending: 'Pendente',
+  canceled: 'Cancelado', expired: 'Expirado', unpaid: 'Inadimplente', none: 'Sem plano',
+};
 
 interface AdminStats {
   registrations: { date: string; registrations: number }[];
@@ -396,11 +436,22 @@ const ROLE_LABELS: Record<string, string> = {
   admin: 'Administrador',
 };
 
+const PlanBadge: React.FC<{ user: AdminUser }> = ({ user }) => {
+  const status = user.plan_status || 'none';
+  const color = status === 'active' ? 'green'
+    : status === 'trial' ? 'neon'
+    : status === 'pending' ? 'amber'
+    : status === 'none' ? 'gray' : 'red';
+  const planName = user.plan || 'Sem plano';
+  return <Badge color={color}>{planName} · {PLAN_STATUS_LABELS[status] ?? status}</Badge>;
+};
+
 const UsersTab: React.FC = () => {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<AdminUser | null>(null);
+  const [viewing, setViewing] = useState<AdminUser | null>(null);
   const [deleting, setDeleting] = useState<AdminUser | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -436,7 +487,7 @@ const UsersTab: React.FC = () => {
   }
 
   function onSaved(updated: AdminUser) {
-    setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
+    setUsers((prev) => prev.map((u) => (u.id === updated.id ? { ...u, ...updated } : u)));
     setEditing(null);
   }
 
@@ -460,20 +511,32 @@ const UsersTab: React.FC = () => {
         <div className="space-y-2">
           {users.map((u) => (
             <div key={u.id} className="card !p-3 flex items-center gap-3">
-              <div className="w-9 h-9 rounded-full bg-bg-surface flex items-center justify-center shrink-0 text-sm font-bold text-accent-neon uppercase">
+              <button
+                onClick={() => setViewing(u)}
+                className="w-9 h-9 rounded-full bg-bg-surface flex items-center justify-center shrink-0 text-sm font-bold text-accent-neon uppercase"
+                title="Ver detalhes"
+              >
                 {(u.full_name || u.email)[0]}
-              </div>
-              <div className="flex-1 min-w-0">
+              </button>
+              <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setViewing(u)}>
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-medium text-sm truncate">{u.full_name || '—'}</span>
-                  {u.is_superuser && <Badge color="neon">Superadmin</Badge>}
-                  {u.is_staff && !u.is_superuser && <Badge color="blue">Staff</Badge>}
+                  <Badge color="gray">#{u.id}</Badge>
+                  {u.profile_label && <Badge color="blue">{u.profile_label}</Badge>}
                   {!u.is_active && <Badge color="red">Inativo</Badge>}
+                  {u.is_login_locked && <Badge color="red">Login bloqueado</Badge>}
                 </div>
                 <div className="text-xs text-text-muted truncate">{u.email}</div>
-                <div className="text-xs text-text-muted">{ROLE_LABELS[u.role] ?? 'Perfil não informado'}</div>
+                <div className="mt-1"><PlanBadge user={u} /></div>
               </div>
               <div className="flex items-center gap-1 shrink-0">
+                <button
+                  onClick={() => setViewing(u)}
+                  className="p-1.5 rounded hover:bg-bg-surface text-text-muted hover:text-text-primary transition-colors"
+                  title="Ver detalhes"
+                >
+                  <Eye className="w-4 h-4" />
+                </button>
                 <button
                   onClick={() => setEditing(u)}
                   className="p-1.5 rounded hover:bg-bg-surface text-text-muted hover:text-text-primary transition-colors"
@@ -496,6 +559,14 @@ const UsersTab: React.FC = () => {
         </div>
       )}
 
+      {viewing && (
+        <UserDetailModal
+          userId={viewing.id}
+          onClose={() => setViewing(null)}
+          onChanged={() => load(search)}
+          onEdit={() => { setEditing(viewing); setViewing(null); }}
+        />
+      )}
       {editing && <EditUserModal user={editing} onClose={() => setEditing(null)} onSaved={onSaved} />}
       {deleting && (
         <ConfirmModal
@@ -518,6 +589,7 @@ const EditUserModal: React.FC<{
 }> = ({ user, onClose, onSaved }) => {
   const [form, setForm] = useState({
     full_name: user.full_name,
+    email: user.email,
     role: user.role,
     is_active: user.is_active,
     is_staff: user.is_staff,
@@ -547,7 +619,7 @@ const EditUserModal: React.FC<{
             <X className="w-5 h-5" />
           </button>
         </div>
-        <p className="text-xs text-text-muted">{user.email}</p>
+        <p className="text-xs text-text-muted">#{user.id}</p>
         <form onSubmit={save} className="space-y-3">
           <div>
             <label className="text-xs text-text-secondary mb-1 block">Nome</label>
@@ -555,6 +627,15 @@ const EditUserModal: React.FC<{
               className="input-base"
               value={form.full_name}
               onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))}
+            />
+          </div>
+          <div>
+            <label className="text-xs text-text-secondary mb-1 block">E-mail</label>
+            <input
+              type="email"
+              className="input-base"
+              value={form.email}
+              onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
             />
           </div>
           <div>
@@ -607,6 +688,240 @@ const EditUserModal: React.FC<{
     </div>
   );
 };
+
+// ─── User detail modal (audit / ações) ──────────────────────────────────────────
+
+const DetailRow: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
+  <div className="flex justify-between gap-3 text-sm py-1 border-b border-border/40 last:border-0">
+    <span className="text-text-muted">{label}</span>
+    <span className="text-right font-medium break-words">{value ?? '—'}</span>
+  </div>
+);
+
+const DetailSection: React.FC<{ title: string; icon: React.ReactNode; children: React.ReactNode }> = ({ title, icon, children }) => (
+  <section className="card !p-3">
+    <h3 className="text-sm font-semibold flex items-center gap-2 mb-2">{icon} {title}</h3>
+    {children}
+  </section>
+);
+
+const UserDetailModal: React.FC<{
+  userId: number;
+  onClose: () => void;
+  onChanged: () => void;
+  onEdit: () => void;
+}> = ({ userId, onClose, onChanged, onEdit }) => {
+  const [data, setData] = useState<AdminUserDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [planSlug, setPlanSlug] = useState('');
+  const [planStatus, setPlanStatus] = useState('');
+
+  async function load() {
+    setLoading(true);
+    try {
+      const res = await api.get<AdminUserDetail>(`/api/admin-panel/users/${userId}/`);
+      setData(res.data);
+      setPlanSlug(res.data.plan_slug || '');
+      setPlanStatus(res.data.plan_status && res.data.plan_status !== 'none' ? res.data.plan_status : '');
+    } catch (err) {
+      toast.error(extractApiError(err));
+      onClose();
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [userId]);
+
+  async function act(fn: () => Promise<void>) {
+    setBusy(true);
+    try {
+      await fn();
+      await load();
+      onChanged();
+    } catch (err) {
+      toast.error(extractApiError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function resetPassword() {
+    const pwd = window.prompt('Nova senha (mínimo 6 caracteres):');
+    if (!pwd) return;
+    act(async () => {
+      await api.post(`/api/admin-panel/users/${userId}/set-password/`, { password: pwd });
+      toast.success('Senha redefinida.');
+    });
+  }
+
+  function unlockLogin() {
+    act(async () => {
+      await api.post(`/api/admin-panel/users/${userId}/unlock-login/`, {});
+      toast.success('Login desbloqueado.');
+    });
+  }
+
+  function savePlan() {
+    act(async () => {
+      await api.post(`/api/admin-panel/users/${userId}/plan/`, {
+        plan_slug: planSlug || undefined,
+        status: planStatus || undefined,
+      });
+      toast.success('Plano atualizado.');
+    });
+  }
+
+  function makeTester() {
+    act(async () => {
+      await api.post(`/api/admin-panel/users/${userId}/plan/`, { plan_slug: 'tester', status: 'active' });
+      toast.success('Plano Tester liberado.');
+    });
+  }
+
+  function removeLink(role: 'parent' | 'child', counterpartId: number) {
+    act(async () => {
+      await api.post(`/api/admin-panel/users/${userId}/links/`, { action: 'remove', role, counterpart_id: counterpartId });
+      toast.success('Vínculo removido.');
+    });
+  }
+
+  function addLink(role: 'parent' | 'child') {
+    const id = window.prompt(role === 'parent' ? 'ID do responsável a vincular:' : 'ID do dependente a vincular:');
+    if (!id) return;
+    act(async () => {
+      await api.post(`/api/admin-panel/users/${userId}/links/`, { action: 'add', role, counterpart_id: Number(id) });
+      toast.success('Vínculo criado.');
+    });
+  }
+
+  const sp = data?.sport_profile;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 px-3 py-6 overflow-y-auto">
+      <div className="bg-bg-card border border-border rounded-2xl w-full max-w-lg p-5 space-y-3 my-auto">
+        <div className="flex items-center justify-between">
+          <h2 className="font-bold text-lg flex items-center gap-2"><UserCog className="w-5 h-5 text-accent-neon" /> Detalhes do usuário</h2>
+          <button onClick={onClose} className="text-text-muted hover:text-text-primary"><X className="w-5 h-5" /></button>
+        </div>
+
+        {loading || !data ? (
+          <div className="py-12 flex justify-center"><Loader2 className="w-6 h-6 text-accent-neon animate-spin" /></div>
+        ) : (
+          <>
+            {/* Conta */}
+            <DetailSection title="Conta" icon={<UserCog className="w-4 h-4 text-accent-neon" />}>
+              <DetailRow label="ID" value={`#${data.id}`} />
+              <DetailRow label="Nome" value={data.full_name || '—'} />
+              <DetailRow label="E-mail" value={data.email} />
+              <DetailRow label="Telefone" value={data.phone || '—'} />
+              <DetailRow label="Perfil" value={data.profile_label} />
+              <DetailRow label="Conta" value={data.is_active ? 'Ativa' : 'Inativa'} />
+              <DetailRow label="E-mail verificado" value={data.email_verified ? 'Sim' : 'Não'} />
+              <DetailRow label="Login bloqueado" value={data.is_login_locked
+                ? `Sim (${Math.ceil((data.lock_seconds_remaining || 0) / 60)} min restantes)` : 'Não'} />
+              <DetailRow label="Tentativas falhas" value={data.failed_login_attempts ?? 0} />
+              <DetailRow label="Criado em" value={fmtDate(data.created_at)} />
+              <DetailRow label="Último login" value={data.last_login ? fmtDate(data.last_login) : 'Nunca'} />
+            </DetailSection>
+
+            {/* Plano */}
+            <DetailSection title="Plano" icon={<CreditCard className="w-4 h-4 text-accent-neon" />}>
+              <DetailRow label="Plano" value={data.plan || 'Sem plano'} />
+              <DetailRow label="Status" value={<PlanBadge user={data} />} />
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                <select className="input-base !py-1.5 text-sm" value={planSlug} onChange={(e) => setPlanSlug(e.target.value)}>
+                  <option value="">(manter plano)</option>
+                  <option value="individual">Individual</option>
+                  <option value="familia">Família</option>
+                  <option value="tester">Tester</option>
+                </select>
+                <select className="input-base !py-1.5 text-sm" value={planStatus} onChange={(e) => setPlanStatus(e.target.value)}>
+                  <option value="">(manter status)</option>
+                  <option value="active">Ativo</option>
+                  <option value="pending">Pendente</option>
+                  <option value="trial">Trial</option>
+                  <option value="canceled">Cancelado</option>
+                  <option value="expired">Expirado</option>
+                  <option value="unpaid">Inadimplente</option>
+                </select>
+              </div>
+              <div className="flex gap-2 mt-2">
+                <button disabled={busy} onClick={savePlan} className="btn-secondary flex-1 text-sm">Aplicar plano</button>
+                <button disabled={busy} onClick={makeTester} className="btn-secondary flex-1 text-sm">Liberar Tester</button>
+              </div>
+            </DetailSection>
+
+            {/* Perfil esportivo */}
+            <DetailSection title="Perfil esportivo" icon={<Trophy className="w-4 h-4 text-accent-neon" />}>
+              {!sp ? (
+                <p className="text-sm text-text-muted">Sem perfil esportivo cadastrado.</p>
+              ) : (
+                <>
+                  <DetailRow label="Modalidade" value={sp.modality || '—'} />
+                  <DetailRow label="Categoria/Nível" value={sp.competitive_level_label || sp.competitive_level} />
+                  <DetailRow label="Nascimento" value={sp.birth_date || sp.birth_year || '—'} />
+                  <DetailRow label="Idade" value={sp.age ?? '—'} />
+                  <DetailRow label="Gênero" value={sp.gender_label || '—'} />
+                  <DetailRow label="Federação" value={sp.federation ? `${sp.federation.name} (${sp.federation.uf})` : '—'} />
+                  <DetailRow label="Estado" value={sp.home_state || '—'} />
+                  <DetailRow label="Cidade" value={sp.home_city || '—'} />
+                  <DetailRow label="UFs de interesse" value={(sp.travel_states || []).join(', ') || '—'} />
+                  <DetailRow label="UTR (simples/duplas)" value={`${sp.utr_singles || '—'} / ${sp.utr_doubles || '—'}`} />
+                  <DetailRow label="ID Tênis Integrado" value={sp.ti_player_id || '—'} />
+                  <DetailRow label="Rankings externos" value={sp.external_rankings?.length ?? 0} />
+                </>
+              )}
+            </DetailSection>
+
+            {/* Torneios */}
+            <DetailSection title="Torneios" icon={<Trophy className="w-4 h-4 text-accent-neon" />}>
+              <DetailRow label="Inscritos" value={data.tournaments?.registered.length ?? 0} />
+              <DetailRow label="Acompanhados" value={data.tournaments?.watching.length ?? 0} />
+              <DetailRow label="Resultados" value={data.tournaments?.results.length ?? 0} />
+            </DetailSection>
+
+            {/* Vínculos */}
+            <DetailSection title="Vínculos" icon={<Users className="w-4 h-4 text-accent-neon" />}>
+              <div className="text-xs text-text-muted mb-1">Responsáveis</div>
+              {data.links?.responsibles.length ? data.links.responsibles.map((r) => (
+                <div key={r.link_id} className="flex items-center justify-between text-sm py-1">
+                  <span className="truncate">{r.full_name || r.email} <span className="text-text-muted">#{r.id}</span></span>
+                  <button disabled={busy} onClick={() => removeLink('parent', r.id)} className="text-red-400 text-xs hover:underline">Remover</button>
+                </div>
+              )) : <p className="text-sm text-text-muted">Nenhum responsável.</p>}
+              <button disabled={busy} onClick={() => addLink('parent')} className="text-accent-neon text-xs hover:underline mt-1">+ Adicionar responsável</button>
+
+              <div className="text-xs text-text-muted mb-1 mt-3">Dependentes</div>
+              {data.links?.dependents.length ? data.links.dependents.map((d) => (
+                <div key={d.link_id} className="flex items-center justify-between text-sm py-1">
+                  <span className="truncate">{d.full_name || d.email} <span className="text-text-muted">#{d.id}</span></span>
+                  <button disabled={busy} onClick={() => removeLink('child', d.id)} className="text-red-400 text-xs hover:underline">Remover</button>
+                </div>
+              )) : <p className="text-sm text-text-muted">Nenhum dependente.</p>}
+              <button disabled={busy} onClick={() => addLink('child')} className="text-accent-neon text-xs hover:underline mt-1">+ Adicionar dependente</button>
+            </DetailSection>
+
+            {/* Ações */}
+            <div className="flex flex-wrap gap-2 pt-1">
+              <button disabled={busy} onClick={onEdit} className="btn-secondary flex items-center gap-1 text-sm"><UserCog className="w-4 h-4" /> Editar</button>
+              <button disabled={busy} onClick={resetPassword} className="btn-secondary flex items-center gap-1 text-sm"><KeyRound className="w-4 h-4" /> Resetar senha</button>
+              {data.is_login_locked && (
+                <button disabled={busy} onClick={unlockLogin} className="btn-secondary flex items-center gap-1 text-sm"><Unlock className="w-4 h-4" /> Desbloquear login</button>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
+function fmtDate(iso?: string | null): string {
+  if (!iso) return '—';
+  try { return new Date(iso).toLocaleString('pt-BR'); } catch { return iso; }
+}
 
 // ─── Confirm modal ────────────────────────────────────────────────────────────
 

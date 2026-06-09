@@ -70,6 +70,12 @@ class User(AbstractBaseUser, PermissionsMixin, TimestampedModel):
 
     last_login_ip = models.GenericIPAddressField(null=True, blank=True)
 
+    # Login security — brute-force protection (persisted so the block survives a
+    # cache flush and can be released by an admin). See apps.accounts.security.
+    failed_login_attempts = models.PositiveSmallIntegerField(default=0)
+    login_locked_until = models.DateTimeField(null=True, blank=True)
+    last_failed_login_at = models.DateTimeField(null=True, blank=True)
+
     objects = UserManager()
 
     USERNAME_FIELD = 'email'

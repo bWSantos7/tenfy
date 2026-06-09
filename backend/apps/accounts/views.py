@@ -32,10 +32,18 @@ from .serializers import (
     PlayerSearchSerializer,
 )
 from .models import CoachAthlete, ParentChild, DependentInvite
+from . import services
 
 logger = logging.getLogger('apps.accounts')
 
 User = get_user_model()
+
+
+def _responsible_link_error(exc) -> Response:
+    """Render a services.assert_can_link_responsible ValidationError as a 400."""
+    from django.core.exceptions import ValidationError as DjangoValidationError
+    detail = exc.messages[0] if isinstance(exc, DjangoValidationError) and exc.messages else str(exc)
+    return Response({'detail': detail}, status=status.HTTP_400_BAD_REQUEST)
 
 
 def _resolve_federation(federation_value):
@@ -143,19 +151,79 @@ class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
 
     def post(self, request, *args, **kwargs):
-        response = super().post(request, *args, **kwargs)
-        if response.status_code == 200:
-            ip = self._get_ip(request)
-            email = request.data.get('email', '').strip().lower()
-            if email:
-                try:
-                    user = User.objects.get(email=email)
-                    user.last_login = timezone.now()
-                    user.last_login_ip = ip
-                    user.save(update_fields=['last_login', 'last_login_ip'])
-                except User.DoesNotExist:
-                    pass
+        from rest_framework.exceptions import AuthenticationFailed
+        from . import security
+
+        ip = self._get_ip(request)
+        email = request.data.get('email', '').strip().lower()
+        user = User.objects.filter(email=email).first() if email else None
+
+        # Block locked accounts before attempting credential validation.
+        # Only reveal the block for a known account — keeps the generic
+        # "invalid credentials" path for unknown e-mails (no user enumeration).
+        if user and security.is_locked(user):
+            return Response(
+                {'detail': (
+                    'Conta temporariamente bloqueada após várias tentativas de login. '
+                    'Tente novamente em alguns minutos ou contate o suporte.'
+                )},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            response = super().post(request, *args, **kwargs)
+        except AuthenticationFailed:
+            # Wrong password / inactive account. Count the failure against the
+            # known user and lock after MAX_LOGIN_ATTEMPTS.
+            if user:
+                result = security.register_failed_attempt(user)
+                if result['locked']:
+                    self._audit_lock(user, ip, result['attempts'])
+                    return Response(
+                        {'detail': (
+                            'Você excedeu o número de tentativas. Conta bloqueada por '
+                            '15 minutos. Tente novamente mais tarde ou contate o suporte.'
+                        )},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+                remaining = result['remaining_attempts']
+                return Response(
+                    {'detail': (
+                        f'E-mail ou senha incorretos. Você tem {remaining} '
+                        f'tentativa{"s" if remaining != 1 else ""} restante'
+                        f'{"s" if remaining != 1 else ""} antes do bloqueio.'
+                    )},
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
+            # Unknown e-mail — generic message, no enumeration.
+            return Response(
+                {'detail': 'E-mail ou senha incorretos.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        if response.status_code == 200 and user:
+            # Successful login: reset counter/lock and record last login.
+            security.reset_attempts(user)
+            user.last_login = timezone.now()
+            user.last_login_ip = ip
+            user.save(update_fields=['last_login', 'last_login_ip'])
         return response
+
+    @staticmethod
+    def _audit_lock(user, ip, attempts):
+        try:
+            from apps.audit.models import AuditLog
+            AuditLog.objects.create(
+                actor=None,
+                action=AuditLog.ACTION_LOGIN,
+                entity_type='user',
+                entity_id=str(user.id),
+                diff={'event': 'login_locked', 'failed_attempts': attempts},
+                reason='Bloqueio automático por excesso de tentativas de login.',
+                ip_address=ip or None,
+            )
+        except Exception:  # noqa: BLE001 — auditoria nunca deve quebrar o login
+            logger.exception('Failed to write login-lock audit for user %s', user.id)
 
     @staticmethod
     def _get_ip(request):
@@ -645,6 +713,13 @@ class ParentChildViewSet(viewsets.ModelViewSet):
                         status=status.HTTP_403_FORBIDDEN,
                     )
 
+        # Área 5: respeitar o limite de responsáveis por jogador/dependente.
+        from django.core.exceptions import ValidationError as DjangoValidationError
+        try:
+            services.assert_can_link_responsible(child, request.user)
+        except DjangoValidationError as exc:
+            return _responsible_link_error(exc)
+
         # Staff bypass: create link directly without requiring an invite
         if request.user.is_staff:
             link, _ = ParentChild.objects.get_or_create(parent=request.user, child=child, defaults={'is_active': True})
@@ -947,6 +1022,13 @@ class ParentChildViewSet(viewsets.ModelViewSet):
         if ParentChild.objects.filter(parent=request.user, child=invitee, is_active=True).exists():
             return Response({'detail': 'Este jogador já é seu dependente.'}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Área 5: não enviar convite que não poderá ser finalizado (limite de responsáveis).
+        from django.core.exceptions import ValidationError as DjangoValidationError
+        try:
+            services.assert_can_link_responsible(invitee, request.user)
+        except DjangoValidationError as exc:
+            return _responsible_link_error(exc)
+
         # Prevent duplicate pending invites
         existing = DependentInvite.objects.filter(
             parent=request.user, invitee=invitee, status=DependentInvite.STATUS_PENDING
@@ -1095,6 +1177,13 @@ class DependentInviteViewSet(viewsets.GenericViewSet):
                             {'detail': 'O responsável não possui Plano Família ativo.'},
                             status=status.HTTP_400_BAD_REQUEST,
                         )
+
+            # Área 5: re-validar o limite de responsáveis no momento do aceite.
+            from django.core.exceptions import ValidationError as DjangoValidationError
+            try:
+                services.assert_can_link_responsible(invite.invitee, invite.parent)
+            except DjangoValidationError as exc:
+                return _responsible_link_error(exc)
 
             with transaction.atomic():
                 invite.status = DependentInvite.STATUS_ACCEPTED

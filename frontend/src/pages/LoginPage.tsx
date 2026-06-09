@@ -31,9 +31,13 @@ export const LoginPage: React.FC = () => {
         setUser(data.user);
         toast.success('Bem-vindo de volta!');
         nav(from, { replace: true });
-      } catch {
+      } catch (err) {
+        // Prefere a mensagem do backend (tentativas restantes / bloqueio temporário);
+        // cai num texto genérico quando não há detalhe.
+        const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+        const message = detail || 'E-mail ou senha incorretos. Verifique os dados ou redefina sua senha.';
         iframeRef.current?.contentWindow?.postMessage(
-          { type: 'tenfy-login-error', message: 'E-mail ou senha incorretos. Verifique os dados ou redefina sua senha.' },
+          { type: 'tenfy-login-error', message },
           '*',
         );
       }

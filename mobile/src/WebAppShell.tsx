@@ -31,6 +31,11 @@ export function WebAppShell() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [canGoBack, setCanGoBack] = useState(false);
+  // O overlay nativo de loading só faz sentido no primeiro carregamento do documento.
+  // Navegações internas do app (SPA / pushState, ex.: login -> /inicio) podem disparar
+  // onLoadStart sem um onLoadEnd correspondente no Android, deixando o spinner preso.
+  // Após o primeiro carregamento, o próprio web cuida dos estados de loading.
+  const hasLoadedOnce = useRef(false);
 
   // Botão físico de voltar (Android): volta no histórico da WebView quando possível.
   useEffect(() => {
@@ -47,6 +52,9 @@ export function WebAppShell() {
 
   const onNavChange = useCallback((navState: WebViewNavigation) => {
     setCanGoBack(navState.canGoBack);
+    // Garante que o overlay nunca fique preso: quando o WebView reporta que não
+    // está mais carregando, escondemos o spinner.
+    if (!navState.loading) setLoading(false);
   }, []);
 
   // Links externos (outro domínio, mailto, tel, whatsapp) abrem no app nativo correspondente.
@@ -76,6 +84,7 @@ export function WebAppShell() {
 
   const reload = useCallback(() => {
     setError(false);
+    hasLoadedOnce.current = false; // retry após erro é um carregamento real → mostra spinner
     setLoading(true);
     webRef.current?.reload();
   }, []);
@@ -107,8 +116,8 @@ export function WebAppShell() {
             pullToRefreshEnabled
             mediaPlaybackRequiresUserAction
             setSupportMultipleWindows={false}
-            onLoadStart={() => setLoading(true)}
-            onLoadEnd={() => setLoading(false)}
+            onLoadStart={() => { if (!hasLoadedOnce.current) setLoading(true); }}
+            onLoadEnd={() => { hasLoadedOnce.current = true; setLoading(false); }}
             onError={onError}
             onNavigationStateChange={onNavChange}
             onShouldStartLoadWithRequest={onShouldStartLoadWithRequest}

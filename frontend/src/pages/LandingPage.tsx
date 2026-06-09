@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 // HTML original da landing (src/landing/index.html), importado como texto cru.
 // Mantido sem alterações; aqui só ajustamos os caminhos relativos para absolutos.
@@ -22,6 +22,29 @@ const SRC_DOC = rawHtml
 export const LandingPage: React.FC = () => {
   const navigate = useNavigate();
   const srcDoc = useMemo(() => SRC_DOC, []);
+
+  // Detecta se está rodando dentro do app mobile (WebView)
+  const isMobileApp = useMemo(() => {
+    return (
+      navigator.userAgent.includes('TenfyMobileApp') ||
+      !!(window as any).ReactNativeWebView
+    );
+  }, []);
+
+  useEffect(() => {
+    if (isMobileApp) {
+      // Redireciona para /inicio (o ProtectedRoute mandará para /login se não logado)
+      navigate('/inicio', { replace: true });
+    }
+  }, [isMobileApp, navigate]);
+
+  if (isMobileApp) {
+    return (
+      <div className="min-h-screen bg-[#F6F7FA] flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-[#0A1330] border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   const onLoad = useCallback(
     (e: React.SyntheticEvent<HTMLIFrameElement>) => {

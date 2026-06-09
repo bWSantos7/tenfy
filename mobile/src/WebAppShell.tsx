@@ -94,6 +94,7 @@ export function WebAppShell() {
           <WebView
             ref={webRef}
             source={{ uri: WEB_URL }}
+            applicationNameForUserAgent="TenfyMobileApp"
             originWhitelist={['*']}
             javaScriptEnabled
             domStorageEnabled

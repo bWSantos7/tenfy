@@ -29,27 +29,137 @@ from apps.tournaments.serializers import TournamentEditionListSerializer
 User = get_user_model()
 
 
-class AdminUserSerializer(serializers.ModelSerializer):
+def _client_ip(request):
+    xff = request.META.get('HTTP_X_FORWARDED_FOR', '')
+    if xff:
+        return xff.split(',')[0].strip() or None
+    return request.META.get('REMOTE_ADDR') or None
+
+
+def _audit(actor, action, entity_id, *, diff=None, reason='', request=None):
+    """Write an admin AuditLog entry. Never let auditing break the operation."""
+    try:
+        AuditLog.objects.create(
+            actor=actor,
+            action=action,
+            entity_type='user',
+            entity_id=str(entity_id),
+            diff=diff or {},
+            reason=reason or '',
+            ip_address=_client_ip(request) if request else None,
+        )
+    except Exception:  # noqa: BLE001
+        import logging
+        logging.getLogger('apps.admin_panel').exception('Audit write failed')
+
+
+# ── Derived user info helpers ────────────────────────────────────────────────
+
+_PLAN_ACTIVE_STATUSES = ('active', 'trial')
+
+
+def _profile_type(user):
+    """(code, friendly label) describing the user's profile for the admin UI."""
+    from apps.accounts.models import ParentChild
+    if user.is_superuser:
+        return 'master', 'Master'
+    if user.is_staff:
+        return 'admin', 'Admin'
+    if user.role == 'parent':
+        return 'responsavel', 'Responsável'
+    if user.role == 'coach':
+        return 'treinador', 'Treinador'
+    if user.role == 'player':
+        is_dependent = getattr(user, '_dep_count', None)
+        if is_dependent is None:
+            is_dependent = ParentChild.objects.filter(child=user, is_active=True).exists()
+        return ('dependente', 'Dependente') if is_dependent else ('jogador', 'Jogador')
+    return user.role or 'user', (user.role or 'Usuário').capitalize()
+
+
+def _plan_info(user):
+    """Plan + subscription status summary; tolerant when there is no subscription."""
+    try:
+        sub = user.subscription
+    except Exception:  # noqa: BLE001 — Subscription.DoesNotExist / not loaded
+        return {
+            'plan': None, 'plan_slug': None, 'plan_status': 'none',
+            'plan_is_blocked': True, 'billing_period': None,
+        }
+    return {
+        'plan': sub.plan.name if sub.plan_id else None,
+        'plan_slug': sub.plan.slug if sub.plan_id else None,
+        'plan_status': sub.status,
+        'plan_is_blocked': sub.status not in _PLAN_ACTIVE_STATUSES,
+        'billing_period': sub.billing_period,
+    }
+
+
+def _is_login_locked(user):
+    from apps.accounts import security
+    return security.is_locked(user)
+
+
+def _serialize_user_row(user):
+    """Compact row for the admin users list."""
+    code, label = _profile_type(user)
+    plan = _plan_info(user)
+    return {
+        'id': user.id,
+        'email': user.email,
+        'full_name': user.full_name,
+        'phone': user.phone,
+        'role': user.role,
+        'profile_type': code,
+        'profile_label': label,
+        'is_active': user.is_active,
+        'is_staff': user.is_staff,
+        'is_superuser': user.is_superuser,
+        'is_login_locked': _is_login_locked(user),
+        'email_verified': user.email_verified,
+        'created_at': user.created_at,
+        'last_login': user.last_login,
+        **plan,
+    }
+
+
+class AdminUserWriteSerializer(serializers.ModelSerializer):
+    """Admin-editable user fields. E-mail is writable here (admin override) with a
+    uniqueness guard; role/active/staff are editable. Superuser flag is never set
+    via the API."""
     class Meta:
         model = User
         fields = (
-            'id', 'email', 'full_name', 'phone', 'role',
-            'is_active', 'is_staff', 'is_superuser',
-            'email_verified',
-            'marketing_consent', 'created_at', 'last_login',
+            'full_name', 'email', 'phone', 'role',
+            'is_active', 'is_staff', 'email_verified', 'marketing_consent',
         )
-        read_only_fields = ('id', 'email', 'created_at', 'last_login', 'is_superuser')
+
+    def validate_email(self, value):
+        value = (value or '').strip().lower()
+        qs = User.objects.filter(email=value)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError('Este e-mail já está em uso.')
+        return value
 
 
 @api_view(['GET'])
 @permission_classes([IsAdmin])
 def user_list(request):
-    """List all users with optional search."""
-    qs = User.objects.order_by('-created_at')
+    """List all users with optional search and derived plan/profile info."""
+    qs = (
+        User.objects
+        .select_related('subscription__plan')
+        .annotate(
+            _dep_count=Count('parent_links', filter=Q(parent_links__is_active=True)),
+        )
+        .order_by('-created_at')
+    )
     q = request.query_params.get('q', '').strip()
     if q:
         qs = qs.filter(Q(email__icontains=q) | Q(full_name__icontains=q))
-    return Response(AdminUserSerializer(qs, many=True).data)
+    return Response([_serialize_user_row(u) for u in qs])
 
 
 @api_view(['POST'])
@@ -65,17 +175,160 @@ def user_set_password(request, pk):
         return Response({'detail': 'Senha deve ter pelo menos 6 caracteres.'}, status=status.HTTP_400_BAD_REQUEST)
     user.set_password(password)
     user.save(update_fields=['password'])
+    _audit(request.user, AuditLog.ACTION_UPDATE, user.id,
+           diff={'event': 'password_reset'},
+           reason='Senha redefinida pelo administrador.', request=request)
     return Response({'detail': f'Senha do usuário {user.email} atualizada com sucesso.'})
 
 
-@api_view(['PATCH', 'DELETE'])
+def _sport_profile_payload(user):
+    """Full sport-profile snapshot for admin audit (primary profile + extras)."""
+    from apps.players.models import PlayerProfile, ExternalPlayerRanking
+    from apps.players.parsers import extract_ti_id
+
+    profiles = list(PlayerProfile.objects.filter(user=user).order_by('-is_primary', '-created_at'))
+    if not profiles:
+        return None
+    primary = profiles[0]
+    ti_id, _ = extract_ti_id(primary.external_ids or {})
+
+    external_rankings = []
+    if ti_id:
+        external_rankings = list(
+            ExternalPlayerRanking.objects
+            .filter(ti_player_id=str(ti_id))
+            .values('source', 'ranking_name', 'category_label', 'position', 'points', 'season')[:30]
+        )
+
+    def _fed(p):
+        if p.federation_id and p.federation:
+            return {'id': p.federation_id, 'name': p.federation.short_name or p.federation.name,
+                    'uf': p.federation.state}
+        return None
+
+    return {
+        'display_name': primary.display_name,
+        'modality': primary.preferred_modality,
+        'competitive_level': primary.competitive_level,
+        'competitive_level_label': primary.get_competitive_level_display(),
+        'birth_year': primary.birth_year,
+        'birth_date': primary.birth_date,
+        'age': primary.sporting_age,
+        'gender': primary.gender,
+        'gender_label': primary.get_gender_display() if primary.gender else '',
+        'federation': _fed(primary),
+        'home_state': primary.home_state,
+        'home_city': primary.home_city,
+        'travel_states': primary.travel_states,
+        'dominant_hand': primary.dominant_hand,
+        'ti_player_id': ti_id,
+        'utr_singles': primary.utr_singles,
+        'utr_doubles': primary.utr_doubles,
+        'utr_profile_url': primary.utr_profile_url,
+        'ti_rankings': primary.ti_rankings_cache or [],
+        'external_rankings': external_rankings,
+        'profiles_count': len(profiles),
+    }
+
+
+def _tournaments_payload(user):
+    """Registrations / watchlist / results counts + recent samples for admin audit."""
+    out = {'registered': [], 'watching': [], 'results': []}
+    try:
+        from apps.registrations.models import TournamentRegistration
+        regs = (
+            TournamentRegistration.objects
+            .filter(profile__user=user)
+            .select_related('edition__tournament')
+            .order_by('-registered_at')[:30]
+        )
+        out['registered'] = [{
+            'id': r.id,
+            'edition': getattr(r.edition, 'title', '') or str(r.edition_id),
+            'payment_status': r.payment_status,
+            'is_withdrawn': r.is_withdrawn,
+            'registered_at': r.registered_at,
+        } for r in regs]
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        from apps.watchlist.models import WatchlistItem, TournamentResult
+        items = (
+            WatchlistItem.objects
+            .filter(user=user)
+            .select_related('edition__tournament')
+            .order_by('-created_at')[:30]
+        )
+        out['watching'] = [{
+            'id': w.id,
+            'edition': getattr(w.edition, 'title', '') or str(w.edition_id),
+            'user_status': w.user_status,
+        } for w in items]
+        results = (
+            TournamentResult.objects
+            .filter(watchlist_item__user=user)
+            .order_by('-created_at')[:30]
+        )
+        out['results'] = [{
+            'id': r.id,
+            'category_played': r.category_played,
+            'position': r.position,
+            'wins': r.wins,
+            'losses': r.losses,
+        } for r in results]
+    except Exception:  # noqa: BLE001
+        pass
+    return out
+
+
+def _links_payload(user):
+    """Responsáveis vinculados (se dependente) e dependentes vinculados (se responsável)."""
+    from apps.accounts.models import ParentChild
+
+    parents = (
+        ParentChild.objects.filter(child=user, is_active=True)
+        .select_related('parent')
+    )
+    children = (
+        ParentChild.objects.filter(parent=user, is_active=True)
+        .select_related('child')
+    )
+
+    def _u(u):
+        return {'id': u.id, 'full_name': u.full_name, 'email': u.email, 'role': u.role}
+
+    return {
+        'responsibles': [{'link_id': l.id, **_u(l.parent)} for l in parents],
+        'dependents': [{'link_id': l.id, **_u(l.child)} for l in children],
+    }
+
+
+@api_view(['GET', 'PATCH', 'DELETE'])
 @permission_classes([IsAdmin])
 def user_detail(request, pk):
-    """Edit or delete a single user. Cannot act on your own account."""
+    """GET full audit payload; PATCH editable fields; DELETE a user. Cannot act on
+    your own account for PATCH/DELETE."""
     try:
-        user = User.objects.get(pk=pk)
+        user = User.objects.select_related('subscription__plan').get(pk=pk)
     except User.DoesNotExist:
         return Response({'detail': 'Usuário não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == 'GET':
+        from apps.accounts import security
+        code, label = _profile_type(user)
+        payload = {
+            **_serialize_user_row(user),
+            'consent_version': user.consent_version,
+            'consented_at': user.consented_at,
+            'last_login_ip': user.last_login_ip,
+            'failed_login_attempts': user.failed_login_attempts,
+            'login_locked_until': user.login_locked_until,
+            'lock_seconds_remaining': security.seconds_remaining(user),
+            'sport_profile': _sport_profile_payload(user),
+            'tournaments': _tournaments_payload(user),
+            'links': _links_payload(user),
+        }
+        return Response(payload)
 
     if user.pk == request.user.pk:
         return Response({'detail': 'Você não pode editar ou deletar sua própria conta aqui.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -83,15 +336,167 @@ def user_detail(request, pk):
     if request.method == 'DELETE':
         if user.is_superuser:
             return Response({'detail': 'Não é possível deletar um superusuário.'}, status=status.HTTP_400_BAD_REQUEST)
+        _audit(request.user, AuditLog.ACTION_DELETE, user.id,
+               diff={'email': user.email}, reason='Usuário excluído pelo administrador.', request=request)
         user.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     # PATCH
-    ser = AdminUserSerializer(user, data=request.data, partial=True)
+    ser = AdminUserWriteSerializer(user, data=request.data, partial=True)
     ser.is_valid(raise_exception=True)
-    # Prevent promoting to superuser via API
-    ser.save(is_superuser=user.is_superuser)
-    return Response(ser.data)
+    before = {k: getattr(user, k) for k in ser.validated_data.keys()}
+    ser.save(is_superuser=user.is_superuser)  # never promote to superuser via API
+    after = {k: getattr(user, k) for k in ser.validated_data.keys()}
+    _audit(request.user, AuditLog.ACTION_UPDATE, user.id,
+           diff={'before': {k: str(v) for k, v in before.items()},
+                 'after': {k: str(v) for k, v in after.items()}},
+           reason='Dados de usuário atualizados pelo administrador.', request=request)
+    return Response(_serialize_user_row(user))
+
+
+@api_view(['POST'])
+@permission_classes([IsAdmin])
+def user_unlock_login(request, pk):
+    """Release a login lock (clears the failed-attempt counter and lock)."""
+    from apps.accounts import security
+    try:
+        user = User.objects.get(pk=pk)
+    except User.DoesNotExist:
+        return Response({'detail': 'Usuário não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+    security.reset_attempts(user)
+    _audit(request.user, AuditLog.ACTION_UPDATE, user.id,
+           diff={'event': 'login_unlocked'}, reason='Login desbloqueado pelo administrador.', request=request)
+    return Response({'detail': f'Login de {user.email} desbloqueado.'})
+
+
+@api_view(['POST'])
+@permission_classes([IsAdmin])
+def user_set_plan(request, pk):
+    """Admin: liberar/alterar o plano do usuário.
+
+    Body: { "plan_slug": "individual|familia|tester" (opcional),
+            "status": "active|pending|canceled|expired|unpaid|trial" (opcional) }
+    - Cria a Subscription se não existir.
+    - Plano Tester ativa imediatamente (sem Asaas), conforme regra do produto.
+    Registra ator + timestamp no AuditLog.
+    """
+    from apps.billing.models import Plan, Subscription
+    try:
+        user = User.objects.get(pk=pk)
+    except User.DoesNotExist:
+        return Response({'detail': 'Usuário não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+
+    plan_slug = (request.data.get('plan_slug') or '').strip().lower()
+    new_status = (request.data.get('status') or '').strip().lower()
+
+    if not plan_slug and not new_status:
+        return Response({'detail': 'Informe plan_slug e/ou status.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    plan = None
+    if plan_slug:
+        try:
+            plan = Plan.objects.get(slug=plan_slug)
+        except Plan.DoesNotExist:
+            return Response({'detail': f'Plano "{plan_slug}" não encontrado.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    valid_statuses = {s for s, _ in Subscription.STATUS_CHOICES}
+    if new_status and new_status not in valid_statuses:
+        return Response({'detail': f'Status inválido. Use um de: {", ".join(sorted(valid_statuses))}.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    sub, _created = Subscription.objects.get_or_create(
+        user=user,
+        defaults={'plan': plan or Plan.objects.get(slug=Plan.SLUG_INDIVIDUAL),
+                  'status': Subscription.STATUS_PENDING},
+    )
+    before = {'plan': sub.plan.slug if sub.plan_id else None, 'status': sub.status}
+
+    update_fields = []
+    if plan is not None:
+        sub.plan = plan
+        update_fields.append('plan')
+        # Tester ativa imediatamente (operacional, sem Asaas).
+        if plan.slug == Plan.SLUG_TESTER and not new_status:
+            new_status = Subscription.STATUS_ACTIVE
+    if new_status:
+        sub.status = new_status
+        update_fields.append('status')
+        if new_status == Subscription.STATUS_ACTIVE and not sub.start_date:
+            sub.start_date = timezone.now().date()
+            update_fields.append('start_date')
+
+    if update_fields:
+        sub.save(update_fields=list(set(update_fields)) + ['updated_at'])
+
+    _audit(request.user, AuditLog.ACTION_UPDATE, user.id,
+           diff={'event': 'plan_changed', 'before': before,
+                 'after': {'plan': sub.plan.slug, 'status': sub.status}},
+           reason='Plano/assinatura alterado pelo administrador.', request=request)
+    return Response({'detail': f'Plano de {user.email} atualizado.', **_plan_info(user)})
+
+
+@api_view(['POST'])
+@permission_classes([IsAdmin])
+def user_manage_link(request, pk):
+    """Admin corrige vínculo responsável↔jogador/dependente.
+
+    Body: { "action": "add"|"remove", "counterpart_id": <int>, "role": "parent"|"child" }
+      - role="parent": counterpart é o RESPONSÁVEL de <pk> (pk é o jogador/dependente).
+      - role="child":  counterpart é o DEPENDENTE de <pk> (pk é o responsável).
+    A criação respeita a regra de limite de responsáveis (Área 5).
+    """
+    from django.core.exceptions import ValidationError as DjangoValidationError
+    from apps.accounts.models import ParentChild
+    from apps.accounts import services
+
+    try:
+        user = User.objects.get(pk=pk)
+    except User.DoesNotExist:
+        return Response({'detail': 'Usuário não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+
+    action = (request.data.get('action') or '').strip().lower()
+    role = (request.data.get('role') or '').strip().lower()
+    counterpart_id = request.data.get('counterpart_id')
+
+    if action not in ('add', 'remove') or role not in ('parent', 'child') or not counterpart_id:
+        return Response({'detail': 'Parâmetros inválidos. Use action, role e counterpart_id.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        counterpart = User.objects.get(pk=counterpart_id)
+    except User.DoesNotExist:
+        return Response({'detail': 'Usuário contraparte não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+
+    parent, child = (counterpart, user) if role == 'parent' else (user, counterpart)
+    if parent.pk == child.pk:
+        return Response({'detail': 'Responsável e dependente não podem ser o mesmo usuário.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    if action == 'add':
+        try:
+            services.assert_can_link_responsible(child, parent)
+        except DjangoValidationError as exc:
+            detail = exc.messages[0] if exc.messages else str(exc)
+            return Response({'detail': detail}, status=status.HTTP_400_BAD_REQUEST)
+        link, created = ParentChild.objects.get_or_create(parent=parent, child=child, defaults={'is_active': True})
+        if not link.is_active:
+            link.is_active = True
+            link.save(update_fields=['is_active'])
+        _audit(request.user, AuditLog.ACTION_CREATE, child.id,
+               diff={'event': 'link_added', 'parent_id': parent.id, 'child_id': child.id},
+               reason='Vínculo responsável/dependente criado pelo administrador.', request=request)
+        return Response({'detail': 'Vínculo criado.', 'link_id': link.id, 'links': _links_payload(user)})
+
+    # remove
+    link = ParentChild.objects.filter(parent=parent, child=child, is_active=True).first()
+    if not link:
+        return Response({'detail': 'Vínculo ativo não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+    link.is_active = False
+    link.save(update_fields=['is_active'])
+    _audit(request.user, AuditLog.ACTION_UPDATE, child.id,
+           diff={'event': 'link_removed', 'parent_id': parent.id, 'child_id': child.id},
+           reason='Vínculo responsável/dependente removido pelo administrador.', request=request)
+    return Response({'detail': 'Vínculo removido.', 'links': _links_payload(user)})
 
 
 @api_view(['GET'])

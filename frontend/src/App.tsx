@@ -21,6 +21,7 @@ const ResultsPage         = React.lazy(() => import('./pages/ResultsPage').then(
 const CoachPage           = React.lazy(() => import('./pages/CoachPage').then(m => ({ default: m.CoachPage })));
 const SubscriptionPage    = React.lazy(() => import('./pages/SubscriptionPage').then(m => ({ default: m.SubscriptionPage })));
 const PrivacyPolicyPage   = React.lazy(() => import('./pages/PrivacyPolicyPage').then(m => ({ default: m.PrivacyPolicyPage })));
+const AccountDeletionPage = React.lazy(() => import('./pages/AccountDeletionPage').then(m => ({ default: m.AccountDeletionPage })));
 const InscricoesPage      = React.lazy(() => import('./pages/InscricoesPage').then(m => ({ default: m.InscricoesPage })));
 const TournamentComparePage = React.lazy(() => import('./pages/TournamentComparePage').then(m => ({ default: m.TournamentComparePage })));
 
@@ -103,6 +104,10 @@ const App: React.FC = () => {
         </Route>
 
         <Route path="/politica-privacidade" element={<PrivacyPolicyPage />} />
+
+        {/* Página pública de exclusão de conta (exigida pelas lojas de apps). */}
+        <Route path="/exclusao-de-conta" element={<AccountDeletionPage />} />
+        <Route path="/excluir-conta" element={<AccountDeletionPage />} />
 
         <Route
           path="*"

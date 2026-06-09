@@ -1060,6 +1060,53 @@ interface WaitlistLeadsResponse {
   detail?: string;
 }
 
+// Rótulos amigáveis para as colunas da tabela (fallback: humaniza o nome do banco).
+const LEAD_LABELS: Record<string, string> = {
+  id: 'ID', uuid: 'ID',
+  email: 'E-mail', e_mail: 'E-mail',
+  name: 'Nome', nome: 'Nome', full_name: 'Nome', fullname: 'Nome', first_name: 'Nome',
+  last_name: 'Sobrenome', sobrenome: 'Sobrenome',
+  phone: 'Telefone', telefone: 'Telefone', celular: 'Celular', whatsapp: 'WhatsApp',
+  created_at: 'Criado em', inserted_at: 'Criado em', created: 'Criado em', createdat: 'Criado em',
+  updated_at: 'Atualizado em', updatedat: 'Atualizado em',
+  source: 'Origem', origem: 'Origem',
+  city: 'Cidade', cidade: 'Cidade',
+  state: 'Estado', estado: 'Estado', uf: 'UF',
+  country: 'País', pais: 'País',
+  role: 'Perfil', perfil: 'Perfil', tipo: 'Tipo',
+  status: 'Status', message: 'Mensagem', mensagem: 'Mensagem',
+  utm_source: 'UTM origem', utm_medium: 'UTM mídia', utm_campaign: 'UTM campanha',
+  ip: 'IP', user_agent: 'Navegador',
+  marketing_consent: 'Consentimento', consent: 'Consentimento',
+};
+
+const humanizeLeadLabel = (col: string): string => {
+  const key = col.toLowerCase();
+  if (LEAD_LABELS[key]) return LEAD_LABELS[key];
+  return col
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+};
+
+const isLeadDateCol = (col: string) => /(_at$|^created|^updated|date|data|criad|atualizad)/i.test(col);
+const isLeadEmailCol = (col: string) => /e-?mail/i.test(col);
+
+const formatLeadValue = (col: string, v: unknown): string => {
+  if (v === null || v === undefined || v === '') return '—';
+  if (typeof v === 'boolean') return v ? 'Sim' : 'Não';
+  if (typeof v === 'object') return JSON.stringify(v);
+  const s = String(v);
+  if (isLeadDateCol(col)) {
+    const d = new Date(s);
+    if (!Number.isNaN(d.getTime())) {
+      return d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+    }
+  }
+  return s;
+};
+
 const WaitlistLeadsTab: React.FC = () => {
   const [data, setData] = useState<WaitlistLeadsResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1081,12 +1128,6 @@ const WaitlistLeadsTab: React.FC = () => {
   };
 
   useEffect(() => { load(); }, []);
-
-  const fmt = (v: unknown): string => {
-    if (v === null || v === undefined || v === '') return '—';
-    if (typeof v === 'object') return JSON.stringify(v);
-    return String(v);
-  };
 
   if (loading) return <div className="card text-center py-8 text-text-muted text-sm">Carregando…</div>;
   if (error) return <div className="card text-center py-8 text-sm text-red-400">{error}</div>;
@@ -1110,8 +1151,10 @@ const WaitlistLeadsTab: React.FC = () => {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <h2 className="font-semibold text-sm">
-          Inscritos — Waitlist <span className="text-text-muted font-normal">({data.count})</span>
+        <h2 className="font-semibold text-base flex items-center gap-2">
+          <Database className="w-4 h-4 text-accent-neon" />
+          Inscritos — Waitlist
+          <span className="text-xs font-medium text-text-muted bg-bg-elevated px-2 py-0.5 rounded-full">{data.count}</span>
         </h2>
         <button onClick={load} className="btn-secondary !text-xs flex items-center gap-1.5">
           <RefreshCcw className="w-3.5 h-3.5" /> Atualizar
@@ -1119,33 +1162,53 @@ const WaitlistLeadsTab: React.FC = () => {
       </div>
 
       {data.results.length === 0 ? (
-        <div className="card text-center py-8 text-text-muted text-sm">Nenhum lead encontrado.</div>
+        <div className="card text-center py-10 text-text-muted text-sm">Nenhum lead encontrado ainda.</div>
       ) : (
-        <div className="card !p-0 overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left text-xs text-text-muted">
-                {data.columns.map((c) => (
-                  <th key={c} className="px-3 py-2 font-semibold whitespace-nowrap">{c}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {data.results.map((row, i) => (
-                <tr key={i} className="border-b border-border/50 hover:bg-bg-elevated/40 transition-colors">
+        <div className="card !p-0 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="bg-bg-elevated/70 border-b border-border">
+                  <th className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-text-muted whitespace-nowrap">#</th>
                   {data.columns.map((c) => (
-                    <td
+                    <th
                       key={c}
-                      className="px-3 py-2 align-top whitespace-nowrap max-w-[280px] truncate"
-                      title={fmt(row[c])}
+                      className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-text-muted whitespace-nowrap"
                     >
-                      {fmt(row[c])}
-                    </td>
+                      {humanizeLeadLabel(c)}
+                    </th>
                   ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {data.results.map((row, i) => (
+                  <tr
+                    key={i}
+                    className="border-b border-border/40 last:border-0 even:bg-bg-elevated/20 hover:bg-accent-neon/5 transition-colors"
+                  >
+                    <td className="px-4 py-2.5 text-text-muted text-xs tabular-nums whitespace-nowrap">{i + 1}</td>
+                    {data.columns.map((c) => {
+                      const val = formatLeadValue(c, row[c]);
+                      const isEmail = isLeadEmailCol(c) && val !== '—';
+                      return (
+                        <td
+                          key={c}
+                          className="px-4 py-2.5 align-middle whitespace-nowrap max-w-[320px] truncate"
+                          title={val}
+                        >
+                          {isEmail ? (
+                            <a href={`mailto:${val}`} className="text-accent-blue hover:underline">{val}</a>
+                          ) : (
+                            val
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

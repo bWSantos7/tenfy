@@ -126,8 +126,8 @@ export const PrivacyPolicyPage: React.FC = () => {
             </ul>
             <p className="mt-3">
               Para exercer qualquer desses direitos, entre em contato conosco pelo e-mail:{' '}
-              <a href="mailto:privacidade@tennis.app.br" className="text-accent-neon hover:underline">
-                privacidade@tennis.app.br
+              <a href="mailto:privacidade@tenfy.com.br" className="text-accent-neon hover:underline">
+                privacidade@tenfy.com.br
               </a>
             </p>
           </section>
@@ -166,14 +166,14 @@ export const PrivacyPolicyPage: React.FC = () => {
             <ul className="space-y-1 ml-2">
               <li>
                 <strong className="text-text-primary">E-mail:</strong>{' '}
-                <a href="mailto:privacidade@tennis.app.br" className="text-accent-neon hover:underline">
-                  privacidade@tennis.app.br
+                <a href="mailto:privacidade@tenfy.com.br" className="text-accent-neon hover:underline">
+                  privacidade@tenfy.com.br
                 </a>
               </li>
               <li>
                 <strong className="text-text-primary">Site:</strong>{' '}
-                <a href="https://www.tennis.app.br" className="text-accent-neon hover:underline" target="_blank" rel="noopener noreferrer">
-                  www.tennis.app.br
+                <a href="https://www.tenfy.com.br" className="text-accent-neon hover:underline" target="_blank" rel="noopener noreferrer">
+                  www.tenfy.com.br
                 </a>
               </li>
             </ul>

@@ -651,3 +651,85 @@ def ingestion_runs_list(request):
             )
 
     return Response(RunSerializer(qs, many=True).data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAdmin])
+def waitlist_leads(request):
+    """Lista (somente leitura) da tabela externa ``tenfy_waitlist_leads``.
+
+    A tabela não é gerenciada pelo Django (criada por outro fluxo/landing).
+    Consultamos direto via SQL, introspectando as colunas, para ser robusto ao
+    esquema. Se a tabela não existir no banco padrão, retorna ``available=False``
+    com um detalhe explicativo (sem quebrar o painel).
+    """
+    from django.db import connection
+
+    TABLE = 'tenfy_waitlist_leads'
+    try:
+        limit = min(max(int(request.query_params.get('limit', 100)), 1), 500)
+    except (TypeError, ValueError):
+        limit = 100
+    try:
+        offset = max(int(request.query_params.get('offset', 0)), 0)
+    except (TypeError, ValueError):
+        offset = 0
+
+    try:
+        with connection.cursor() as cur:
+            cur.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name = %s ORDER BY ordinal_position",
+                [TABLE],
+            )
+            columns = [row[0] for row in cur.fetchall()]
+            if not columns:
+                return Response({
+                    'available': False,
+                    'columns': [],
+                    'results': [],
+                    'count': 0,
+                    'detail': 'Tabela tenfy_waitlist_leads não encontrada no banco.',
+                })
+
+            # Ordena pela coluna de data/criação quando existir; senão pela 1ª coluna.
+            order_col = next(
+                (c for c in ('created_at', 'inserted_at', 'createdAt', 'id') if c in columns),
+                columns[0],
+            )
+
+            cur.execute('SELECT COUNT(*) FROM "{tbl}"'.format(tbl=TABLE))
+            total = cur.fetchone()[0]
+
+            cur.execute(
+                'SELECT * FROM "{tbl}" ORDER BY "{col}" DESC LIMIT %s OFFSET %s'.format(
+                    tbl=TABLE, col=order_col,
+                ),
+                [limit, offset],
+            )
+            result_cols = [c[0] for c in cur.description]
+            results = []
+            for row in cur.fetchall():
+                item = {}
+                for key, value in zip(result_cols, row):
+                    if isinstance(value, (bytes, bytearray, memoryview)):
+                        value = str(value)
+                    item[key] = value
+                results.append(item)
+    except Exception as exc:  # noqa: BLE001 — diagnóstico amigável para o admin
+        return Response({
+            'available': False,
+            'columns': [],
+            'results': [],
+            'count': 0,
+            'detail': 'Erro ao consultar tenfy_waitlist_leads: {0}'.format(exc),
+        })
+
+    return Response({
+        'available': True,
+        'columns': result_cols,
+        'results': results,
+        'count': total,
+        'limit': limit,
+        'offset': offset,
+    })

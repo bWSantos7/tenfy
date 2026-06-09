@@ -6,6 +6,7 @@ from .views import (
     data_sources_list, data_source_patch, connector_status,
     ingestion_runs_list, execution_logs,
     trigger_itf_sync, trigger_cosat_sync, debug_itf_sample, trigger_db_cleanup,
+    waitlist_leads,
 )
 
 urlpatterns = [
@@ -27,4 +28,5 @@ urlpatterns = [
     path('sync/cosat/', trigger_cosat_sync, name='admin-sync-cosat'),
     path('debug/itf-sample/', debug_itf_sample, name='admin-debug-itf-sample'),
     path('maintenance/cleanup/', trigger_db_cleanup, name='admin-db-cleanup'),
+    path('waitlist-leads/', waitlist_leads, name='admin-waitlist-leads'),
 ]

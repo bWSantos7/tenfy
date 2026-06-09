@@ -61,7 +61,7 @@ interface AdminStats {
   totals: { users: number; active_users: number; new_users_period: number };
 }
 
-type Tab = 'dashboard' | 'stats' | 'users' | 'sources' | 'connectors' | 'editions';
+type Tab = 'dashboard' | 'stats' | 'users' | 'leads' | 'sources' | 'connectors' | 'editions';
 
 const EDITION_STATUS_LABELS: Record<string, string> = {
   unknown:   'Não informado',
@@ -110,6 +110,7 @@ export const AdminPanelPage: React.FC = () => {
           ['dashboard',  'Dashboard'],
           ['stats',      'Estatísticas'],
           ['users',      'Usuários'],
+          ['leads',      'Leads'],
           ['sources',    'Fontes'],
           ['connectors', 'Conectores'],
           ['editions',   'Torneios'],
@@ -131,6 +132,7 @@ export const AdminPanelPage: React.FC = () => {
       {tab === 'dashboard'  && <ErrorBoundary><DashboardTab /></ErrorBoundary>}
       {tab === 'stats'      && <ErrorBoundary><StatsTab /></ErrorBoundary>}
       {tab === 'users'      && <ErrorBoundary><UsersTab /></ErrorBoundary>}
+      {tab === 'leads'      && <ErrorBoundary><WaitlistLeadsTab /></ErrorBoundary>}
       {tab === 'sources'    && <ErrorBoundary><SourcesTab /></ErrorBoundary>}
       {tab === 'connectors' && <ErrorBoundary><ConnectorsTab /></ErrorBoundary>}
       {tab === 'editions'   && <ErrorBoundary><EditionsAdminTab /></ErrorBoundary>}
@@ -1043,6 +1045,114 @@ const EditionsAdminTab: React.FC = () => {
             </div>
           ))}
         </div>
+      )}
+    </div>
+  );
+};
+
+// ─── Waitlist leads tab ─────────────────────────────────────────────────────────
+
+interface WaitlistLeadsResponse {
+  available: boolean;
+  columns: string[];
+  results: Record<string, unknown>[];
+  count: number;
+  detail?: string;
+}
+
+const WaitlistLeadsTab: React.FC = () => {
+  const [data, setData] = useState<WaitlistLeadsResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await api.get<WaitlistLeadsResponse>('/api/admin-panel/waitlist-leads/', {
+        params: { limit: 500 },
+      });
+      setData(res.data);
+    } catch (e) {
+      setError(extractApiError(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const fmt = (v: unknown): string => {
+    if (v === null || v === undefined || v === '') return '—';
+    if (typeof v === 'object') return JSON.stringify(v);
+    return String(v);
+  };
+
+  if (loading) return <div className="card text-center py-8 text-text-muted text-sm">Carregando…</div>;
+  if (error) return <div className="card text-center py-8 text-sm text-red-400">{error}</div>;
+  if (!data) return null;
+
+  if (!data.available) {
+    return (
+      <div className="card text-center py-10 space-y-2">
+        <Database className="w-8 h-8 text-text-muted mx-auto" />
+        <p className="text-sm font-medium">Leads indisponíveis</p>
+        <p className="text-xs text-text-muted max-w-md mx-auto">
+          {data.detail || 'Tabela tenfy_waitlist_leads não encontrada no banco.'}
+        </p>
+        <button onClick={load} className="btn-secondary !text-sm mt-2 inline-flex items-center gap-1.5">
+          <RefreshCcw className="w-3.5 h-3.5" /> Tentar novamente
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <h2 className="font-semibold text-sm">
+          Inscritos — Waitlist <span className="text-text-muted font-normal">({data.count})</span>
+        </h2>
+        <button onClick={load} className="btn-secondary !text-xs flex items-center gap-1.5">
+          <RefreshCcw className="w-3.5 h-3.5" /> Atualizar
+        </button>
+      </div>
+
+      {data.results.length === 0 ? (
+        <div className="card text-center py-8 text-text-muted text-sm">Nenhum lead encontrado.</div>
+      ) : (
+        <div className="card !p-0 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left text-xs text-text-muted">
+                {data.columns.map((c) => (
+                  <th key={c} className="px-3 py-2 font-semibold whitespace-nowrap">{c}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {data.results.map((row, i) => (
+                <tr key={i} className="border-b border-border/50 hover:bg-bg-elevated/40 transition-colors">
+                  {data.columns.map((c) => (
+                    <td
+                      key={c}
+                      className="px-3 py-2 align-top whitespace-nowrap max-w-[280px] truncate"
+                      title={fmt(row[c])}
+                    >
+                      {fmt(row[c])}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {data.count > data.results.length && (
+        <p className="text-xs text-text-muted text-center">
+          Mostrando os {data.results.length} mais recentes de {data.count}.
+        </p>
       )}
     </div>
   );

@@ -193,6 +193,34 @@ class SyncFromExtractorTest(TestCase):
         self.assertTrue(withdrawn.removed_or_replaced)            # desistência
         self.assertEqual(withdrawn.player_country_code, 'BRA')
 
+    def test_federations_entry_source_per_federation(self):
+        """'federations' agrupa várias federações; o inscrito leva o source da
+        federação específica (ex.: 'fct-sc'), não 'federations'."""
+        _create_extractor_schema()
+        with connection.cursor() as cur:
+            cur.execute("INSERT INTO extractor.sources (id, name, type) VALUES (3, 'federations', 'html')")
+            cur.execute('''
+                INSERT INTO extractor.tournaments
+                    (id, source_id, external_id, name, federation, modality, country,
+                     state, city, start_date, end_date, status, original_url, is_youth, raw_data)
+                VALUES (30, 3, '22999', 'Estadual Infantojuvenil SC', 'FCT (SC)', 'tennis',
+                        'Brasil', 'SC', 'Florianópolis', '2026-07-10', '2026-07-12',
+                        'inscricoes_abertas', 'https://x/22999', TRUE, '{}'::jsonb)
+            ''')
+            cur.execute('''
+                INSERT INTO extractor.tournament_categories (id, tournament_id, name, age_group, gender, category_type)
+                VALUES (300, 30, '14 Anos Masculino Simples', 14, 'M', 'singles')
+            ''')
+            cur.execute('''
+                INSERT INTO extractor.entrants
+                    (id, tournament_id, category_id, external_id, name, country, payment_status, raw_data)
+                VALUES (3000, 30, 300, '99001', 'Atleta SC', 'Brasil', 'pago', '{}'::jsonb)
+            ''')
+        call_command('sync_from_extractor', '--source', 'federations', '--no-dry-run',
+                     '--import-entries', stdout=io.StringIO())
+        fe = FederationEntry.objects.get(player_name='Atleta SC')
+        self.assertEqual(fe.source, 'fct-sc')  # separado por federação, não 'federations'
+
 
 class MappingHelpersTest(TestCase):
     def test_payment_mapping(self):

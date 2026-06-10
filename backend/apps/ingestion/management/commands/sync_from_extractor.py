@@ -258,6 +258,13 @@ class Command(BaseCommand):
         # TournamentRegistration (inscrições internas da plataforma, outro modelo).
         deleted, _ = FederationEntry.objects.filter(edition_id=ed.id).delete()
         stats['entries_deleted'] += deleted
+        # 'federations' agrupa várias federações; o inscrito leva o source da
+        # federação específica (ex.: 'fct-sc', 'fgt-rs', 'adtrj') para ficar
+        # separado por federação — não tudo sob 'federations'.
+        entry_source = source
+        if source == 'federations':
+            fed = (t.get('federation') or '').strip()
+            entry_source = (_slug(fed) or 'federations') if fed else 'federations'
         for e in entrants:
             name = (e.get('name') or '').strip()
             if not name:
@@ -267,7 +274,7 @@ class Command(BaseCommand):
             # perder o inscrito. Não inventamos categoria de idade.
             category_text = (e.get('category_name') or '').strip() or 'Inscritos'
             pay, removed, reason = _map_payment(e)
-            ext = e.get('external_id') or f'{source}:{_slug(name)}:{_slug(category_text)}'
+            ext = e.get('external_id') or f'{entry_source}:{_slug(name)}:{_slug(category_text)}'
             raw = e.get('raw_data') or {}
             if isinstance(raw, str):  # jsonb pode vir como str em SQL bruto
                 import json
@@ -283,7 +290,7 @@ class Command(BaseCommand):
                 edition_id=ed.id,
                 category_text=category_text[:200],
                 player_external_id=str(ext)[:100],
-                source=source[:50],
+                source=entry_source[:50],
                 defaults={
                     'player_name': name[:200],
                     'ranking_position': e.get('position') or _int_or_none(e.get('ranking')),

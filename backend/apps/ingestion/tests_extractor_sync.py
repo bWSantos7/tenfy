@@ -195,7 +195,12 @@ class SyncFromExtractorTest(TestCase):
 
     def test_federations_entry_source_per_federation(self):
         """'federations' agrupa várias federações; o inscrito leva o source da
-        federação específica (ex.: 'fct-sc'), não 'federations'."""
+        federação específica (ex.: 'fct-sc'), não 'federations'. E o torneio é
+        atribuído à Organization canônica pela UF (filtro por federação no site)."""
+        from apps.sources.models import Organization
+        org_sc = Organization.objects.create(
+            name='Federação Catarinense de Tênis', short_name='FCT',
+            type=Organization.TYPE_FEDERATION, state='SC')
         _create_extractor_schema()
         with connection.cursor() as cur:
             cur.execute("INSERT INTO extractor.sources (id, name, type) VALUES (3, 'federations', 'html')")
@@ -220,6 +225,9 @@ class SyncFromExtractorTest(TestCase):
                      '--import-entries', stdout=io.StringIO())
         fe = FederationEntry.objects.get(player_name='Atleta SC')
         self.assertEqual(fe.source, 'fct-sc')  # separado por federação, não 'federations'
+        # Torneio atribuído à Organization canônica da UF (SC), não a uma nova.
+        self.assertEqual(fe.edition.tournament.organization_id, org_sc.id)
+        self.assertEqual(Organization.objects.filter(state='SC').count(), 1)
 
 
 class MappingHelpersTest(TestCase):

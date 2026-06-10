@@ -180,7 +180,7 @@ class Command(BaseCommand):
     # ------------------------------------------------------------------ helpers
     def _sync_tournament(self, t: dict, import_entries: bool, stats: Counter):
         source = t['source_name']
-        org = self._resolve_org(source, t.get('federation'))
+        org = self._resolve_org(source, t)
         ds = self._resolve_data_source(source, org)
         run = self._resolve_run(ds)
 
@@ -311,17 +311,34 @@ class Command(BaseCommand):
             stats['entries_created'] += 1 if created else 0
 
     # --------------------------------------------------------- org / datasource
-    def _resolve_org(self, source: str, federation_name: str | None) -> Organization:
-        if source == 'federations' and federation_name:
-            key = f'fed:{federation_name.strip().lower()}'
-            if key not in self._org_cache:
-                org, _ = Organization.objects.get_or_create(
-                    name=federation_name.strip()[:200],
-                    defaults={'type': Organization.TYPE_FEDERATION,
-                              'short_name': federation_name.strip()[:20]},
-                )
-                self._org_cache[key] = org
-            return self._org_cache[key]
+    def _resolve_org(self, source: str, t: dict) -> Organization:
+        if source == 'federations':
+            uf = (t.get('state') or '').strip().upper()[:2]
+            fed = (t.get('federation') or '').strip()
+            # Federação canônica do seed pela UF (a MESMA org que o site já usa
+            # no filtro). Evita criar orgs duplicadas tipo "FPT (SP)" ao lado da
+            # "FPT". A UF é a chave autoritativa (acrônimos colidem: FCT=RJ e SC,
+            # FGT=RS mas GO=FGOT, etc.).
+            if uf:
+                ck = f'fed-uf:{uf}'
+                if ck not in self._org_cache:
+                    org = Organization.objects.filter(
+                        type=Organization.TYPE_FEDERATION, state=uf).first()
+                    if org:
+                        self._org_cache[ck] = org
+                if ck in self._org_cache:
+                    return self._org_cache[ck]
+            # Fallback: por nome da federação (UF sem org seedada).
+            if fed:
+                key = f'fed:{fed.lower()}'
+                if key not in self._org_cache:
+                    org, _ = Organization.objects.get_or_create(
+                        name=fed[:200],
+                        defaults={'type': Organization.TYPE_FEDERATION,
+                                  'short_name': fed[:20]},
+                    )
+                    self._org_cache[key] = org
+                return self._org_cache[key]
         short, otype = SOURCE_ORG.get(source, ('CBT', Organization.TYPE_CONFEDERATION))
         if short not in self._org_cache:
             org = (Organization.objects.filter(short_name=short).first()

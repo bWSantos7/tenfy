@@ -225,6 +225,45 @@ def sync_cosat_from_mongo_task(self):
 
 
 @shared_task(bind=True, max_retries=0)
+def sync_from_extractor_task(self):
+    """
+    Sincroniza torneios + inscritos do schema ``extractor`` (serviço externo
+    tournament-extractor, mesmo PostgreSQL) para o PostgreSQL do Tenfy.
+
+    Substitui a ingestão antiga (conectores in-backend + syncs Mongo COSAT/ITF +
+    workflows n8n de inscritos). Roda de hora em hora via Celery Beat.
+
+    Gate por EXTRACTOR_SYNC_ENABLED (default True). Lock de cache evita execuções
+    concorrentes. Importa inscritos (import_entries=True). Nunca deleta.
+    """
+    from django.conf import settings
+    from django.core.cache import cache
+
+    if not getattr(settings, 'EXTRACTOR_SYNC_ENABLED', True):
+        logger.info('sync_from_extractor_task: skipped (EXTRACTOR_SYNC_ENABLED=False)')
+        return {'skipped': True, 'reason': 'disabled'}
+
+    lock_key = 'sync_from_extractor:lock'
+    if not cache.add(lock_key, True, 3600):
+        logger.warning('sync_from_extractor_task: already running, skipped')
+        return {'skipped': True, 'reason': 'already_running'}
+
+    try:
+        import io
+        from django.core.management import call_command
+        out = io.StringIO()
+        call_command('sync_from_extractor', dry_run=False, import_entries=True, stdout=out)
+        tail = out.getvalue()[-400:]
+        logger.info('sync_from_extractor_task complete:\n%s', tail)
+        return {'status': 'success'}
+    except Exception as exc:
+        logger.exception('sync_from_extractor_task failed: %s', exc)
+        return {'status': 'error', 'error': str(exc)[:200]}
+    finally:
+        cache.delete(lock_key)
+
+
+@shared_task(bind=True, max_retries=0)
 def sync_itf_from_mongo_task(self):
     """
     Periodic ITF MongoDB → PostgreSQL sync. Runs every 12h via Celery Beat.

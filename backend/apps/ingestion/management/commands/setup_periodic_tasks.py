@@ -9,11 +9,18 @@ import json
 
 
 TASKS = [
+    # ---------------------------------------------------------------------
+    # Ingestão de torneios/inscritos: agora vem 100% do tournament-extractor
+    # (schema "extractor" no mesmo Postgres). Os meios antigos (conectores
+    # in-backend, syncs Mongo COSAT/ITF, entries n8n CBT/FPT) foram DESATIVADOS
+    # — o código segue no repo como fallback, mas não é mais agendado.
+    # Ver OBSOLETE_TASKS abaixo.
+    # ---------------------------------------------------------------------
     {
-        'name': 'ingest-all-active-sources-hourly',
-        'task': 'apps.ingestion.tasks.run_all_active_sources',
-        'cron': {'minute': '0', 'hour': '*', 'day_of_week': '*', 'day_of_month': '*', 'month_of_year': '*'},
-        'description': 'Ingest all active sources every hour',
+        'name': 'sync-from-extractor-hourly',
+        'task': 'apps.ingestion.tasks.sync_from_extractor_task',
+        'cron': {'minute': '5', 'hour': '*', 'day_of_week': '*', 'day_of_month': '*', 'month_of_year': '*'},
+        'description': 'Sync torneios + inscritos do schema extractor (tournament-extractor) a cada hora at :05',
     },
     {
         'name': 'dispatch-deadline-alerts-hourly',
@@ -32,38 +39,6 @@ TASKS = [
         'task': 'apps.audit.tasks.cleanup_old_logs',
         'cron': {'minute': '0', 'hour': '3', 'day_of_week': '*', 'day_of_month': '*', 'month_of_year': '*'},
         'description': 'Clean up old audit logs daily at 03:00',
-    },
-    {
-        'name': 'sync-cosat-every-6h',
-        'task': 'apps.ingestion.tasks.sync_cosat_from_mongo_task',
-        'cron': {'minute': '30', 'hour': '*/6', 'day_of_week': '*', 'day_of_month': '*', 'month_of_year': '*'},
-        'description': 'Sync COSAT tournaments from MongoDB every 6 hours (00:30, 06:30, 12:30, 18:30 UTC)',
-    },
-    {
-        'name': 'sync-utr-every-12h',
-        'task': 'apps.ingestion.tasks.sync_utr_task',
-        'cron': {'minute': '45', 'hour': '*/12', 'day_of_week': '*', 'day_of_month': '*', 'month_of_year': '*'},
-        'description': 'Sync UTR Brazil youth tournaments every 12h (00:45, 12:45 UTC)',
-    },
-    {
-        'name': 'sync-fpt-sp-entries-hourly',
-        'task': 'apps.registrations.tasks.sync_fpt_sp_entries_task',
-        'cron': {'minute': '10', 'hour': '*', 'day_of_week': '*', 'day_of_month': '*', 'month_of_year': '*'},
-        'description': 'Sync FPT (SP) tournament inscritos from fpt.tenisintegrado.com.br every hour at :10',
-        'kwargs': {'limit': 60},
-    },
-    {
-        'name': 'sync-cbt-fct-entries-hourly',
-        'task': 'apps.registrations.tasks.sync_cbt_fct_entries_task',
-        'cron': {'minute': '20', 'hour': '*', 'day_of_week': '*', 'day_of_month': '*', 'month_of_year': '*'},
-        'description': 'Sync CBT and FCT tournament inscritos via TenisIntegrado every hour at :20',
-        'kwargs': {'sources': ['cbt', 'fct'], 'limit': 60},
-    },
-    {
-        'name': 'sync-itf-every-12h',
-        'task': 'apps.ingestion.tasks.sync_itf_from_mongo_task',
-        'cron': {'minute': '0', 'hour': '*/12', 'day_of_week': '*', 'day_of_month': '*', 'month_of_year': '*'},
-        'description': 'Sync ITF tournaments + acceptance lists from MongoDB every 12 hours (00:00, 12:00 UTC)',
     },
     {
         'name': 'sync-all-ti-profiles-hourly',
@@ -87,8 +62,17 @@ TASKS = [
 
 # Periodic tasks that were renamed/retired — removed so a previous deploy's
 # schedule does not keep firing them (e.g. the old every-2h TI sync).
+# A ingestão de torneios/inscritos passou a vir do tournament-extractor; os
+# agendamentos antigos abaixo foram desativados (o código das tasks/commands
+# permanece no repo como fallback manual).
 OBSOLETE_TASKS = [
     'sync-all-ti-profiles-every-2h',
+    'ingest-all-active-sources-hourly',   # run_all_active_sources (conectores in-backend)
+    'sync-cosat-every-6h',                # sync_cosat_from_mongo_task
+    'sync-itf-every-12h',                 # sync_itf_from_mongo_task
+    'sync-utr-every-12h',                 # sync_utr_task
+    'sync-fpt-sp-entries-hourly',         # sync_fpt_sp_entries_task (n8n/entries)
+    'sync-cbt-fct-entries-hourly',        # sync_cbt_fct_entries_task (n8n/entries)
 ]
 
 

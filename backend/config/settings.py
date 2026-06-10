@@ -410,6 +410,15 @@ ITF_MONGO_COLLECTION_TOURNAMENTS = config('ITF_MONGO_COLLECTION_TOURNAMENTS', de
 ITF_MONGO_COLLECTION_PLAYERS = config('ITF_MONGO_COLLECTION_PLAYERS', default='itfplayers')
 ITF_MONGO_CONNECT_TIMEOUT_MS = config('ITF_MONGO_CONNECT_TIMEOUT_MS', default=5000, cast=int)
 
+# ── tournament-extractor (schema "extractor" no mesmo PostgreSQL) ─────────────
+# O serviço externo tournament-extractor extrai torneios juvenis + inscritos de
+# COSAT/UTR/FPT/CBT/ITF/Federações e grava no schema "extractor". O comando
+# `sync_from_extractor` lê esse schema e faz upsert em TournamentEdition/
+# FederationEntry, substituindo a ingestão antiga (conectores in-backend +
+# Mongo COSAT/ITF + n8n de inscritos).
+EXTRACTOR_SYNC_ENABLED = config('EXTRACTOR_SYNC_ENABLED', default=True, cast=bool)
+EXTRACTOR_DB_SCHEMA = config('EXTRACTOR_DB_SCHEMA', default='extractor')
+
 # Web Push (VAPID) — generate keys with: python -c "from py_vapid import Vapid; v=Vapid(); v.generate_keys(); print(v.private_key, v.public_key)"
 VAPID_PRIVATE_KEY = config('VAPID_PRIVATE_KEY', default='')
 VAPID_PUBLIC_KEY = config('VAPID_PUBLIC_KEY', default='')

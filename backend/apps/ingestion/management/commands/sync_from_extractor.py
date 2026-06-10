@@ -170,7 +170,7 @@ class Command(BaseCommand):
             '\nResumo: '
             f'torneios={stats["tournaments"]} criados={stats["created"]} '
             f'atualizados={stats["updated"]} inscritos={stats["entries"]} '
-            f'(entries criados={stats["entries_created"]})'
+            f'(novos={stats["entries_created"]} antigos_removidos={stats["entries_deleted"]})'
         ))
         if dry_run:
             self.stdout.write(self.style.WARNING(
@@ -247,7 +247,18 @@ class Command(BaseCommand):
         }
 
     def _sync_entries(self, ed, t: dict, source: str, stats: Counter):
-        for e in t.get('entrants', []):
+        entrants = t.get('entrants', [])
+        if not entrants:
+            # O extractor não trouxe inscritos para este torneio (ex.: lista
+            # ainda não publicada). Preserva os existentes — não esvazia.
+            return
+        # Refresh por torneio: o extractor passa a ser a fonte dos inscritos
+        # desta edição. Remove os FederationEntry atuais (de qualquer meio antigo)
+        # e reinsere os do extractor, evitando duplicação. NÃO toca em
+        # TournamentRegistration (inscrições internas da plataforma, outro modelo).
+        deleted, _ = FederationEntry.objects.filter(edition_id=ed.id).delete()
+        stats['entries_deleted'] += deleted
+        for e in entrants:
             name = (e.get('name') or '').strip()
             if not name:
                 continue  # nunca inventar atleta

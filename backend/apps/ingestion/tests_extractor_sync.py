@@ -124,6 +124,24 @@ class SyncFromExtractorTest(TestCase):
         self.assertEqual(TournamentEdition.objects.count(), 1)
         self.assertEqual(FederationEntry.objects.count(), 1)
 
+    def test_refresh_replaces_old_entries(self):
+        """Refresh por torneio: inscritos antigos da edição (de meios anteriores)
+        são substituídos pelos do extractor, sem duplicar."""
+        _create_extractor_schema()
+        call_command('sync_from_extractor', '--no-dry-run', '--import-entries', stdout=io.StringIO())
+        ed = TournamentEdition.objects.first()
+        self.assertEqual(FederationEntry.objects.filter(edition=ed).count(), 1)
+        # Inscrito antigo (meio anterior) na MESMA edição, fonte/id diferentes.
+        FederationEntry.objects.create(
+            edition=ed, category_text='Chave Antiga', player_name='Velho Inscrito',
+            player_external_id='old:1', source='cbt_legado',
+        )
+        self.assertEqual(FederationEntry.objects.filter(edition=ed).count(), 2)
+        # Re-sync: o antigo é removido (refresh), fica só o do extractor.
+        call_command('sync_from_extractor', '--no-dry-run', '--import-entries', stdout=io.StringIO())
+        self.assertEqual(FederationEntry.objects.filter(edition=ed).count(), 1)
+        self.assertFalse(FederationEntry.objects.filter(player_external_id='old:1').exists())
+
     def test_itf_acceptance_list_entries(self):
         """ITF (acceptance list): categoria por gênero×seção, desistência vira
         removed_or_replaced, bandeira pelo código e nome cheio do país via raw."""

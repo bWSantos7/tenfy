@@ -198,6 +198,24 @@ class Command(BaseCommand):
         if import_entries:
             self._sync_entries(ed, t, source, stats)
 
+    # Fontes baseadas no tenisintegrado compartilham IDs numéricos de torneio.
+    _TENISINTEGRADO = ('fpt', 'cbt', 'federations')
+
+    def _canonical_external_id(self, source: str, raw_id) -> str:
+        """external_id da edição. Para fontes tenisintegrado (fpt/cbt/federations),
+        o MESMO torneio pode já existir sob outro prefixo (ex.: 'cbt:22821',
+        'fpt-sp:22821') porque os meios antigos cruzaram prefixos. Reusa o
+        external_id da edição existente com o mesmo ID numérico para NÃO duplicar
+        (e preservar inscrições de usuário já ligadas a ela)."""
+        rid = str(raw_id or '').strip()
+        if source in self._TENISINTEGRADO and rid.isdigit():
+            existing = (TournamentEdition.objects
+                        .filter(external_id__endswith=f':{rid}')
+                        .order_by('id').first())
+            if existing:
+                return existing.external_id
+        return f'{source}:{rid}'
+
     def _build_edition_data(self, t: dict, source: str) -> dict:
         name = (t.get('name') or '').strip()
         year = None
@@ -223,7 +241,7 @@ class Command(BaseCommand):
         }
         categories = [{'source_text': c['name']} for c in t.get('categories', []) if c.get('name')]
         return {
-            'external_id': f'{source}:{t.get("external_id") or t["id"]}',
+            'external_id': self._canonical_external_id(source, t.get('external_id') or t['id']),
             'canonical_name': name,
             'canonical_slug': _slug(name),
             'circuit': 'Infantojuvenil',

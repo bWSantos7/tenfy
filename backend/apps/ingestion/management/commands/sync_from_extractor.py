@@ -237,7 +237,10 @@ class Command(BaseCommand):
             'status': STATUS_MAP.get((t.get('status') or '').lower(), TournamentEdition.STATUS_UNKNOWN),
             'surface': TournamentEdition.SURFACE_UNKNOWN,
             'venue': venue,
-            'base_price_brl': t.get('registration_fee'),
+            # float (não Decimal): vai para raw_payload (JSONField) e Decimal
+            # não é serializável em JSON. DecimalField do modelo aceita float.
+            'base_price_brl': (float(t['registration_fee'])
+                               if t.get('registration_fee') is not None else None),
             'official_source_url': t.get('original_url') or '',
             'source_name': f'extractor:{source}',
             'categories': categories,
@@ -246,9 +249,12 @@ class Command(BaseCommand):
     def _sync_entries(self, ed, t: dict, source: str, stats: Counter):
         for e in t.get('entrants', []):
             name = (e.get('name') or '').strip()
-            category_text = (e.get('category_name') or '').strip()
-            if not name or not category_text:
-                continue  # nunca inventar categoria/atleta
+            if not name:
+                continue  # nunca inventar atleta
+            # Categoria real quando existe; senão um balde genérico "Inscritos"
+            # (ex.: UTR traz lista nominal sem divisão por inscrito) para não
+            # perder o inscrito. Não inventamos categoria de idade.
+            category_text = (e.get('category_name') or '').strip() or 'Inscritos'
             pay, removed, reason = _map_payment(e)
             ext = e.get('external_id') or f'{source}:{_slug(name)}:{_slug(category_text)}'
             raw = e.get('raw_data') or {}

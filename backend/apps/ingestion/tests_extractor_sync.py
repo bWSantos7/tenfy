@@ -51,9 +51,10 @@ def _create_extractor_schema():
         cur.execute('''
             INSERT INTO extractor.tournaments
                 (id, source_id, external_id, name, federation, modality, country, state, city,
-                 start_date, end_date, registration_end_date, status, original_url, is_youth, raw_data)
+                 start_date, end_date, registration_end_date, registration_fee,
+                 status, original_url, is_youth, raw_data)
             VALUES (10, 1, '22697', 'Aberto Infantojuvenil de Teste', 'CBT', 'tennis',
-                    'Brasil', 'RJ', 'Niteroi', '2026-06-20', '2026-06-22', '2026-06-15',
+                    'Brasil', 'RJ', 'Niteroi', '2026-06-20', '2026-06-22', '2026-06-15', 150.00,
                     'inscricoes_abertas', 'https://x/22697', TRUE, '{}'::jsonb)
         ''')
         cur.execute('''
@@ -85,6 +86,8 @@ class SyncFromExtractorTest(TestCase):
         self.assertEqual(ed.categories.count(), 1)
         # Bandeira do torneio: Venue.country_code resolvido a partir de "Brasil".
         self.assertEqual(ed.venue.country_code, 'BRA')
+        # Taxa: Decimal da fonte vira float (raw_payload é JSON; Decimal quebraria).
+        self.assertEqual(float(ed.base_price_brl), 150.0)
 
         self.assertEqual(FederationEntry.objects.count(), 1)
         fe = FederationEntry.objects.first()

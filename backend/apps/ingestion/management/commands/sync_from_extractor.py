@@ -49,7 +49,7 @@ CONNECTOR_KEY = 'extractor'
 SOURCE_ORG = {
     'cosat': ('COSAT', Organization.TYPE_CONFEDERATION),
     'utr': ('UTR', Organization.TYPE_PLATFORM),
-    'fpt': ('FPT', Organization.TYPE_FEDERATION),
+    'fpt': ('FPT-SP', Organization.TYPE_FEDERATION),  # Federação Paulista (sigla oficial)
     'cbt': ('CBT', Organization.TYPE_CONFEDERATION),
     'itf': ('ITF', Organization.TYPE_CONFEDERATION),
     'federations': ('CBT', Organization.TYPE_CONFEDERATION),  # org real resolvida por torneio
@@ -346,6 +346,12 @@ class Command(BaseCommand):
                         self._org_cache[ck] = org
                 if ck in self._org_cache:
                     return self._org_cache[ck]
+            # Validação: federação estadual sem UF segura. NÃO vinculamos a uma
+            # federação de outra UF — registramos e caímos no fallback por nome.
+            logger.warning(
+                'Federação sem UF resolvível (uf=%r fed=%r ext=%r) — fallback por nome',
+                uf, fed, t.get('external_id'),
+            )
             # Fallback: por nome da federação (UF sem org seedada).
             if fed:
                 key = f'fed:{fed.lower()}'

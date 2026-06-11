@@ -19,7 +19,7 @@ ORGANIZATIONS = [
     },
     {
         'name': 'Federação Paulista de Tênis',
-        'short_name': 'FPT',
+        'short_name': 'FPT-SP',
         'type': Organization.TYPE_FEDERATION,
         'website_url': 'https://fpt.tenisintegrado.com.br',
         'state': 'SP',
@@ -50,26 +50,26 @@ ORGANIZATIONS = [
         'description': 'Plataforma de rating universal para tênis. Organiza torneios baseados em UTR rating.',
     },
     {
-        'name': 'Federação Mineira de Tênis',
-        'short_name': 'FMT',
+        'name': 'Federação Mineira de Tênis e Beach Tennis',
+        'short_name': 'FMTBT-MG',
         'type': Organization.TYPE_FEDERATION,
         'website_url': 'https://www.fmtenis.com.br',
         'state': 'MG',
         'description': 'Federação estadual de Minas Gerais.',
     },
     {
-        'name': 'Federação Carioca de Tênis',
-        'short_name': 'FCT',
+        'name': 'Associação Desportiva de Tênis do Estado do Rio de Janeiro',
+        'short_name': 'ADTERJ-RJ',
         'type': Organization.TYPE_FEDERATION,
         'website_url': 'https://fct.com.br',
         'state': 'RJ',
-        'description': 'Federação estadual do Rio de Janeiro.',
+        'description': 'Entidade estadual do Rio de Janeiro (ADTERJ-RJ).',
     },
 ]
 
 DATA_SOURCES = [
     {
-        'org_short': 'FPT',
+        'org_short': 'FPT-SP',
         'source_name': 'FPT (SP) – Tennis Tool API (todos os departamentos)',
         'slug': 'fpt-sp-tennistool-all',
         'source_type': DataSource.SOURCE_TYPE_JSON,
@@ -80,7 +80,7 @@ DATA_SOURCES = [
         'legal_notes': 'API pública Tennis Tool da FPT (SP). Mesma plataforma do CBT. Host: fpt.tenisintegrado.com.br. Dados públicos sem autenticação.',
     },
     {
-        'org_short': 'FPT',
+        'org_short': 'FPT-SP',
         'source_name': 'FPT (SP) – Tennis Kids (departamento 7)',
         'slug': 'fpt-sp-tennistool-kids',
         'source_type': DataSource.SOURCE_TYPE_JSON,
@@ -92,7 +92,7 @@ DATA_SOURCES = [
         'enabled': False,
     },
     {
-        'org_short': 'FPT',
+        'org_short': 'FPT-SP',
         'source_name': 'FPT (SP) – Regulamento Torneios Abertos 2026 (PDF)',
         'slug': 'fpt-regulamento-2026',
         'source_type': DataSource.SOURCE_TYPE_PDF,

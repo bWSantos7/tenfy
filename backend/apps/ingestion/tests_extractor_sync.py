@@ -198,9 +198,10 @@ class SyncFromExtractorTest(TestCase):
         federação específica (ex.: 'fct-sc'), não 'federations'. E o torneio é
         atribuído à Organization canônica pela UF (filtro por federação no site)."""
         from apps.sources.models import Organization
-        org_sc = Organization.objects.create(
-            name='Federação Catarinense de Tênis', short_name='FCT',
-            type=Organization.TYPE_FEDERATION, state='SC')
+        # Usa a federação de SC já seedada (pela migração 0012) — a UF é a chave
+        # canônica; não criamos uma org duplicada.
+        org_sc = Organization.objects.get(
+            state='SC', type=Organization.TYPE_FEDERATION)
         _create_extractor_schema()
         with connection.cursor() as cur:
             cur.execute("INSERT INTO extractor.sources (id, name, type) VALUES (3, 'federations', 'html')")

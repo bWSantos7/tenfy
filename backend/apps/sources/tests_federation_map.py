@@ -82,6 +82,10 @@ class OrganizationFilterListTest(TestCase):
         mk('Fed Praia X', 'FBTX', Organization.TYPE_FEDERATION, '')
         mk('CBT', 'CBT', Organization.TYPE_CONFEDERATION, '')
         mk('LetzPlay X', 'LZPX', Organization.TYPE_PLATFORM, '')
+        # Federação com UF mas SEM torneios — deve aparecer no filtro.
+        Organization.objects.create(
+            name='Fed Sem Torneio', short_name='SEMT-AC',
+            type=Organization.TYPE_FEDERATION, state='AC')
 
     def test_filtro_so_oficiais(self):
         res = self.client.get('/api/sources/organizations/')
@@ -89,5 +93,6 @@ class OrganizationFilterListTest(TestCase):
         shorts = {o['short_name'] for o in data}
         self.assertIn('FPTX-SP', shorts)
         self.assertIn('CBT', shorts)
-        self.assertNotIn('FBTX', shorts)
-        self.assertNotIn('LZPX', shorts)
+        self.assertIn('SEMT-AC', shorts)   # federação com UF aparece mesmo sem torneios
+        self.assertNotIn('FBTX', shorts)   # beach (sem UF) -> excluída
+        self.assertNotIn('LZPX', shorts)   # plataforma -> excluída

@@ -38,10 +38,10 @@ class OrganizationViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = Organization.objects.filter(is_active=True).order_by('short_name', 'name')
-        # Non-admins only see orgs que têm torneios E são entidades oficiais do
-        # filtro: federações estaduais com UF (as 27) + conectores nacionais/
-        # internacionais (CBT/COSAT/ITF/UTR). Exclui orgs sem UF (ex.: beach
-        # tennis) e plataformas fora dessa lista.
+        # Non-admins veem apenas as entidades oficiais do filtro: TODAS as
+        # federações estaduais com UF (as 27, mesmo sem torneios no momento) +
+        # conectores nacionais/internacionais (CBT/COSAT/ITF/UTR). Exclui orgs
+        # sem UF (ex.: beach tennis) e plataformas fora dessa lista.
         if self.action == 'list' and not (
             self.request.user.is_staff or self.request.user.is_superuser
         ):
@@ -49,8 +49,7 @@ class OrganizationViewSet(viewsets.ModelViewSet):
                 (Q(type=Organization.TYPE_FEDERATION) & ~Q(state=''))
                 | Q(short_name__in=['CBT', 'COSAT', 'ITF', 'UTR'])
             )
-            qs = qs.filter(official).filter(
-                tournaments__editions__isnull=False).distinct()
+            qs = qs.filter(official).distinct()
         return qs
 
     @action(detail=False, methods=['get'])

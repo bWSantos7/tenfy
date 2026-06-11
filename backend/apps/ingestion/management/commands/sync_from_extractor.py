@@ -36,6 +36,7 @@ from django.utils import timezone
 
 from apps.ingestion.connectors import extractor_reader
 from apps.ingestion.models import IngestionRun
+from apps.ingestion.text_normalize import demojibake
 from apps.ingestion.persistence import TournamentPersister
 from apps.registrations.models import FederationEntry
 from apps.sources.models import DataSource, Organization
@@ -217,7 +218,10 @@ class Command(BaseCommand):
         return f'{source}:{rid}'
 
     def _build_edition_data(self, t: dict, source: str) -> dict:
-        name = (t.get('name') or '').strip()
+        # Rede de segurança: conserta mojibake residual (UTF-8 lido como latin-1)
+        # mesmo que o schema ainda tenha dado antigo quebrado. Origem já corrigida
+        # no extractor; aqui garante que o Tenfy nunca persista nome quebrado.
+        name = demojibake((t.get('name') or '').strip())
         year = None
         for d in (t.get('start_date'), t.get('end_date')):
             if d is not None:

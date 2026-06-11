@@ -30,6 +30,12 @@ export default defineConfig({
         // HTML must NOT be precached — browser must always fetch it fresh so
         // new asset hashes are discovered after each deploy.
         globPatterns: ['**/*.{js,css,ico,png,svg,woff2}'],
+        // navigateFallback defaults to 'index.html', but index.html is not in
+        // the precache (see globPatterns above). createHandlerBoundToURL then
+        // throws 'non-precached-url' while sw.js evaluates, so the new SW
+        // never installs and browsers stay pinned to an old SW/build forever.
+        // null = navigations always go to the network (fresh index.html).
+        navigateFallback: null,
         // Activate the new service worker immediately instead of waiting for
         // all tabs to close (prevents the "need incognito" symptom).
         skipWaiting: true,

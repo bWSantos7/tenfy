@@ -226,6 +226,20 @@ class FederationEntry(TimestampedModel):
         default='',
         help_text='Código ISO do país (ex: ARG, BR) conforme publicado pela fonte',
     )
+    # Dados do atleta exibidos abaixo do nome na lista de inscritos (TASK 6).
+    # Preenchidos quando a fonte fornece (Tênis Integrado: id_tenista/uf/idade).
+    player_ti_id = models.CharField(
+        max_length=20, blank=True, default='',
+        help_text='ID do jogador no Tênis Integrado (id_tenista), quando disponível.',
+    )
+    player_uf = models.CharField(
+        max_length=2, blank=True, default='',
+        help_text='UF do atleta (ex: SP), quando disponível.',
+    )
+    player_age = models.PositiveIntegerField(
+        null=True, blank=True,
+        help_text='Idade do atleta conforme a fonte, quando disponível.',
+    )
     raw_data = models.JSONField(default=dict, blank=True)
     synced_at = models.DateTimeField(auto_now=True)
 

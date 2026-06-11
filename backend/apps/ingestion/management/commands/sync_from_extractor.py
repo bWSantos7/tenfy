@@ -308,6 +308,12 @@ class Command(BaseCommand):
             # senão usa o valor de country (que já pode ser código ou nome).
             country_name = (raw.get('country_name') or e.get('country') or '')
             country_code = _country_code(raw.get('country_code') or e.get('country'))
+            # Dados do atleta p/ exibir abaixo do nome (TASK 6): ID Tênis Integrado,
+            # UF e idade, quando a fonte fornece (tennistool: raw_data.part).
+            part = raw.get('part') if isinstance(raw.get('part'), dict) else {}
+            ti_id = str(part.get('id_tenista') or '')[:20]
+            player_uf = (e.get('state') or part.get('uf') or '')[:2].upper()
+            player_age = _int_or_none(part.get('idade'))
             _, created = FederationEntry.objects.update_or_create(
                 edition_id=ed.id,
                 category_text=category_text[:200],
@@ -323,6 +329,9 @@ class Command(BaseCommand):
                     'confidence': FederationEntry.CONFIDENCE_MEDIUM,
                     'player_country_name': country_name[:100],
                     'player_country_code': country_code,
+                    'player_ti_id': ti_id,
+                    'player_uf': player_uf,
+                    'player_age': player_age,
                     'notes': (f'rating={e["rating"]}' if e.get('rating') else '')[:300],
                     'raw_data': {k: e.get(k) for k in (
                         'ranking', 'rating', 'state', 'city',

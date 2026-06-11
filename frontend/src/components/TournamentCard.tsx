@@ -4,6 +4,7 @@ import { MapPin, Calendar, Clock, Circle, CheckCircle2, Receipt, Info } from 'lu
 import { TournamentEditionList } from '../types';
 import { STATUS_LABELS, fmtBRL, fmtDateRange, fmtRelative, fmtDateTime, statusBgClass } from '../utils/format';
 import { editionCountry } from '../utils/country';
+import { orgLogoUrl } from '../utils/orgLogos';
 
 import logoFPT from '../assets/logos/FPT.jpg';
 import logoCBT from '../assets/logos/CBT.jpg';
@@ -34,7 +35,11 @@ function findLocalLogo(edition: TournamentEditionList): string | null {
 }
 
 function resolveOrgLogo(edition: TournamentEditionList): string | null {
-  return findLocalLogo(edition) ?? edition.organization_logo_url ?? null;
+  // 1) logos oficiais por federação/conector (public/logo_federacao, todas as UFs)
+  // 2) assets embutidos (ITF etc.) 3) URL vinda do backend.
+  return orgLogoUrl(edition.organization_name, edition.organization_short)
+    ?? findLocalLogo(edition)
+    ?? edition.organization_logo_url ?? null;
 }
 
 interface Props {
@@ -105,12 +110,18 @@ export const TournamentCard: React.FC<Props> = ({
 
         {/* Info rows */}
         <div className="space-y-2 text-xs text-text-secondary">
-          {edition.entry_close_at && (
+          {(edition.entry_open_at || edition.entry_close_at) && (
             <div>
               <p className="text-[10px] font-semibold text-text-muted uppercase tracking-wide mb-0.5">
                 Período Inscrições
               </p>
-              <p>Até {fmtDateTime(edition.entry_close_at)}</p>
+              <p>
+                {edition.entry_open_at && edition.entry_close_at
+                  ? `${fmtDateTime(edition.entry_open_at)} a ${fmtDateTime(edition.entry_close_at)}`
+                  : edition.entry_close_at
+                    ? `Até ${fmtDateTime(edition.entry_close_at)}`
+                    : `A partir de ${fmtDateTime(edition.entry_open_at)}`}
+              </p>
             </div>
           )}
           <div>

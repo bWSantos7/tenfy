@@ -230,6 +230,38 @@ class SyncFromExtractorTest(TestCase):
         self.assertEqual(fe.edition.tournament.organization_id, org_sc.id)
         self.assertEqual(Organization.objects.filter(state='SC').count(), 1)
 
+    def test_entrant_ti_id_uf_age_populated(self):
+        """TASK 6: id_tenista/uf/idade do raw_data.part viram
+        player_ti_id/player_uf/player_age na FederationEntry."""
+        from apps.registrations.models import FederationEntry
+        _create_extractor_schema()
+        with connection.cursor() as cur:
+            cur.execute("INSERT INTO extractor.sources (id, name, type) VALUES (4, 'cbt', 'html')")
+            cur.execute('''
+                INSERT INTO extractor.tournaments
+                    (id, source_id, external_id, name, federation, modality, country,
+                     state, city, start_date, end_date, status, original_url, is_youth, raw_data)
+                VALUES (40, 4, '21000', 'CBT Teste', 'CBT', 'tennis', 'Brasil', 'SP',
+                        'São Paulo', '2026-07-10', '2026-07-12', 'inscricoes_abertas',
+                        'https://x/21000', TRUE, '{}'::jsonb)
+            ''')
+            cur.execute('''
+                INSERT INTO extractor.tournament_categories (id, tournament_id, name, age_group, gender, category_type)
+                VALUES (400, 40, '12 Anos Masculino Simples', 12, 'M', 'singles')
+            ''')
+            cur.execute('''
+                INSERT INTO extractor.entrants
+                    (id, tournament_id, category_id, external_id, name, country, payment_status, raw_data)
+                VALUES (4000, 40, 400, '88-257249', 'Eduardo Pozzi', 'Brasil', 'pago',
+                        '{"part": {"id_tenista": "257249", "uf": "SP", "idade": "12"}}'::jsonb)
+            ''')
+        call_command('sync_from_extractor', '--source', 'cbt', '--no-dry-run',
+                     '--import-entries', stdout=io.StringIO())
+        fe = FederationEntry.objects.get(player_name='Eduardo Pozzi')
+        self.assertEqual(fe.player_ti_id, '257249')  # id_tenista puro, não o composto
+        self.assertEqual(fe.player_uf, 'SP')
+        self.assertEqual(fe.player_age, 12)
+
 
 class MappingHelpersTest(TestCase):
     def test_payment_mapping(self):

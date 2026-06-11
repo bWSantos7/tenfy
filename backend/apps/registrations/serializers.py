@@ -291,7 +291,7 @@ class FederationEntrySerializer(serializers.ModelSerializer):
             'source', 'source_label', 'source_url', 'confidence',
             'removed_or_replaced', 'replacement_reason',
             'player_country_name', 'player_country_code',
-            'player_uf', 'player_age',
+            'player_uf', 'player_age', 'player_ti_id',
             'notes', 'synced_at',
             'slot_position', 'in_draw', 'status', 'status_label',
         )
@@ -303,11 +303,12 @@ class FederationEntrySerializer(serializers.ModelSerializer):
 
     def get_player_uf(self, obj):
         d = self._ti_info(obj)
-        return (d or {}).get('uf') or ''
+        # Catálogo TI (quando disponível) ou o campo persistido na sincronização.
+        return (d or {}).get('uf') or obj.player_uf or ''
 
     def get_player_age(self, obj):
         d = self._ti_info(obj)
-        return (d or {}).get('age')
+        return (d or {}).get('age') or obj.player_age
 
     def _max_p(self, obj):
         return getattr(obj, '_max_participants', None)

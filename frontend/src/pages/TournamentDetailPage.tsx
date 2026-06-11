@@ -862,15 +862,15 @@ function EntryRow({ entry, maxP }: { entry: FederationEntryItem; maxP: number | 
           {entry.ranking_position != null && (
             <span className="text-[11px] text-text-muted">Ranking {entry.ranking_position}</span>
           )}
-          {tenisIntegradoId(entry.player_external_id) && (
+          {(entry.player_ti_id || tenisIntegradoId(entry.player_external_id)) && (
             <a
-              href={tenisIntegradoProfileUrl(entry.player_external_id)!}
+              href={`https://www.tenisintegrado.com.br/perfil2/index/${entry.player_ti_id || tenisIntegradoId(entry.player_external_id)}`}
               target="_blank"
               rel="noreferrer"
               className="text-[11px] text-accent-blue hover:underline"
               title="Abrir perfil no Tênis Integrado"
             >
-              ID TI {tenisIntegradoId(entry.player_external_id)}
+              ID TI {entry.player_ti_id || tenisIntegradoId(entry.player_external_id)}
             </a>
           )}
           {entry.player_uf && (

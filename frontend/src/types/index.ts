@@ -456,6 +456,7 @@ export interface FederationEntryItem {
   player_country_code: string;
   player_uf: string;
   player_age: number | null;
+  player_ti_id: string;
   notes: string;
   synced_at: string | null;
   slot_position: number | null;

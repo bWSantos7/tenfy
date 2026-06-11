@@ -36,6 +36,15 @@ class Command(BaseCommand):
         except Exception as exc:
             self.stdout.write(self.style.WARNING(f'⚠ Sources: {exc}'))
 
+        # 2b. Garante as siglas oficiais SIGLA-UF das federações (TASK 1) — idempotente.
+        # Enforça por UF mesmo que algum seeder volte a usar sigla antiga.
+        self.stdout.write('▶ Federações no formato oficial (fix_federation_orgs)...')
+        try:
+            call_command('fix_federation_orgs', '--apply', verbosity=0)
+            self.stdout.write(self.style.SUCCESS('✓ Federações OK'))
+        except Exception as exc:
+            self.stdout.write(self.style.WARNING(f'⚠ Federações: {exc}'))
+
         # 3. Periodic tasks
         self.stdout.write('▶ Registrando periodic tasks...')
         try:

@@ -18,21 +18,21 @@ ORGANIZATIONS = [
         # Accented canonical name — must match apps.sources.federations so the
         # profile picker and ingestion converge on a single org per UF (no dup).
         'name': 'Federação Paulista de Tênis',
-        'short_name': 'FPT',
+        'short_name': 'FPT-SP',  # sigla oficial SIGLA-UF (TASK 1)
         'type': Organization.TYPE_FEDERATION,
         'website_url': 'https://fpt.tenisintegrado.com.br',
         'state': 'SP',
     },
     {
-        'name': 'Federação Mineira de Tênis',
-        'short_name': 'FMT',
+        'name': 'Federação Mineira de Tênis e Beach Tennis',
+        'short_name': 'FMTBT-MG',
         'type': Organization.TYPE_FEDERATION,
         'website_url': 'https://www.fmtenis.com.br',
         'state': 'MG',
     },
     {
         'name': 'Federação Catarinense de Tênis',
-        'short_name': 'FCT',
+        'short_name': 'FCT-SC',
         'type': Organization.TYPE_FEDERATION,
         'website_url': 'https://fct.org.br',
         'state': 'SC',
@@ -57,8 +57,8 @@ ORGANIZATIONS = [
         'description': 'Plataforma UTR. Torneios infantojuvenis do Brasil via API v2 (conta autenticada).',
     },
     {
-        'name': 'Federação Baiana de Tênis',
-        'short_name': 'FBT',
+        'name': 'Federação Bahiana de Tênis',
+        'short_name': 'FBT-BA',
         'type': Organization.TYPE_FEDERATION,
         'website_url': 'https://fbt.com.br',
         'state': 'BA',
@@ -86,7 +86,7 @@ DATA_SOURCES = [
         },
     },
     {
-        'org_short': 'FPT',
+        'org_short': 'FPT-SP',
         'source_name': 'FPT (SP) - Tennis Tool API',
         'slug': 'fpt-sp-tennistool',
         'source_type': DataSource.SOURCE_TYPE_JSON,
@@ -97,7 +97,7 @@ DATA_SOURCES = [
         'config_json': {},
     },
     {
-        'org_short': 'FCT',
+        'org_short': 'FCT-SC',
         'source_name': 'FCT - Torneios publicos via Tenis Integrado',
         'slug': 'fct-public',
         'source_type': DataSource.SOURCE_TYPE_HTML,
@@ -139,7 +139,7 @@ DATA_SOURCES = [
         ),
     },
     {
-        'org_short': 'FBT',
+        'org_short': 'FBT-BA',
         'source_name': 'FBT - Federacao Baiana de Tenis (importacao assistida)',
         'slug': 'fbt-public',
         'source_type': DataSource.SOURCE_TYPE_HTML,

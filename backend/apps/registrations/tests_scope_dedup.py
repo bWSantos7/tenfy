@@ -377,7 +377,11 @@ class FptStaleWithdrawalTestCase(TestCase):
         from apps.registrations.models import FederationEntry, TournamentRegistration
         from apps.registrations.tasks import sync_fpt_sp_entries_task
 
-        org = Organization.objects.create(name='FPT SP', short_name='FPT', state='SP', type='federation')
+        # Usa a federação Paulista canônica (seedada pela migração 0012, por UF) —
+        # não cria org duplicada de SP, que tornaria o resolve por UF ambíguo.
+        org, _ = Organization.objects.get_or_create(
+            state='SP', type='federation',
+            defaults={'name': 'Federação Paulista de Tênis', 'short_name': 'FPT-SP'})
         t = Tournament.objects.create(canonical_name='Aberto FPT', canonical_slug='aberto-fpt',
                                       circuit='FPT', modality='tennis', organization=org)
         ed = TournamentEdition.objects.create(

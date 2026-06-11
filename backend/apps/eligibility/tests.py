@@ -672,6 +672,29 @@ class FederationScopeTestCase(TestCase):
             tournament=tournament, season_year=2026, title=name, venue=venue,
         )
 
+    def test_official_rename_keeps_federation_compatibility(self):
+        """TASK 2: após renomear as federações para SIGLA-UF (TASK 1), o atleta
+        FPT-SP segue vendo torneios FPT-SP como compatíveis e NÃO vê torneios de
+        outra federação estadual. O vínculo é por UF (não pela sigla)."""
+        from django.core.management import call_command
+        from apps.eligibility.location import (
+            profile_state_result, DISTANCE_OWN_FEDERATION, DISTANCE_OTHER_FEDERATION)
+        from apps.eligibility.services import classify_tournament_circuit, CIRCUIT_PAULISTA
+        call_command('fix_federation_orgs', '--apply', verbosity=0)
+        self.fpt.refresh_from_db()
+        self.fct.refresh_from_db()
+        self.assertEqual(self.fpt.short_name, 'FPT-SP')
+        self.assertEqual(self.fct.short_name, 'ADTERJ-RJ')   # FCT/RJ -> ADTERJ-RJ
+        sp_ed = self._edition(self.fpt, name='Estadual SP', state='SP')
+        res_sp = profile_state_result(self.profile, sp_ed)
+        self.assertTrue(res_sp['included'])
+        self.assertEqual(res_sp['status'], DISTANCE_OWN_FEDERATION)
+        rj_ed = self._edition(self.fct, name='Estadual RJ', state='RJ')
+        res_rj = profile_state_result(self.profile, rj_ed)
+        self.assertFalse(res_rj['included'])
+        self.assertEqual(res_rj['status'], DISTANCE_OTHER_FEDERATION)
+        self.assertEqual(classify_tournament_circuit(sp_ed), CIRCUIT_PAULISTA)
+
     def test_national_cbt_included_for_any_federation(self):
         from apps.eligibility.location import profile_state_result, DISTANCE_NATIONAL
         # CBT tournament held in BA — FPT athlete must still see it.

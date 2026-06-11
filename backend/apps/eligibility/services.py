@@ -164,8 +164,8 @@ def classify_tournament_circuit(edition: TournamentEdition) -> Optional[str]:
     if org_short == 'CBT' or 'CONFEDERACAO BRASILEIRA' in org_name or 'BRASILEIRA DE TENIS' in org_name:
         return CIRCUIT_BRASILEIRO
     if (
-        org_short == 'FPT'
-        or 'FEDERACAO PAULISTA' in org_name
+        org_short in ('FPT', 'FPT-SP')   # sigla oficial é FPT-SP (TASK 1)
+        or 'PAULISTA' in org_name        # robusto à acentuação (Ç/Ã)
         or 'PAULISTA' in circuit
     ):
         return CIRCUIT_PAULISTA

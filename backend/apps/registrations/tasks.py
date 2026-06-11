@@ -398,7 +398,10 @@ def sync_fpt_sp_entries_task(self, limit: int = 50):
 
     log = logging.getLogger('apps.registrations.sync_fpt_sp')
 
-    fpt_sp = Organization.objects.filter(short_name='FPT', state='SP').first()
+    # Resolve a federação Paulista pela UF (chave canônica) — robusto à sigla
+    # oficial FPT-SP (TASK 1); o short_name antigo 'FPT' deixou de existir.
+    fpt_sp = Organization.objects.filter(
+        state='SP', type=Organization.TYPE_FEDERATION).first()
     if not fpt_sp:
         log.error('FPT (SP) org not found')
         return {'error': 'org_not_found'}

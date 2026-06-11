@@ -53,3 +53,41 @@ class FixFederationOrgsTest(TestCase):
                  for o in Organization.objects.filter(
                      type=Organization.TYPE_FEDERATION)}
         self.assertEqual(before, after)
+
+class OrganizationFilterListTest(TestCase):
+    """Filtro de torneios (list de organizations, não-admin) mostra só as
+    entidades oficiais: federações com UF + CBT/COSAT/ITF/UTR — exclui beach
+    tennis (sem UF) e plataformas fora da lista."""
+
+    def setUp(self):
+        from rest_framework.test import APIClient
+        from django.contrib.auth import get_user_model
+        from apps.sources.models import DataSource
+        from apps.tournaments.models import Tournament, TournamentEdition
+        self.client = APIClient()
+        self.client.force_authenticate(
+            user=get_user_model().objects.create_user(email='of@test.com', password='p'))
+        dso = Organization.objects.create(
+            name='dsorg', short_name='DSO', type=Organization.TYPE_CONFEDERATION)
+        self.ds = DataSource.objects.create(
+            organization=dso, source_name='x', slug='org-filter-ds',
+            source_type=DataSource.SOURCE_TYPE_JSON, base_url='https://x')
+
+        def mk(name, short, otype, state):
+            o = Organization.objects.create(name=name, short_name=short, type=otype, state=state)
+            t = Tournament.objects.create(canonical_name=name, canonical_slug='cs-' + short.lower(), organization=o)
+            TournamentEdition.objects.create(
+                tournament=t, data_source=self.ds, season_year=2026, title=name, external_id='x:' + short)
+        mk('Fed Paulista X', 'FPTX-SP', Organization.TYPE_FEDERATION, 'SP')
+        mk('Fed Praia X', 'FBTX', Organization.TYPE_FEDERATION, '')
+        mk('CBT', 'CBT', Organization.TYPE_CONFEDERATION, '')
+        mk('LetzPlay X', 'LZPX', Organization.TYPE_PLATFORM, '')
+
+    def test_filtro_so_oficiais(self):
+        res = self.client.get('/api/sources/organizations/')
+        data = res.data if isinstance(res.data, list) else res.data.get('results', res.data)
+        shorts = {o['short_name'] for o in data}
+        self.assertIn('FPTX-SP', shorts)
+        self.assertIn('CBT', shorts)
+        self.assertNotIn('FBTX', shorts)
+        self.assertNotIn('LZPX', shorts)

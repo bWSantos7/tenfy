@@ -2,7 +2,7 @@
   "expo": {
     "name": "Tenfy",
     "slug": "tenfy",
-    "version": "1.0.4",
+    "version": "1.0.5",
     "orientation": "portrait",
     "icon": "./assets/logo4.png",
     "userInterfaceStyle": "light",
@@ -28,7 +28,7 @@
     },
     "android": {
       "package": "com.tenfy.mobile",
-      "versionCode": 7,
+      "versionCode": 8,
       "adaptiveIcon": {
         "foregroundImage": "./assets/logo3.png",
         "backgroundColor": "#0A1330"

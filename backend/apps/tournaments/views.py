@@ -112,7 +112,28 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
         # Hide editions explicitly unpublished by admin from the public listing.
         # Admin endpoints (TournamentEditionAdminViewSet) bypass this.
         qs = qs.filter(is_published=True)
+
+        # Modalidade: quando o usuário autenticado tem um perfil primário com
+        # modalidade definida (ex.: tennis) e não há filtro explícito de
+        # ?modality=, esconde as outras modalidades (ex.: beach_tennis não
+        # aparece para quem é tennis). Filtro explícito (filterset) tem prioridade.
+        if not (self.request.query_params.get('modality') or '').strip():
+            m = self._profile_default_modality()
+            if m:
+                qs = qs.filter(tournament__modality__iexact=m)
         return qs
+
+    def _profile_default_modality(self) -> str:
+        """Modalidade do perfil primário do usuário autenticado (minúsculas),
+        ou '' quando não há (anônimo, pai sem perfil próprio, ou sem modalidade)."""
+        user = getattr(self.request, 'user', None)
+        if not (user and user.is_authenticated):
+            return ''
+        from apps.players.models import PlayerProfile
+        prof = (PlayerProfile.objects
+                .filter(user=user, is_primary=True)
+                .only('preferred_modality').first())
+        return (prof.preferred_modality or '').strip().lower() if prof else ''
 
     def get_serializer_class(self):
         if self.action == 'retrieve':
@@ -227,7 +248,10 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
         """Override list() to add Redis cache for common queries."""
         import hashlib, json as _json
         params = dict(sorted(request.query_params.items()))
-        cache_key = 'tournaments:list:' + hashlib.md5(_json.dumps(params).encode()).hexdigest()
+        # Inclui a modalidade-default do perfil no cache key (o resultado varia
+        # por modalidade do usuário quando não há ?modality= explícito).
+        mkey = (self._profile_default_modality() or 'all') if not params.get('modality') else 'q'
+        cache_key = 'tournaments:list:' + mkey + ':' + hashlib.md5(_json.dumps(params).encode()).hexdigest()
         cached = cache.get(cache_key)
         if cached:
             return Response(cached)
@@ -240,7 +264,8 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
     def calendar(self, request):
         import json as _json
         params = dict(sorted(request.query_params.items()))
-        cache_key = 'tournaments:calendar:' + hashlib.md5(
+        mkey = (self._profile_default_modality() or 'all') if not params.get('modality') else 'q'
+        cache_key = 'tournaments:calendar:' + mkey + ':' + hashlib.md5(
             _json.dumps(params).encode()
         ).hexdigest()
         cached = cache.get(cache_key)

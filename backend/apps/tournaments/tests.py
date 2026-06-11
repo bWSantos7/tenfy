@@ -1222,3 +1222,55 @@ class DedupeTournamentEditionsTestCase(TestCase):
         self._edition('copa-b', 'cbt:222', title='Copa B')
         call_command('dedupe_tournament_editions', '--no-dry-run', stdout=io.StringIO())
         self.assertEqual(TournamentEdition.objects.filter(external_id__in=['cbt:111', 'cbt:222']).count(), 2)
+
+
+class ModalityProfileFilterTestCase(TestCase):
+    """Beach tennis não aparece na listagem geral para um perfil de tennis
+    (sem precisar passar ?modality= explícito). Filtro explícito sobrepõe."""
+
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        self.user = User.objects.create_user(email='mod@test.com', password='pass')
+        self.profile = PlayerProfile.objects.create(
+            user=self.user, display_name='Tenista', is_primary=True,
+            preferred_modality='tennis')
+        self.org = Organization.objects.create(
+            name='ORG MOD', short_name='OM', type=Organization.TYPE_CONFEDERATION)
+        self.ds = DataSource.objects.create(
+            organization=self.org, source_name='X', slug='mod-ds',
+            source_type=DataSource.SOURCE_TYPE_JSON, base_url='https://x',
+            connector_key='mod_ds')
+        self.tennis_ed = self._edition('tennis', 'mod-tennis')
+        self.beach_ed = self._edition('beach_tennis', 'mod-beach')
+
+    def _edition(self, modality, slug):
+        t = Tournament.objects.create(
+            canonical_name=f'T {modality}', canonical_slug=slug,
+            organization=self.org, modality=modality)
+        return TournamentEdition.objects.create(
+            tournament=t, data_source=self.ds, title=f'Torneio {modality}',
+            season_year=2026, status='unknown', is_youth=True,
+            is_published=True, external_id=f'x:{slug}')
+
+    def test_tennis_profile_nao_ve_beach(self):
+        self.client.force_authenticate(user=self.user)
+        ids = [e['id'] for e in _response_items(self.client.get('/api/tournaments/editions/'))]
+        self.assertIn(self.tennis_ed.id, ids)
+        self.assertNotIn(self.beach_ed.id, ids)
+
+    def test_modality_explicito_sobrepoe(self):
+        cache.clear()
+        self.client.force_authenticate(user=self.user)
+        res = self.client.get('/api/tournaments/editions/', {'modality': 'beach_tennis'})
+        ids = [e['id'] for e in _response_items(res)]
+        self.assertIn(self.beach_ed.id, ids)
+
+    def test_beach_profile_ve_beach(self):
+        self.profile.preferred_modality = 'beach_tennis'
+        self.profile.save(update_fields=['preferred_modality'])
+        cache.clear()
+        self.client.force_authenticate(user=self.user)
+        ids = [e['id'] for e in _response_items(self.client.get('/api/tournaments/editions/'))]
+        self.assertIn(self.beach_ed.id, ids)
+        self.assertNotIn(self.tennis_ed.id, ids)

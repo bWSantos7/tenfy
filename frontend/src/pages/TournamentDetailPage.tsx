@@ -15,7 +15,7 @@ import { getEdition, evaluateEdition } from '../services/tournaments';
 import { listProfiles, toggleWatchlist, listWatchlist, updateWatch } from '../services/data';
 import { getEditionRegistrants, myRegistrations, withdrawRegistration } from '../services/registrations';
 import { fmtDate } from '../utils/format';
-import { editionCountry } from '../utils/country';
+import { editionCountry, resolveCountry, flagUrl } from '../utils/country';
 import {
   STATUS_LABELS, fmtDateRange, fmtDateTime, fmtBRL, fmtRelative,
   statusBgClass, translateReason, formatChangeEventTitle, formatChangeEventDetails,
@@ -897,6 +897,11 @@ function EntryRow({ entry, maxP }: { entry: FederationEntryItem; maxP: number | 
   const isRemoved = entry.status === 'removed';
   const showPayment = entry.source !== 'cosat' && entry.status !== 'registered';
 
+  // Bandeira do país do inscrito (quando a fonte fornece o país). flagUrl usa o
+  // flagcdn, que renderiza em qualquer OS (emoji de bandeira não aparece no Windows).
+  const country = resolveCountry(entry.player_country_code);
+  const flag = country ? flagUrl(country.code2) : '';
+
   return (
     <div className={`flex items-start gap-3 px-4 py-3 border-b border-border-subtle last:border-0 ${isRemoved ? 'opacity-60' : ''}`}>
       {/* Slot # */}
@@ -908,11 +913,14 @@ function EntryRow({ entry, maxP }: { entry: FederationEntryItem; maxP: number | 
 
       {/* Player info */}
       <div className="flex-1 min-w-0">
-        <p className={`text-sm font-semibold ${isRemoved ? 'line-through' : ''}`}>
-          {entry.player_name}
-          {entry.player_country_code && entry.player_country_code !== 'BRA' && (
-            <span className="ml-1 text-[10px] text-text-muted font-normal">({entry.player_country_code})</span>
-          )}
+        <p className={`text-sm font-semibold flex items-center gap-1.5 ${isRemoved ? 'line-through' : ''}`}>
+          {flag
+            ? <img src={flag} alt={country?.code2 || ''} title={country?.name || ''}
+                   loading="lazy" className="w-[18px] h-[13px] rounded-[2px] object-cover shrink-0" />
+            : entry.player_country_code && entry.player_country_code !== 'BRA'
+              ? <span className="text-[10px] text-text-muted font-normal shrink-0">({entry.player_country_code})</span>
+              : null}
+          <span className="truncate">{entry.player_name}</span>
         </p>
         {entry.player_country_name && entry.player_country_code !== 'BRA' && (
           <p className="text-[11px] text-text-muted">{entry.player_country_name}</p>

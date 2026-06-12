@@ -415,11 +415,15 @@ class RegistrationViewSet(viewsets.GenericViewSet):
             'created_at',
         )
 
-        # Annotate slot_position per (edition, category_text) using Window
+        # slot_position por (edição, categoria, seção do quadro). A seção
+        # (Main/Qualifying/Alternates) só é preenchida pelo COSAT; nas demais
+        # fontes draw_section='' (partição única) e o número segue como antes.
+        # Como ranking_position é global crescente (Main, depois Qualifying...),
+        # ordenar por ele mantém as seções contíguas e na ordem da fonte.
         entries = entries.annotate(
             slot_position=Window(
                 expression=RowNumber(),
-                partition_by=[F('edition_id'), F('category_text')],
+                partition_by=[F('edition_id'), F('category_text'), F('draw_section')],
                 order_by=[
                     F('ranking_position').asc(nulls_last=True),
                     F('created_at').asc(),

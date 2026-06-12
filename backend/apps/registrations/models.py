@@ -240,6 +240,12 @@ class FederationEntry(TimestampedModel):
         null=True, blank=True,
         help_text='Idade do atleta conforme a fonte, quando disponível.',
     )
+    # Seção do quadro na fonte (ex.: Main, Qualifying, Alternates). Hoje só o
+    # COSAT publica essa divisão; demais fontes ficam com '' (lista única).
+    draw_section = models.CharField(
+        max_length=40, blank=True, default='',
+        help_text='Seção do quadro conforme a fonte (ex.: Main, Qualifying, Alternates).',
+    )
     raw_data = models.JSONField(default=dict, blank=True)
     synced_at = models.DateTimeField(auto_now=True)
 

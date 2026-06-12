@@ -314,6 +314,9 @@ class Command(BaseCommand):
             ti_id = str(part.get('id_tenista') or '')[:20]
             player_uf = (e.get('state') or part.get('uf') or '')[:2].upper()
             player_age = _int_or_none(part.get('idade'))
+            # Seção do quadro (Main/Qualifying/Alternates), quando a fonte divide
+            # a lista (hoje só o COSAT). Usada para separar a categoria no app.
+            draw_section = str(raw.get('draw_section') or '')[:40]
             _, created = FederationEntry.objects.update_or_create(
                 edition_id=ed.id,
                 category_text=category_text[:200],
@@ -332,6 +335,7 @@ class Command(BaseCommand):
                     'player_ti_id': ti_id,
                     'player_uf': player_uf,
                     'player_age': player_age,
+                    'draw_section': draw_section,
                     'notes': (f'rating={e["rating"]}' if e.get('rating') else '')[:300],
                     'raw_data': {k: e.get(k) for k in (
                         'ranking', 'rating', 'state', 'city',

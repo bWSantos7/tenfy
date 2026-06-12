@@ -292,6 +292,7 @@ class FederationEntrySerializer(serializers.ModelSerializer):
             'removed_or_replaced', 'replacement_reason',
             'player_country_name', 'player_country_code',
             'player_uf', 'player_age', 'player_ti_id',
+            'draw_section',
             'notes', 'synced_at',
             'slot_position', 'in_draw', 'status', 'status_label',
         )

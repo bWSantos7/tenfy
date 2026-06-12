@@ -749,9 +749,7 @@ function GroupedCategoryCard({
             ))}
           </div>
           <div className="border-t border-border-subtle">
-            {activeCat.entries.map((entry) => (
-              <EntryRow key={entry.id} entry={entry} maxP={activeCat.summary.total_slots ?? activeCat.max_participants} />
-            ))}
+            <EntryList entries={activeCat.entries} maxP={activeCat.summary.total_slots ?? activeCat.max_participants} />
           </div>
         </>
       )}
@@ -816,12 +814,57 @@ function RegistrantsCategoryCard({
       {/* Entry list */}
       {expanded && (
         <div className="border-t border-border-subtle">
-          {cat.entries.map((entry) => (
-            <EntryRow key={entry.id} entry={entry} maxP={totalSlots} />
-          ))}
+          <EntryList entries={cat.entries} maxP={totalSlots} />
         </div>
       )}
     </div>
+  );
+}
+
+// ── Registrants: section grouping (Main/Qualifying/Alternates) ────────────────
+
+// Rótulos amigáveis das seções do quadro (hoje só o COSAT publica essa divisão).
+const SECTION_LABELS: Record<string, string> = {
+  Main: 'Chave principal',
+  Qualifying: 'Qualifying',
+  Alternates: 'Suplentes',
+};
+const sectionLabel = (s: string): string => SECTION_LABELS[s] ?? s;
+
+/**
+ * Lista de inscritos. Quando a fonte divide a categoria em seções
+ * (Main/Qualifying/Alternates — COSAT), insere um cabeçalho por seção. As
+ * entradas já vêm ordenadas (Main → Qualifying → Alternates), então basta
+ * agrupar as consecutivas. Sem seção (demais fontes), renderiza lista única.
+ */
+function EntryList({ entries, maxP }: { entries: FederationEntryItem[]; maxP: number | null }) {
+  const hasSections = entries.some((e) => e.draw_section);
+  if (!hasSections) {
+    return <>{entries.map((entry) => <EntryRow key={entry.id} entry={entry} maxP={maxP} />)}</>;
+  }
+  const groups: { section: string; items: FederationEntryItem[] }[] = [];
+  for (const e of entries) {
+    const sec = e.draw_section || '';
+    const last = groups[groups.length - 1];
+    if (last && last.section === sec) last.items.push(e);
+    else groups.push({ section: sec, items: [e] });
+  }
+  return (
+    <>
+      {groups.map((g) => (
+        <div key={g.section || 'sem-secao'}>
+          {g.section && (
+            <div className="px-4 py-1.5 bg-bg-subtle border-b border-border-subtle">
+              <span className="text-[11px] font-bold uppercase tracking-wide text-text-muted">
+                {sectionLabel(g.section)}
+                <span className="ml-1.5 font-normal normal-case">· {g.items.length}</span>
+              </span>
+            </div>
+          )}
+          {g.items.map((entry) => <EntryRow key={entry.id} entry={entry} maxP={maxP} />)}
+        </div>
+      ))}
+    </>
   );
 }
 

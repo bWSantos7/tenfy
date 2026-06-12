@@ -457,6 +457,8 @@ export interface FederationEntryItem {
   player_uf: string;
   player_age: number | null;
   player_ti_id: string;
+  /** Seção do quadro na fonte (ex.: Main, Qualifying, Alternates). Só COSAT preenche; vazio nas demais. */
+  draw_section: string;
   notes: string;
   synced_at: string | null;
   slot_position: number | null;

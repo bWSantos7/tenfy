@@ -130,12 +130,16 @@ class Command(BaseCommand):
                             help='Limita o número de torneios (testes).')
         parser.add_argument('--import-entries', action='store_true', default=False,
                             help='Também importa os inscritos (FederationEntry).')
+        parser.add_argument('--match-sync', action='store_true', default=False,
+                            help='Roda o matching inscrito→Agenda de forma síncrona '
+                                 '(COSAT/ITF/UTR). Padrão: enfileira no Celery.')
 
     def handle(self, *args, **opts):
         dry_run = opts['dry_run']
         source = opts['source']
         limit = opts['limit']
         import_entries = opts['import_entries']
+        self._match_sync = opts['match_sync']
 
         if not extractor_reader.is_available():
             raise CommandError(
@@ -149,6 +153,9 @@ class Command(BaseCommand):
         self._org_cache: dict[str, Organization] = {}
         self._ds_cache: dict[str, DataSource] = {}
         self._run_cache: dict[int, IngestionRun] = {}
+        # Edições COSAT/ITF/UTR que tiveram inscritos importados → matching
+        # automático (inscrito → Agenda). Disparado após o commit.
+        self._match_edition_ids: set[int] = set()
         stats = Counter()
 
         try:
@@ -167,6 +174,12 @@ class Command(BaseCommand):
             logger.exception('sync_from_extractor falhou: %s', exc)
             raise CommandError(str(exc))
 
+        # ── Matching automático COSAT/ITF/UTR → Agenda (após o commit) ──
+        # Cada edição com inscritos importados é comparada com os perfis da
+        # Tenfy; correspondências seguras viram inscrição + item de Agenda.
+        if not dry_run and import_entries and self._match_edition_ids:
+            self._dispatch_matching()
+
         self.stdout.write(self.style.SUCCESS(
             '\nResumo: '
             f'torneios={stats["tournaments"]} criados={stats["created"]} '
@@ -179,6 +192,36 @@ class Command(BaseCommand):
             ))
 
     # ------------------------------------------------------------------ helpers
+    def _dispatch_matching(self):
+        """Roda/enfileira o matching inscrito→Agenda para as edições COSAT/ITF/UTR
+        que tiveram inscritos importados."""
+        from apps.registrations.tasks import match_federation_entries
+        eids = sorted(self._match_edition_ids)
+        self.stdout.write(
+            f'\n--- Matching automático COSAT/ITF/UTR → Agenda ({len(eids)} edições) ---'
+        )
+        created = 0
+        errors = 0
+        for eid in eids:
+            try:
+                if self._match_sync:
+                    res = match_federation_entries.apply(args=[eid]).result
+                    if isinstance(res, dict):
+                        created += res.get('registrations_created', 0) or 0
+                else:
+                    match_federation_entries.delay(eid)
+            except Exception as exc:  # noqa: BLE001
+                errors += 1
+                logger.warning('matching dispatch falhou edition=%s: %s', eid, exc)
+        if self._match_sync:
+            self.stdout.write(self.style.SUCCESS(
+                f'  inscrições criadas/atualizadas por matching: {created} (erros={errors})'
+            ))
+        else:
+            self.stdout.write(
+                f'  matching enfileirado no Celery para {len(eids)} edições (erros={errors})'
+            )
+
     def _sync_tournament(self, t: dict, import_entries: bool, stats: Counter):
         source = t['source_name']
         org = self._resolve_org(source, t)
@@ -269,11 +312,18 @@ class Command(BaseCommand):
         }
 
     def _sync_entries(self, ed, t: dict, source: str, stats: Counter):
+        from apps.registrations.matching import FLEX_SOURCES
         entrants = t.get('entrants', [])
         if not entrants:
             # O extractor não trouxe inscritos para este torneio (ex.: lista
             # ainda não publicada). Preserva os existentes — não esvazia.
             return
+
+        # COSAT/ITF/UTR: marca a edição para o matching inscrito→Agenda (pós-commit).
+        # Só edições não-finalizadas (não há por que rematchear torneios passados
+        # a cada hora).
+        if source in FLEX_SOURCES and ed.status != TournamentEdition.STATUS_FINISHED:
+            self._match_edition_ids.add(ed.id)
         # Refresh por torneio: o extractor passa a ser a fonte dos inscritos
         # desta edição. Remove os FederationEntry atuais (de qualquer meio antigo)
         # e reinsere os do extractor, evitando duplicação. NÃO toca em

@@ -17,14 +17,35 @@ def _normalize(text: str) -> str:
     return normalized.encode('ascii', 'ignore').decode('ascii').lower().strip()
 
 
-def _ensure_watchlist(user_id: int, edition, status: str = 'registered_declared') -> None:
-    """Create a WatchlistItem for user+edition if one does not exist (status configurável)."""
+def _ensure_watchlist(user_id: int, edition, status: str = 'registered_declared',
+                      profile=None, upgrade: bool = False) -> None:
+    """Garante o vínculo de Agenda (WatchlistItem) do user+edição.
+
+    - Cria com o status dado (e vincula o perfil esportivo) se não existir.
+    - Quando ``upgrade`` (fontes COSAT/ITF/UTR): se já existir como acompanhado
+      (none/intended), promove para 'inscrito'; preenche o profile se estiver
+      vazio. Nunca rebaixa 'withdrawn'/'completed'. Mantém intacto o
+      comportamento das fontes antigas (upgrade=False → só get_or_create).
+    """
     from apps.watchlist.models import WatchlistItem
-    WatchlistItem.objects.get_or_create(
+    item, created = WatchlistItem.objects.get_or_create(
         user_id=user_id,
         edition=edition,
-        defaults={'user_status': status},
+        defaults={'user_status': status, 'profile': profile},
     )
+    if created or not upgrade:
+        return
+    updates = {}
+    if status == WatchlistItem.STATUS_REGISTERED and item.user_status in (
+        WatchlistItem.STATUS_NONE, WatchlistItem.STATUS_INTENDED,
+    ):
+        updates['user_status'] = WatchlistItem.STATUS_REGISTERED
+    if profile is not None and item.profile_id is None:
+        updates['profile'] = profile
+    if updates:
+        for k, v in updates.items():
+            setattr(item, k, v)
+        item.save(update_fields=[*updates.keys(), 'updated_at'])
 
 
 def _do_match(entries, profiles, edition, registrations_created_ref: list) -> list:
@@ -33,16 +54,30 @@ def _do_match(entries, profiles, edition, registrations_created_ref: list) -> li
 
     Returns list of MatchingLog instances (not yet saved).
     registrations_created_ref is a 1-element list used as a mutable counter.
+
+    Por fonte:
+      - COSAT/ITF/UTR (FLEX_SOURCES): matching flexível por tokens
+        (apps.registrations.matching.decide_match) com safeguards de gênero/idade.
+      - Demais (CBT/FPT/FCT/manual): caminho legado (SequenceMatcher>0.95),
+        intocado.
+    O match por ID externo (Step 1) vale para todas as fontes.
     """
+    from .matching import FLEX_SOURCES, decide_match, CONF_NONE
+
     logs_to_create = []
+    tour_year = edition.season_year or (
+        edition.start_date.year if getattr(edition, 'start_date', None) else None
+    )
 
     for entry in entries:
         matched_profile = None
         method = MatchingLog.METHOD_NONE
         score = None
         confidence = MatchingLog.CONFIDENCE_NONE
+        match_reason = ''
+        is_flex = entry.source in FLEX_SOURCES
 
-        # ── Step 1: exact ID match ────────────────────────────────────────────
+        # ── Step 1: exact ID match (todas as fontes) ──────────────────────────
         if entry.player_external_id:
             for profile in profiles:
                 ext_ids = profile.external_ids or {}
@@ -51,10 +86,51 @@ def _do_match(entries, profiles, edition, registrations_created_ref: list) -> li
                     method = MatchingLog.METHOD_EXTERNAL_ID
                     score = 1.0
                     confidence = MatchingLog.CONFIDENCE_HIGH
+                    match_reason = 'ID externo da fonte (match exato)'
                     break
 
-        # ── Step 2: fuzzy name match ─────────────────────────────────────────
-        if not matched_profile and entry.player_name:
+        # ── Step 2: name match ────────────────────────────────────────────────
+        if not matched_profile and entry.player_name and is_flex:
+            # COSAT/ITF/UTR: matching flexível por tokens + safeguards.
+            best = None  # ((auto, score), decision, profile)
+            for profile in profiles:
+                if not profile.display_name:
+                    continue
+                d = decide_match(
+                    entry_name=entry.player_name,
+                    profile_name=profile.display_name,
+                    category_text=entry.category_text or '',
+                    profile_gender=(getattr(profile, 'gender', '') or ''),
+                    profile_birth_year=getattr(profile, 'birth_year', None),
+                    tournament_year=tour_year,
+                )
+                if d.confidence == CONF_NONE and not d.possible:
+                    continue
+                key = (1 if d.auto_register else 0, d.score or 0.0)
+                if best is None or key > best[0]:
+                    best = (key, d, profile)
+            if best is not None:
+                _, d, profile = best
+                score = d.score
+                match_reason = d.reason
+                if d.auto_register:
+                    matched_profile = profile
+                    method = MatchingLog.METHOD_NAME_TOKEN
+                    confidence = (MatchingLog.CONFIDENCE_HIGH if d.confidence == 'high'
+                                  else MatchingLog.CONFIDENCE_MEDIUM)
+                else:
+                    # Possível correspondência → só auditoria (não inscreve).
+                    logs_to_create.append(MatchingLog(
+                        entry=entry, profile=profile,
+                        confidence=(MatchingLog.CONFIDENCE_MEDIUM if d.confidence == 'medium'
+                                    else MatchingLog.CONFIDENCE_LOW),
+                        method=MatchingLog.METHOD_NAME_TOKEN, score=score,
+                        registration_created=False, match_reason=match_reason[:300],
+                    ))
+                    continue
+
+        elif not matched_profile and entry.player_name:
+            # Caminho legado (CBT/FPT/FCT/manual): SequenceMatcher>0.95 — INTOCADO.
             entry_norm = _normalize(entry.player_name)
             best_score = 0.0
             best_profile = None
@@ -104,6 +180,7 @@ def _do_match(entries, profiles, edition, registrations_created_ref: list) -> li
                             notes=(
                                 f'Auto-matched via {method}'
                                 + (f' (score={score:.3f})' if score is not None else '')
+                                + (f' — {match_reason}' if match_reason else '')
                                 + (' [removed_or_replaced]' if is_removed else '')
                             ),
                         )
@@ -111,27 +188,33 @@ def _do_match(entries, profiles, edition, registrations_created_ref: list) -> li
                         registrations_created_ref[0] += 1
 
                         # Persist external_id for fast future exact matching
-                        if method == MatchingLog.METHOD_NAME_FUZZY and entry.player_external_id:
+                        if method in (MatchingLog.METHOD_NAME_FUZZY, MatchingLog.METHOD_NAME_TOKEN) and entry.player_external_id:
                             ext_ids = dict(matched_profile.external_ids or {})
                             ext_ids[entry.source] = entry.player_external_id
                             matched_profile.external_ids = ext_ids
                             matched_profile.save(update_fields=['external_ids'])
-                            profile_id = matched_profile.pk
 
-                            def enqueue_ti_bootstrap(pid=profile_id):
-                                try:
-                                    from apps.players.tasks import bootstrap_ti_profile_task
-                                    bootstrap_ti_profile_task.delay(pid)
-                                except Exception as exc:
-                                    logger.warning('Could not enqueue TI bootstrap for profile=%s: %s', pid, exc)
+                            # TI bootstrap só no caminho legado (Tênis Integrado).
+                            if method == MatchingLog.METHOD_NAME_FUZZY:
+                                profile_id = matched_profile.pk
 
-                            transaction.on_commit(enqueue_ti_bootstrap)
+                                def enqueue_ti_bootstrap(pid=profile_id):
+                                    try:
+                                        from apps.players.tasks import bootstrap_ti_profile_task
+                                        bootstrap_ti_profile_task.delay(pid)
+                                    except Exception as exc:
+                                        logger.warning('Could not enqueue TI bootstrap for profile=%s: %s', pid, exc)
+
+                                transaction.on_commit(enqueue_ti_bootstrap)
 
                         # Agenda: inscrita normalmente, ou 'withdrawn' quando a
-                        # entry foi removida/substituída (desistência).
+                        # entry foi removida/substituída (desistência). Para
+                        # COSAT/ITF/UTR, promove acompanhamento → inscrito e vincula
+                        # o perfil esportivo correto.
                         _ensure_watchlist(
                             matched_profile.user_id, edition,
                             'withdrawn' if is_removed else 'registered_declared',
+                            profile=matched_profile, upgrade=is_flex,
                         )
 
                 except Exception as exc:
@@ -139,15 +222,27 @@ def _do_match(entries, profiles, edition, registrations_created_ref: list) -> li
                         '_do_match: failed to create registration for profile=%s entry=%s: %s',
                         matched_profile.pk, entry.pk, exc,
                     )
+            elif is_flex and not entry.removed_or_replaced:
+                # Já inscrito: garante que a Agenda reflita "inscrito" e o perfil
+                # (caso o torneio já estivesse só acompanhado manualmente).
+                _ensure_watchlist(
+                    matched_profile.user_id, edition,
+                    'registered_declared', profile=matched_profile, upgrade=True,
+                )
 
-        logs_to_create.append(MatchingLog(
-            entry=entry,
-            profile=matched_profile,
-            confidence=confidence,
-            method=method,
-            score=score,
-            registration_created=reg_created,
-        ))
+        # Só registra MatchingLog quando há correspondência (match ou possível,
+        # este último já logado acima). Entradas "sem match" não geram linha —
+        # evita inchar a tabela quando o matching roda a cada sincronização.
+        if matched_profile is not None:
+            logs_to_create.append(MatchingLog(
+                entry=entry,
+                profile=matched_profile,
+                confidence=confidence,
+                method=method,
+                score=score,
+                registration_created=reg_created,
+                match_reason=match_reason[:300],
+            ))
 
     return logs_to_create
 
@@ -256,7 +351,8 @@ def match_federation_entries(self, edition_id: int) -> dict:
         return {'edition_id': edition_id, 'entries_processed': 0, 'registrations_created': 0}
 
     # Match against ALL profiles in the platform (universal discovery)
-    profiles = list(PlayerProfile.objects.all().only('id', 'user_id', 'display_name', 'external_ids'))
+    profiles = list(PlayerProfile.objects.all().only(
+        'id', 'user_id', 'display_name', 'external_ids', 'gender', 'birth_year'))
     if not profiles:
         return {
             'edition_id': edition_id,

@@ -273,10 +273,12 @@ class MatchingLog(TimestampedModel):
 
     METHOD_EXTERNAL_ID = 'external_id'
     METHOD_NAME_FUZZY = 'name_fuzzy'
+    METHOD_NAME_TOKEN = 'name_token'
     METHOD_NONE = 'none'
     METHOD_CHOICES = [
         (METHOD_EXTERNAL_ID, 'ID externo (match exato)'),
         (METHOD_NAME_FUZZY, 'Nome fuzzy (SequenceMatcher)'),
+        (METHOD_NAME_TOKEN, 'Nome por tokens (COSAT/ITF/UTR)'),
         (METHOD_NONE, 'Sem correspondência'),
     ]
 
@@ -315,6 +317,9 @@ class MatchingLog(TimestampedModel):
     )
     score = models.FloatField(null=True, blank=True)
     registration_created = models.BooleanField(default=False)
+    # Motivo legível do match (auditoria): ex. "primeiro nome + último sobrenome
+    # iguais; um é abreviação do outro" ou "bloqueado: gênero incompatível".
+    match_reason = models.CharField(max_length=300, blank=True, default='')
 
     class Meta:
         ordering = ['-created_at']

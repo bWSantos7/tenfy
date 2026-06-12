@@ -823,19 +823,23 @@ function RegistrantsCategoryCard({
 
 // ── Registrants: section grouping (Main/Qualifying/Alternates) ────────────────
 
-// Rótulos amigáveis das seções do quadro (hoje só o COSAT publica essa divisão).
-const SECTION_LABELS: Record<string, string> = {
-  Main: 'Chave principal',
-  Qualifying: 'Qualifying',
-  Alternates: 'Suplentes',
+// Estilo por seção do quadro: rótulo amigável + cor própria (barra/texto/fundo)
+// para destacar e diferenciar as seções. Fallback para seções desconhecidas.
+// Hoje só o COSAT publica essa divisão (Main/Qualifying/Alternates).
+const SECTION_STYLES: Record<string, { label: string; text: string; bar: string; bg: string }> = {
+  Main:       { label: 'Chave principal', text: 'text-accent-neon',    bar: 'bg-accent-neon',    bg: 'bg-accent-neon/10' },
+  Qualifying: { label: 'Qualifying',      text: 'text-accent-blue',    bar: 'bg-accent-blue',    bg: 'bg-accent-blue/10' },
+  Alternates: { label: 'Suplentes',       text: 'text-status-closing', bar: 'bg-status-closing', bg: 'bg-status-closing/10' },
 };
-const sectionLabel = (s: string): string => SECTION_LABELS[s] ?? s;
+const sectionStyle = (s: string) =>
+  SECTION_STYLES[s] ?? { label: s, text: 'text-text-muted', bar: 'bg-text-muted', bg: 'bg-bg-subtle' };
 
 /**
  * Lista de inscritos. Quando a fonte divide a categoria em seções
- * (Main/Qualifying/Alternates — COSAT), insere um cabeçalho por seção. As
- * entradas já vêm ordenadas (Main → Qualifying → Alternates), então basta
- * agrupar as consecutivas. Sem seção (demais fontes), renderiza lista única.
+ * (Main/Qualifying/Alternates — COSAT), insere um cabeçalho destacado por seção,
+ * com cor própria e um espaço separando uma da outra. As entradas já vêm
+ * ordenadas (Main → Qualifying → Alternates), então basta agrupar as
+ * consecutivas. Sem seção (demais fontes), renderiza lista única.
  */
 function EntryList({ entries, maxP }: { entries: FederationEntryItem[]; maxP: number | null }) {
   const hasSections = entries.some((e) => e.draw_section);
@@ -851,19 +855,24 @@ function EntryList({ entries, maxP }: { entries: FederationEntryItem[]; maxP: nu
   }
   return (
     <>
-      {groups.map((g) => (
-        <div key={g.section || 'sem-secao'}>
-          {g.section && (
-            <div className="px-4 py-1.5 bg-bg-subtle border-b border-border-subtle">
-              <span className="text-[11px] font-bold uppercase tracking-wide text-text-muted">
-                {sectionLabel(g.section)}
-                <span className="ml-1.5 font-normal normal-case">· {g.items.length}</span>
-              </span>
-            </div>
-          )}
-          {g.items.map((entry) => <EntryRow key={entry.id} entry={entry} maxP={maxP} />)}
-        </div>
-      ))}
+      {groups.map((g, gi) => {
+        const st = sectionStyle(g.section);
+        const n = g.items.length;
+        return (
+          <div key={g.section || 'sem-secao'}>
+            {/* Espaço entre seções (separação visual com a cor de fundo da página) */}
+            {gi > 0 && <div className="h-2.5 bg-bg-base" />}
+            {g.section && (
+              <div className={`flex items-center gap-2 px-4 py-2 border-y border-border-subtle ${st.bg}`}>
+                <span className={`w-1 h-4 rounded-full ${st.bar}`} />
+                <span className={`text-xs font-bold uppercase tracking-wide ${st.text}`}>{st.label}</span>
+                <span className="text-[11px] text-text-muted font-medium">· {n} {n === 1 ? 'inscrito' : 'inscritos'}</span>
+              </div>
+            )}
+            {g.items.map((entry) => <EntryRow key={entry.id} entry={entry} maxP={maxP} />)}
+          </div>
+        );
+      })}
     </>
   );
 }

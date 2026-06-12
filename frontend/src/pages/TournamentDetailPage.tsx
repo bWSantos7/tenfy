@@ -827,9 +827,16 @@ function RegistrantsCategoryCard({
 // para destacar e diferenciar as seções. Fallback para seções desconhecidas.
 // Hoje só o COSAT publica essa divisão (Main/Qualifying/Alternates).
 const SECTION_STYLES: Record<string, { label: string; text: string; bar: string; bg: string }> = {
-  Main:       { label: 'Chave principal', text: 'text-accent-neon',    bar: 'bg-accent-neon',    bg: 'bg-accent-neon/10' },
-  Qualifying: { label: 'Qualifying',      text: 'text-accent-blue',    bar: 'bg-accent-blue',    bg: 'bg-accent-blue/10' },
-  Alternates: { label: 'Suplentes',       text: 'text-status-closing', bar: 'bg-status-closing', bg: 'bg-status-closing/10' },
+  // COSAT (rótulos em inglês na fonte)
+  Main:              { label: 'Chave principal', text: 'text-accent-neon',     bar: 'bg-accent-neon',      bg: 'bg-accent-neon/10' },
+  Qualifying:        { label: 'Qualifying',      text: 'text-accent-blue',     bar: 'bg-accent-blue',      bg: 'bg-accent-blue/10' },
+  Alternates:        { label: 'Suplentes',       text: 'text-status-closing',  bar: 'bg-status-closing',   bg: 'bg-status-closing/10' },
+  // ITF (rótulos em português na fonte)
+  'Chave Principal': { label: 'Chave principal', text: 'text-accent-neon',     bar: 'bg-accent-neon',      bg: 'bg-accent-neon/10' },
+  'Qualificação':    { label: 'Qualificação',    text: 'text-accent-blue',     bar: 'bg-accent-blue',      bg: 'bg-accent-blue/10' },
+  'Lucky Losers':    { label: 'Lucky losers',    text: 'text-status-progress', bar: 'bg-status-progress',  bg: 'bg-status-progress/10' },
+  'Wild Cards':      { label: 'Wild cards',      text: 'text-accent-blue-dark',bar: 'bg-accent-blue-dark', bg: 'bg-accent-blue-dark/10' },
+  'Desistências':    { label: 'Desistências',    text: 'text-status-closed',   bar: 'bg-status-closed',    bg: 'bg-status-closed/10' },
 };
 const sectionStyle = (s: string) =>
   SECTION_STYLES[s] ?? { label: s, text: 'text-text-muted', bar: 'bg-text-muted', bg: 'bg-bg-subtle' };

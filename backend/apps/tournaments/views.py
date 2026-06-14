@@ -35,6 +35,11 @@ _COMPATIBLE_ACTIVE_STATUSES = frozenset({
 })
 _LIST_CACHE_TTL       = 120   # 2 minutes for public tournament list
 _CALENDAR_CACHE_TTL   = 600   # 10 minutes for calendar (changes less often)
+# Bump when the list/calendar queryset logic changes (filters, scope, ordering).
+# Segments the cache so a deploy never serves pages built by the previous logic
+# alongside pages built by the new one (which caused a stale page-1 total_pages
+# with empty tail pages right after the federation-scope deploy).
+_LIST_CACHE_VERSION   = 2
 
 
 class TournamentViewSet(viewsets.ReadOnlyModelViewSet):
@@ -313,7 +318,8 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
         # so two users from different federations never share a cached page when
         # ?profile_id= is absent (the listing falls back to the primary profile).
         fkey = self._federation_scope_token()
-        cache_key = 'tournaments:list:' + mkey + ':' + fkey + ':' + hashlib.md5(_json.dumps(params).encode()).hexdigest()
+        cache_key = 'tournaments:list:v{}:{}:{}:{}'.format(
+            _LIST_CACHE_VERSION, mkey, fkey, hashlib.md5(_json.dumps(params).encode()).hexdigest())
         cached = cache.get(cache_key)
         if cached:
             return Response(cached)
@@ -328,9 +334,8 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
         params = dict(sorted(request.query_params.items()))
         mkey = (self._profile_default_modality() or 'all') if not params.get('modality') else 'q'
         fkey = self._federation_scope_token()
-        cache_key = 'tournaments:calendar:' + mkey + ':' + fkey + ':' + hashlib.md5(
-            _json.dumps(params).encode()
-        ).hexdigest()
+        cache_key = 'tournaments:calendar:v{}:{}:{}:{}'.format(
+            _LIST_CACHE_VERSION, mkey, fkey, hashlib.md5(_json.dumps(params).encode()).hexdigest())
         cached = cache.get(cache_key)
         if cached:
             return Response(cached)

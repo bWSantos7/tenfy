@@ -121,7 +121,65 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
             m = self._profile_default_modality()
             if m:
                 qs = qs.filter(tournament__modality__iexact=m)
+
+        # Federation scope (Torneios e Início): o usuário só enxerga torneios da
+        # sua federação declarada + nacionais (CBT)/internacionais (ITF/COSAT)/
+        # plataforma (UTR). Torneios de OUTRAS federações estaduais não aparecem.
+        # Mesma regra da compatibilidade (federation_compatibility). Não se aplica
+        # ao detalhe (retrieve) nem ao endpoint `compatible`, que já faz seu próprio
+        # escopo por perfil explícito.
+        if self.action in ('list', 'closing_soon', 'calendar'):
+            profile = self._scope_profile()
+            if profile is not None:
+                from apps.eligibility.location import federation_scope_q
+                scope = federation_scope_q(profile)
+                if scope is not None:
+                    qs = qs.filter(scope)
         return qs
+
+    def _scope_profile(self):
+        """Perfil cuja federação define o escopo da listagem pública.
+
+        Prioridade: ?profile_id= pertencente ao usuário (ou, para responsável, a um
+        de seus dependentes ativos); senão o perfil primário do usuário. Retorna
+        None quando anônimo ou sem perfil — aí nenhuma federação é aplicada.
+        """
+        user = getattr(self.request, 'user', None)
+        if not (user and user.is_authenticated):
+            return None
+        from apps.players.models import PlayerProfile
+
+        pid = (self.request.query_params.get('profile_id') or '').strip()
+        if pid:
+            try:
+                return (PlayerProfile.objects.select_related('federation')
+                        .get(pk=pid, user=user))
+            except (PlayerProfile.DoesNotExist, ValueError, TypeError):
+                pass
+            if getattr(user, 'role', None) == 'parent':
+                from apps.accounts.models import ParentChild
+                child_ids = list(
+                    ParentChild.objects.filter(parent=user, is_active=True)
+                    .values_list('child_id', flat=True)
+                )
+                try:
+                    return (PlayerProfile.objects.select_related('federation')
+                            .get(pk=pid, user_id__in=child_ids))
+                except (PlayerProfile.DoesNotExist, ValueError, TypeError):
+                    return None
+            return None
+
+        return (PlayerProfile.objects.select_related('federation')
+                .filter(user=user, is_primary=True).first())
+
+    def _federation_scope_token(self) -> str:
+        """Short token identifying the federation scope applied to the listing,
+        for cache-key segmentation. 'anon' = no profile/scope, 'nofed' = profile
+        without a federation, else the federation UF (e.g. 'SP')."""
+        profile = self._scope_profile()
+        if profile is None:
+            return 'anon'
+        return (getattr(profile, 'federation_state', '') or '').upper() or 'nofed'
 
     def _profile_default_modality(self) -> str:
         """Modalidade do perfil primário do usuário autenticado (minúsculas),
@@ -251,7 +309,11 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
         # Inclui a modalidade-default do perfil no cache key (o resultado varia
         # por modalidade do usuário quando não há ?modality= explícito).
         mkey = (self._profile_default_modality() or 'all') if not params.get('modality') else 'q'
-        cache_key = 'tournaments:list:' + mkey + ':' + hashlib.md5(_json.dumps(params).encode()).hexdigest()
+        # Federation scope is per-user: segment the cache by the scope profile's UF
+        # so two users from different federations never share a cached page when
+        # ?profile_id= is absent (the listing falls back to the primary profile).
+        fkey = self._federation_scope_token()
+        cache_key = 'tournaments:list:' + mkey + ':' + fkey + ':' + hashlib.md5(_json.dumps(params).encode()).hexdigest()
         cached = cache.get(cache_key)
         if cached:
             return Response(cached)
@@ -265,7 +327,8 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
         import json as _json
         params = dict(sorted(request.query_params.items()))
         mkey = (self._profile_default_modality() or 'all') if not params.get('modality') else 'q'
-        cache_key = 'tournaments:calendar:' + mkey + ':' + hashlib.md5(
+        fkey = self._federation_scope_token()
+        cache_key = 'tournaments:calendar:' + mkey + ':' + fkey + ':' + hashlib.md5(
             _json.dumps(params).encode()
         ).hexdigest()
         cached = cache.get(cache_key)

@@ -26,7 +26,10 @@ class TournamentEditionFilter(filters.FilterSet):
     modality = filters.CharFilter(field_name='tournament__modality', lookup_expr='iexact')
     circuit = filters.CharFilter(field_name='tournament__circuit', lookup_expr='icontains')
     surface = filters.CharFilter(field_name='surface')
-    status = filters.CharFilter(field_name='status', lookup_expr='iexact')
+    # Status filter operates on the *dynamic* status (computed from dates), so it
+    # matches the badge shown on the card — not the stored `status` field, which
+    # is often stale (e.g. stored 'open' but already finished by end_date).
+    status = filters.CharFilter(method='filter_status')
     q = filters.CharFilter(method='filter_search')
     near_profile = filters.NumberFilter(method='filter_near_profile')
     # Country filter (RF Task 7) — value is an ISO alpha-3 code (BRA, ARG, CHL...).
@@ -92,6 +95,19 @@ class TournamentEditionFilter(filters.FilterSet):
         others = [c for c in codes if c not in brazil]
         if others:
             q |= Q(venue__country_code__in=others)
+        return queryset.filter(q)
+
+    def filter_status(self, queryset, name, value):
+        """Filter by dynamic status (the value shown on the card). Maps the
+        requested status to the same date-based conditions as
+        TournamentEdition.compute_dynamic_status(). Unknown values are ignored."""
+        value = (value or '').strip().lower()
+        if not value:
+            return queryset
+        q = TournamentEdition.dynamic_status_q(value)
+        if q is None:
+            # Unrecognised status keyword → no match (avoid silently returning all).
+            return queryset.none()
         return queryset.filter(q)
 
     def filter_search(self, queryset, name, value):

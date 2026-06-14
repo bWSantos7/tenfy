@@ -260,6 +260,65 @@ class TournamentEdition(TimestampedModel):
             return self.STATUS_OPEN
         return self.STATUS_ANNOUNCED
 
+    @classmethod
+    def dynamic_status_q(cls, value, now=None):
+        """Q() selecting editions whose *dynamic* status equals `value`.
+
+        Mirrors compute_dynamic_status() exactly so the listing/calendar status
+        filter matches the badge the user sees (which is the dynamic status, not
+        the stored `status` field). Returns None for unknown values.
+
+        `canceled`/`finished` keep their stored value; all other dynamic states
+        are derived from the dates, evaluated in the same short-circuit order as
+        compute_dynamic_status(). `draws_published`/`unknown` are never produced
+        dynamically, so they fall back to the stored `status` field.
+        """
+        from datetime import timedelta
+
+        now = now or timezone.now()
+        today = now.date()
+        # days_to_close <= 3  ⟺  (entry_close_at - now) < 4 days  ⟺  entry_close_at < now+4d
+        four_days = now + timedelta(days=4)
+
+        # Stored terminal states win (step 1 of compute_dynamic_status).
+        not_terminal = ~models.Q(status__in=[cls.STATUS_CANCELED, cls.STATUS_FINISHED])
+
+        ended = models.Q(end_date__isnull=False, end_date__lt=today)
+        not_ended = models.Q(end_date__isnull=True) | models.Q(end_date__gte=today)
+        started = models.Q(start_date__isnull=False, start_date__lte=today)
+        not_started = models.Q(start_date__isnull=True) | models.Q(start_date__gt=today)
+        close_passed = models.Q(entry_close_at__isnull=False, entry_close_at__lt=now)
+        closing_window = models.Q(
+            entry_close_at__isnull=False, entry_close_at__gte=now, entry_close_at__lt=four_days
+        )
+        open_via_close = models.Q(entry_close_at__isnull=False, entry_close_at__gte=four_days)
+        open_via_open_at = models.Q(
+            entry_close_at__isnull=True, entry_open_at__isnull=False, entry_open_at__lte=now
+        )
+        announced_rest = models.Q(entry_close_at__isnull=True) & (
+            models.Q(entry_open_at__isnull=True) | models.Q(entry_open_at__gt=now)
+        )
+
+        # Each date branch assumes the earlier branches did not match.
+        if value == cls.STATUS_CANCELED:
+            return models.Q(status=cls.STATUS_CANCELED)
+        if value == cls.STATUS_FINISHED:
+            return models.Q(status=cls.STATUS_FINISHED) | (not_terminal & ended)
+        if value == cls.STATUS_IN_PROGRESS:
+            return not_terminal & not_ended & started
+        if value == cls.STATUS_CLOSED:
+            return not_terminal & not_ended & not_started & close_passed
+        if value == cls.STATUS_CLOSING_SOON:
+            return not_terminal & not_ended & not_started & closing_window
+        if value == cls.STATUS_OPEN:
+            return not_terminal & not_ended & not_started & (open_via_close | open_via_open_at)
+        if value == cls.STATUS_ANNOUNCED:
+            return not_terminal & not_ended & not_started & announced_rest
+        if value in (cls.STATUS_DRAWS_PUBLISHED, cls.STATUS_UNKNOWN):
+            # Not producible dynamically — fall back to the stored status field.
+            return models.Q(status=value)
+        return None
+
 
 class TournamentCategory(TimestampedModel):
     edition = models.ForeignKey(

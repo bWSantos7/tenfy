@@ -164,6 +164,71 @@ def federation_compatibility(profile, edition):
     }
 
 
+# ── Federation scope as a queryset filter (listagem/calendário/início) ──────────
+
+def federation_scope_q(profile):
+    """Q filter that mirrors federation_compatibility()'s *inclusion* rules, for
+    use on the public tournament listing/calendar/home (Torneios e Início).
+
+    Returns None when the profile has no federation — the caller then applies no
+    federation scope (legacy behaviour: show everything).
+
+    An edition is INCLUDED when any of these hold:
+      • org is a confederation (CBT nacional, ITF/COSAT internacional);
+      • org is a platform (UTR — torneios por rating);
+      • the circuit/name/title is nationally scoped (nacional/brasileiro);
+      • org is the athlete's OWN state federation (match por UF ou id);
+      • org is unknown/other (clube, mídia, sem organização) E a UF do local bate
+        com a UF da federação — ou o local não tem UF (otimista).
+
+    Editions from OTHER state federations are excluded, mesmo quando "Abertos".
+    Kept next to federation_compatibility() so both stay in sync.
+    """
+    from django.db.models import Q
+
+    fed_state = (getattr(profile, 'federation_state', '') or '').upper()
+    if not fed_state:
+        return None
+    prof_fed_id = getattr(profile, 'federation_id', None)
+
+    # National-scope title safety net — same words as _NATIONAL_RE. Postgres uses
+    # \y for a word boundary (\b is backspace in its regex flavour), so "nacional"
+    # não casa dentro de "internacional".
+    national_re = r'\y(nacional|brasileiro|brasileira)\y'
+    national_title = (
+        Q(tournament__circuit__iregex=national_re)
+        | Q(tournament__canonical_name__iregex=national_re)
+        | Q(title__iregex=national_re)
+    )
+
+    # Own state federation: UF é a chave canônica; id como fallback.
+    own_federation = Q(tournament__organization__state__iexact=fed_state)
+    if prof_fed_id:
+        own_federation |= Q(tournament__organization_id=prof_fed_id)
+
+    # Unknown/other org (clube, mídia, sem organização): null FK precisa ser
+    # explícito porque NOT (type IN (...)) é NULL — e não TRUE — para org nula.
+    known_types = ['confederation', 'platform', 'federation']
+    unknown_org = (
+        Q(tournament__organization__isnull=True)
+        | ~Q(tournament__organization__type__in=known_types)
+    )
+    venue_matches = (
+        Q(venue__isnull=True)
+        | Q(venue__state='')
+        | Q(venue__state__isnull=True)
+        | Q(venue__state__iexact=fed_state)
+    )
+
+    return (
+        Q(tournament__organization__type='confederation')
+        | Q(tournament__organization__type='platform')
+        | national_title
+        | (Q(tournament__organization__type='federation') & own_federation)
+        | (unknown_org & venue_matches)
+    )
+
+
 # ── State-based check (primary, replaces radius for new profiles) ──────────────
 
 def within_profile_states(profile, edition) -> bool:

@@ -98,10 +98,14 @@ export const HomePage: React.FC = () => {
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
+      // Active profile id (responsável → dependente ativo) scopes the listing to
+      // the declared federation server-side. Null for players sem seleção → o
+      // backend cai no perfil primário do próprio usuário.
+      const scopeId = user?.id ? getActiveProfileId(user.id) : null;
       // Fetch data that doesn't depend on profile in parallel
       const [closingData, recentData, alerts] = await Promise.all([
-        closingSoon(14).catch(() => [] as TournamentEditionList[]),
-        listEditions({ page_size: 8, ordering: '-created_at' }).catch(() => ({ results: [] as TournamentEditionList[] })),
+        closingSoon(14, scopeId ? { profile_id: String(scopeId) } : {}).catch(() => [] as TournamentEditionList[]),
+        listEditions({ page_size: 8, ordering: '-created_at', ...(scopeId ? { profile_id: scopeId } : {}) }).catch(() => ({ results: [] as TournamentEditionList[] })),
         unreadAlerts().catch(() => [] as any[]),
       ]);
 
@@ -172,9 +176,12 @@ export const HomePage: React.FC = () => {
     // Clear saved tournament filters so TournamentsPage re-applies the new
     // profile's modality as the default filter on the next visit.
     try { sessionStorage.removeItem('tenfy_tournament_filters'); } catch {}
-    // Re-fetch closing soon filtered by the new profile's modality
+    // Re-fetch closing soon filtered by the new profile's modality + federation scope
     const newModality = opt.profile.preferred_modality;
-    const modalityFilters: Record<string, string> = newModality ? { modality: newModality } : {};
+    const modalityFilters: Record<string, string> = {
+      ...(newModality ? { modality: newModality } : {}),
+      profile_id: String(opt.profile.id),
+    };
     closingSoon(14, modalityFilters)
       .catch(() => [] as TournamentEditionList[])
       .then((data) => {

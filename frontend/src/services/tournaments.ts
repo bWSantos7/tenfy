@@ -24,6 +24,10 @@ export interface TournamentFilters {
   category_code?: string;
   include_category_up?: boolean | string;
   near_profile?: number;
+  /** Active profile id — scopes the listing to the player's declared federation
+   * (own state federation + CBT/ITF/COSAT/UTR). Falls back server-side to the
+   * user's primary profile when omitted. */
+  profile_id?: number;
   /** ISO alpha-3 country code (BRA, ARG, CHL...). */
   country?: string;
   /** Locked filter derived from active profile's competitive_level. Not user-editable. */

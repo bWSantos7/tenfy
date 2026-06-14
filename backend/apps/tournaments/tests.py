@@ -2,6 +2,7 @@
 Tests for tournament filters, views, modality isolation and UF validation.
 """
 import io
+from datetime import timedelta
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.test import TestCase
@@ -1169,6 +1170,97 @@ class CountryFilterTestCase(TestCase):
         self.assertEqual(ids, {chi.id, chl.id})
 
 
+class DynamicStatusFilterTestCase(TestCase):
+    """O filtro ?status= deve casar com o status DINÂMICO (o que o card mostra),
+    derivado das datas — não com o campo `status` armazenado (frequentemente
+    defasado). Reproduz o bug: CBT/COSAT/ITF + status "Em andamento/Encerrando/
+    Finalizados" e país + status não retornavam corretamente."""
+
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        self.user = User.objects.create_user(email='dynstatus@test.com', password='pass')
+        # Sem PlayerProfile → sem escopo de federação/modalidade interferindo.
+        self.client.force_authenticate(user=self.user)
+        self.org = Organization.objects.create(
+            name='CBT DynStatus', short_name='CBT', type=Organization.TYPE_CONFEDERATION)
+        self.now = timezone.now()
+        self.today = self.now.date()
+
+        self.finished_stored = self._ed('ds-fin-stored', status='finished')
+        self.canceled = self._ed('ds-cancel', status='canceled')
+        self.finished_date = self._ed('ds-fin-date', status='open', end=self.today - timedelta(days=1))
+        self.in_progress = self._ed('ds-prog', status='open',
+                                    start=self.today - timedelta(days=1), end=self.today + timedelta(days=2))
+        self.closed = self._ed('ds-closed', status='open', close=self.now - timedelta(days=1))
+        self.closing = self._ed('ds-closing', status='open', close=self.now + timedelta(days=1))
+        self.open_deadline = self._ed('ds-open-dl', status='announced', close=self.now + timedelta(days=10))
+        self.open_openat = self._ed('ds-open-at', status='announced', open_at=self.now - timedelta(days=1))
+        self.announced = self._ed('ds-announced', status='unknown')
+
+    def _ed(self, slug, *, status='unknown', start=None, end=None, close=None, open_at=None,
+            country_code='', org=None):
+        venue = None
+        if country_code:
+            venue = Venue.objects.create(name=f'V {slug}', city='X', country_code=country_code)
+        t = Tournament.objects.create(canonical_name=slug, canonical_slug=slug,
+                                      organization=org or self.org, modality='tennis')
+        return TournamentEdition.objects.create(
+            tournament=t, season_year=2026, title=slug, status=status,
+            start_date=start, end_date=end, entry_close_at=close, entry_open_at=open_at,
+            venue=venue, is_published=True)
+
+    def _ids(self, query=''):
+        cache.clear()
+        res = self.client.get(f'/api/tournaments/editions/{query}')
+        return {r['id'] for r in _response_items(res)}
+
+    def test_each_dynamic_status_matches_only_its_editions(self):
+        cases = {
+            'finished': {self.finished_stored.id, self.finished_date.id},
+            'canceled': {self.canceled.id},
+            'in_progress': {self.in_progress.id},
+            'closed': {self.closed.id},
+            'closing_soon': {self.closing.id},
+            'open': {self.open_deadline.id, self.open_openat.id},
+            'announced': {self.announced.id},
+        }
+        all_ids = self._ids()  # 'Todos' retorna tudo
+        self.assertTrue(set().union(*cases.values()).issubset(all_ids))
+        for status, expected in cases.items():
+            got = self._ids(f'?status={status}')
+            self.assertEqual(got, expected, f'status={status} retornou {got}, esperado {expected}')
+
+    def test_finished_includes_stored_and_date_derived(self):
+        got = self._ids('?status=finished')
+        self.assertIn(self.finished_stored.id, got)
+        self.assertIn(self.finished_date.id, got)   # status='open' mas end_date no passado
+        self.assertNotIn(self.in_progress.id, got)
+
+    def test_unknown_status_keyword_returns_nothing(self):
+        self.assertEqual(self._ids('?status=banana'), set())
+
+    def test_country_plus_status_combination(self):
+        # País + status: bug relatado (só Todos/Cancelados funcionavam).
+        prog_arg = self._ed('ds-arg-prog', status='open',
+                            start=self.today - timedelta(days=1), end=self.today + timedelta(days=2),
+                            country_code='ARG')
+        fin_arg = self._ed('ds-arg-fin', status='open', end=self.today - timedelta(days=1),
+                          country_code='ARG')
+        self.assertEqual(self._ids('?country=ARG&status=in_progress'), {prog_arg.id})
+        self.assertEqual(self._ids('?country=ARG&status=finished'), {fin_arg.id})
+
+    def test_organization_plus_status_combination(self):
+        cosat = Organization.objects.create(
+            name='COSAT DynStatus', short_name='COSAT', type=Organization.TYPE_CONFEDERATION)
+        cosat_prog = self._ed('ds-cosat-prog', status='open',
+                              start=self.today - timedelta(days=1), end=self.today + timedelta(days=2),
+                              org=cosat)
+        # CBT em andamento (self.in_progress) não deve aparecer ao filtrar org=COSAT.
+        got = self._ids(f'?organization={cosat.id}&status=in_progress')
+        self.assertEqual(got, {cosat_prog.id})
+
+
 class DedupeTournamentEditionsTestCase(TestCase):
     """Card 3 (tasks2): merge de edições duplicadas por external_id e id TI."""
 
@@ -1274,3 +1366,79 @@ class ModalityProfileFilterTestCase(TestCase):
         ids = [e['id'] for e in _response_items(self.client.get('/api/tournaments/editions/'))]
         self.assertIn(self.beach_ed.id, ids)
         self.assertNotIn(self.tennis_ed.id, ids)
+
+
+class FederationScopeListingTestCase(TestCase):
+    """Torneios e Início só mostram torneios da federação declarada do usuário +
+    nacionais (CBT)/internacionais (ITF/COSAT)/plataforma (UTR). Torneios de
+    OUTRAS federações estaduais não aparecem. Mesma regra da compatibilidade."""
+
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        self.user = User.objects.create_user(email='fedscope@test.com', password='pass')
+        self.fpt_sp = Organization.objects.create(
+            name='Federacao Paulista FedScope', short_name='FPT',
+            type=Organization.TYPE_FEDERATION, state='SP')
+        self.fct_rj = Organization.objects.create(
+            name='Federacao Carioca FedScope', short_name='FCT',
+            type=Organization.TYPE_FEDERATION, state='RJ')
+        self.cbt = Organization.objects.create(
+            name='CBT FedScope', short_name='CBT', type=Organization.TYPE_CONFEDERATION)
+        self.itf = Organization.objects.create(
+            name='ITF FedScope', short_name='ITF', type=Organization.TYPE_CONFEDERATION)
+        self.utr = Organization.objects.create(
+            name='UTR FedScope', short_name='UTR', type=Organization.TYPE_PLATFORM)
+        self.profile = PlayerProfile.objects.create(
+            user=self.user, display_name='Paulista', is_primary=True,
+            preferred_modality='tennis', federation=self.fpt_sp)
+        self.ds = DataSource.objects.create(
+            organization=self.cbt, source_name='X', slug='fedscope-ds',
+            source_type=DataSource.SOURCE_TYPE_JSON, base_url='https://x',
+            connector_key='fedscope_ds')
+
+        self.own = self._edition(self.fpt_sp, 'fedscope-own', 'Estadual FPT')
+        self.other = self._edition(self.fct_rj, 'fedscope-other', 'Estadual FCT Aberto')
+        self.national = self._edition(self.cbt, 'fedscope-cbt', 'Nacional CBT')
+        self.intl = self._edition(self.itf, 'fedscope-itf', 'ITF World Tour')
+        self.rating = self._edition(self.utr, 'fedscope-utr', 'UTR Event')
+
+    def _edition(self, org, slug, title, venue=None):
+        t = Tournament.objects.create(
+            canonical_name=title, canonical_slug=slug, organization=org,
+            modality='tennis')
+        return TournamentEdition.objects.create(
+            tournament=t, data_source=self.ds, title=title, season_year=2026,
+            status='open', is_youth=True, is_published=True,
+            external_id=f'x:{slug}', venue=venue)
+
+    def _list_ids(self):
+        cache.clear()
+        self.client.force_authenticate(user=self.user)
+        return [e['id'] for e in _response_items(self.client.get('/api/tournaments/editions/'))]
+
+    def test_own_federation_and_national_shown_other_hidden(self):
+        ids = self._list_ids()
+        self.assertIn(self.own.id, ids)
+        self.assertIn(self.national.id, ids)
+        self.assertIn(self.intl.id, ids)
+        self.assertIn(self.rating.id, ids)
+        # Outra federação estadual não aparece — nem quando "Aberto".
+        self.assertNotIn(self.other.id, ids)
+
+    def test_no_federation_profile_sees_all(self):
+        self.profile.federation = None
+        self.profile.save(update_fields=['federation'])
+        ids = self._list_ids()
+        self.assertIn(self.other.id, ids)
+
+    def test_unknown_org_scoped_by_venue_state(self):
+        club = Organization.objects.create(
+            name='Clube FedScope', short_name='CLB', type=Organization.TYPE_CLUB)
+        rj_venue = Venue.objects.create(name='Arena RJ FS', city='Rio', state='RJ')
+        sp_venue = Venue.objects.create(name='Arena SP FS', city='Sao Paulo', state='SP')
+        club_rj = self._edition(club, 'fedscope-club-rj', 'Clube RJ', venue=rj_venue)
+        club_sp = self._edition(club, 'fedscope-club-sp', 'Clube SP', venue=sp_venue)
+        ids = self._list_ids()
+        self.assertIn(club_sp.id, ids)
+        self.assertNotIn(club_rj.id, ids)

@@ -28,6 +28,7 @@ const STATUS_OPTS = [
   { v: '', l: 'Todos' },
   { v: 'open', l: 'Abertas' },
   { v: 'closing_soon', l: 'Encerrando' },
+  { v: 'closed', l: 'Inscrições encerradas' },
   { v: 'announced', l: 'Anunciados' },
   { v: 'in_progress', l: 'Em andamento' },
   { v: 'draws_published', l: 'Chaves publicadas' },
@@ -278,7 +279,8 @@ export const TournamentsPage: React.FC = () => {
     }
 
     const nearFilter = nearMe && primaryProfileId ? { near_profile: primaryProfileId } : {};
-    listEditions({ ...filters, ...nearFilter, page, page_size: 20, ordering: 'status_priority,start_date' })
+    const scopeFilter = primaryProfileId ? { profile_id: primaryProfileId } : {};
+    listEditions({ ...filters, ...nearFilter, ...scopeFilter, page, page_size: 20, ordering: 'status_priority,start_date' })
       .then((data) => {
         if (cancel) return;
         setItems(sortTournaments(data.results));
@@ -295,7 +297,8 @@ export const TournamentsPage: React.FC = () => {
     let cancel = false;
     setLoading(true);
     const nearFilter = nearMe && primaryProfileId ? { near_profile: primaryProfileId } : {};
-    calendarApi({ ...filters, ...nearFilter })
+    const scopeFilter = primaryProfileId ? { profile_id: primaryProfileId } : {};
+    calendarApi({ ...filters, ...nearFilter, ...scopeFilter })
       .then((months) => {
         if (cancel) return;
         const map: Record<string, TournamentEditionList[]> = {};

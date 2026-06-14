@@ -177,7 +177,16 @@ export const TournamentsPage: React.FC = () => {
   const [profileLevel, setProfileLevel] = useState<string>('');
   const [organizations, setOrganizations] = useState<OrganizationOption[]>([]);
   const [countryCodes, setCountryCodes] = useState<string[]>([]);
+  // Bumped on 'profiles-changed' (e.g. federation edited in settings) to force a
+  // fresh reload of the active profile + listing without a hard refresh.
+  const [refreshKey, setRefreshKey] = useState(0);
   const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const onProfilesChanged = () => setRefreshKey((k) => k + 1);
+    window.addEventListener('profiles-changed', onProfilesChanged);
+    return () => window.removeEventListener('profiles-changed', onProfilesChanged);
+  }, []);
 
   // Country options for the filter dropdown, grouped by name so a country that
   // appears under both IOC (ITF) and ISO (COSAT) codes — e.g. Chile CHI/CHL —
@@ -206,7 +215,9 @@ export const TournamentsPage: React.FC = () => {
   }, [countryCodes]);
 
   useEffect(() => {
-    listProfiles().then((profiles) => {
+    // force:true → ignora o cache em memória quando algo mudou (refreshKey),
+    // garantindo a federação nova logo após editar nas configurações.
+    listProfiles({ force: refreshKey > 0 }).then((profiles) => {
       const list = Array.isArray(profiles) ? profiles : (profiles as any).results ?? [];
       let primary = null;
       if (user?.role === 'parent' && user.id) {
@@ -231,7 +242,7 @@ export const TournamentsPage: React.FC = () => {
     }).catch(() => {});
     listOrganizations().then(setOrganizations).catch(() => setOrganizations([]));
     listCountries().then(setCountryCodes).catch(() => setCountryCodes([]));
-  }, [user?.id, user?.role]);
+  }, [user?.id, user?.role, refreshKey]);
 
   // Auto-apply text search after 400ms debounce
   useEffect(() => {
@@ -289,7 +300,7 @@ export const TournamentsPage: React.FC = () => {
       .catch(() => setItems([]))
       .finally(() => { if (!cancel) setLoading(false); });
     return () => { cancel = true; };
-  }, [filters, page, nearMe, primaryProfileId, viewMode, compatMode]);
+  }, [filters, page, nearMe, primaryProfileId, viewMode, compatMode, refreshKey]);
 
   // Load calendar view
   useEffect(() => {
@@ -316,7 +327,7 @@ export const TournamentsPage: React.FC = () => {
       .catch(() => setCalendarMap({}))
       .finally(() => { if (!cancel) setLoading(false); });
     return () => { cancel = true; };
-  }, [filters, nearMe, primaryProfileId, viewMode]);
+  }, [filters, nearMe, primaryProfileId, viewMode, refreshKey]);
 
   function applySearch() {
     setPage(1);

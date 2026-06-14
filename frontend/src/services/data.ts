@@ -17,9 +17,15 @@ const PROFILES_TTL_MS = 30_000;
 let _profilesInFlight: Promise<PlayerProfile[]> | null = null;
 let _profilesCache: { data: PlayerProfile[]; at: number } | null = null;
 
-/** Drop the cached profiles so the next listProfiles() re-fetches. */
+/** Drop the cached profiles so the next listProfiles() re-fetches.
+ * Also emits 'profiles-changed' so mounted pages (Torneios/Início) refetch
+ * immediately — e.g. after changing a profile's federation in settings,
+ * the tournament listing updates on the spot without a hard refresh. */
 export function invalidateProfilesCache() {
   _profilesCache = null;
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('profiles-changed'));
+  }
 }
 
 export async function listProfiles(opts?: { force?: boolean }): Promise<PlayerProfile[]> {

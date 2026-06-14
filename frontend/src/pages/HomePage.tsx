@@ -215,6 +215,14 @@ export const HomePage: React.FC = () => {
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, [loadData]);
 
+  // Recarrega na hora quando um perfil muda (ex.: federação editada nas
+  // configurações) — navegação SPA não dispara visibilitychange.
+  useEffect(() => {
+    const onProfilesChanged = () => loadData();
+    window.addEventListener('profiles-changed', onProfilesChanged);
+    return () => window.removeEventListener('profiles-changed', onProfilesChanged);
+  }, [loadData]);
+
   if (loading) {
     return (
       <div className="py-16 flex justify-center">

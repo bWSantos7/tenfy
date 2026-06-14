@@ -42,10 +42,17 @@ export default defineConfig({
         clientsClaim: true,
         runtimeCaching: [
           {
+            // NetworkFirst (não StaleWhileRevalidate): as listas de torneios são
+            // escopadas por perfil/federação, mas a URL não codifica a federação
+            // (só profile_id). Com SWR, trocar a federação de um dependente fazia
+            // o app servir a lista antiga cacheada (mesma URL) — Torneios mostrava
+            // a federação anterior enquanto Início (compatível) já vinha correto.
+            // NetworkFirst sempre busca fresco online e só cai no cache offline.
             urlPattern: /^https?:\/\/.*\/api\/(tournaments|players\/categories)/,
-            handler: 'StaleWhileRevalidate',
+            handler: 'NetworkFirst',
             options: {
               cacheName: 'api-cache',
+              networkTimeoutSeconds: 5,
               expiration: { maxEntries: 50, maxAgeSeconds: 60 * 60 },
             },
           },

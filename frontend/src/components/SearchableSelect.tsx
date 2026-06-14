@@ -77,11 +77,18 @@ export const SearchableSelect: React.FC<Props> = ({
     }
   }, [open]);
 
-  // mantém a opção ativa visível ao navegar por teclado
+  // mantém a opção ativa visível ao navegar por teclado.
+  // Ajusta SÓ o scroll vertical (scrollTop) — nunca o horizontal: scrollIntoView
+  // mexe em scrollLeft mesmo com overflow-x:hidden, cortando o início do rótulo.
   useEffect(() => {
     if (!open || !listRef.current) return;
-    const el = listRef.current.children[activeIdx] as HTMLElement | undefined;
-    el?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    const list = listRef.current;
+    const el = list.children[activeIdx] as HTMLElement | undefined;
+    if (!el) return;
+    const top = el.offsetTop;
+    const bottom = top + el.offsetHeight;
+    if (top < list.scrollTop) list.scrollTop = top;
+    else if (bottom > list.scrollTop + list.clientHeight) list.scrollTop = bottom - list.clientHeight;
   }, [activeIdx, open]);
 
   function choose(opt: SelectOption) {

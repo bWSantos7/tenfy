@@ -81,7 +81,7 @@ export const SearchableSelect: React.FC<Props> = ({
   useEffect(() => {
     if (!open || !listRef.current) return;
     const el = listRef.current.children[activeIdx] as HTMLElement | undefined;
-    el?.scrollIntoView({ block: 'nearest' });
+    el?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }, [activeIdx, open]);
 
   function choose(opt: SelectOption) {
@@ -152,7 +152,7 @@ export const SearchableSelect: React.FC<Props> = ({
               className="flex-1 bg-transparent outline-none text-sm text-text-primary placeholder:text-text-muted"
             />
           </div>
-          <div ref={listRef} className="max-h-60 overflow-y-auto">
+          <div ref={listRef} className="max-h-60 overflow-y-auto overflow-x-hidden">
             {filtered.length === 0 ? (
               <div className="px-3 py-4 text-sm text-text-muted text-center">{emptyText}</div>
             ) : (
@@ -165,7 +165,7 @@ export const SearchableSelect: React.FC<Props> = ({
                     i === activeIdx ? 'bg-bg-elevated' : ''
                   } ${opt.value === value ? 'text-accent-neon font-medium' : 'text-text-primary'}`}
                 >
-                  <span className="truncate">{opt.label}</span>
+                  <span className="truncate min-w-0 flex-1">{opt.label}</span>
                 </div>
               ))
             )}

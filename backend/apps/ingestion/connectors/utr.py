@@ -47,6 +47,13 @@ _AGE_PATTERNS = [
 _YOUTH_WORDS = re.compile(r'\b(infanto[\s\-]?juvenil|infantojuvenil|juvenil|infantil|junior|j[uú]nior)\b', re.I)
 # Words that signal an adult/open event (used to exclude when no youth age found).
 _ADULT_WORDS = re.compile(r'\b(livre|adulto|open|profissional|professional|atp|wta|sen[ií]or|veterano|\d{2}\+)\b', re.I)
+# Keywords that indicate the title is already a proper tournament name (not a bare person name).
+_TOURNAMENT_KEYWORDS = re.compile(
+    r'\b(copa|open|torneio|campeonato|championship|cup|grand prix|masters?|'
+    r'challenger|circuit|trophy|series|stage|round|tournament|aberto|classic|'
+    r'invitational|nacional|estadual|municipal|brasil|brazil|club|clube|academy)\b',
+    re.I
+)
 
 
 @register_connector
@@ -178,6 +185,20 @@ class UTRConnector(BaseConnector):
 
     # ── Parsing ──────────────────────────────────────────────────────────────
 
+    def _enrich_title(self, raw_title: str, division_names: list) -> str:
+        """Append the first division name when title is a bare person name.
+
+        UTR challenge events are often named after the host player (e.g. "Lara Macerou").
+        Adding the division (e.g. "Sub-14 Feminino") makes the title meaningful.
+        Titles that already contain digits or tournament keywords are left untouched.
+        """
+        if re.search(r'\d', raw_title) or _TOURNAMENT_KEYWORDS.search(raw_title):
+            return raw_title
+        first_div = next((d for d in division_names if d), '')
+        if first_div:
+            return f'{raw_title} – {first_div}'
+        return raw_title
+
     def _division_names(self, src: dict) -> list:
         names = []
         for field in ('eventDivisions', 'divisions'):
@@ -210,13 +231,15 @@ class UTRConnector(BaseConnector):
 
     def _parse_event(self, src: dict, loc0: dict, youth_only: bool, lo: int, hi: int):
         ext_id = str(src.get('id') or '')
-        title = (src.get('name') or '').strip()
-        if not ext_id or not title:
+        raw_title = (src.get('name') or '').strip()
+        if not ext_id or not raw_title:
             return None
 
         division_names = self._division_names(src)
-        if youth_only and not self._matches_youth(title, division_names, lo, hi):
+        if youth_only and not self._matches_youth(raw_title, division_names, lo, hi):
             return None
+
+        title = self._enrich_title(raw_title, division_names)
 
         schedule = src.get('eventSchedule') or {}
         start_dt = self._parse_dt(schedule.get('eventStartUtc'))
@@ -275,7 +298,7 @@ class UTRConnector(BaseConnector):
         return {
             'external_id': f'utr:{ext_id}',
             'canonical_name': title,
-            'canonical_slug': self.slugify(f'utr-{ext_id}-{title}'),
+            'canonical_slug': self.slugify(f'utr-{ext_id}-{raw_title}'),
             'circuit': 'UTR',
             'modality': 'tennis',
             'season_year': season_year,

@@ -79,6 +79,12 @@ def _is_national_scope(edition, org) -> bool:
     org_type = getattr(org, 'type', None) if org is not None else None
     if org_type == _ORG_CONFEDERATION:
         return True
+    # Federação estadual: o escopo é decidido pela organização, NUNCA pelo título.
+    # Um evento de uma estadual pertence à própria federação mesmo titulado
+    # "Nacional"/"Brasileiro" (ex.: "Etapa Nacional" de um circuito estadual).
+    # Torneio nacional de verdade é atribuído à CBT (org tipo confederação).
+    if org_type == _ORG_FEDERATION:
+        return False
     return bool(_NATIONAL_RE.search(_scope_text(edition)))
 
 
@@ -176,7 +182,8 @@ def federation_scope_q(profile):
     An edition is INCLUDED when any of these hold:
       • org is a confederation (CBT nacional, ITF/COSAT internacional);
       • org is a platform (UTR — torneios por rating);
-      • the circuit/name/title is nationally scoped (nacional/brasileiro);
+      • the circuit/name/title is nationally scoped (nacional/brasileiro) E a org
+        NÃO é uma federação estadual (estadual fica sempre no escopo da federação);
       • org is the athlete's OWN state federation (match por UF ou id);
       • org is unknown/other (clube, mídia, sem organização) E a UF do local bate
         com a UF da federação — ou o local não tem UF (otimista).
@@ -193,9 +200,11 @@ def federation_scope_q(profile):
 
     # National-scope title safety net — same words as _NATIONAL_RE. Postgres uses
     # \y for a word boundary (\b is backspace in its regex flavour), so "nacional"
-    # não casa dentro de "internacional".
+    # não casa dentro de "internacional". NUNCA promove uma federação estadual
+    # (mesma regra de _is_national_scope): evento de estadual fica no escopo dela
+    # mesmo titulado "Nacional"/"Brasileiro"; só vale para org desconhecida/clube.
     national_re = r'\y(nacional|brasileiro|brasileira)\y'
-    national_title = (
+    national_title = ~Q(tournament__organization__type='federation') & (
         Q(tournament__circuit__iregex=national_re)
         | Q(tournament__canonical_name__iregex=national_re)
         | Q(title__iregex=national_re)

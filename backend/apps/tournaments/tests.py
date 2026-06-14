@@ -1426,6 +1426,13 @@ class FederationScopeListingTestCase(TestCase):
         # Outra federação estadual não aparece — nem quando "Aberto".
         self.assertNotIn(self.other.id, ids)
 
+    def test_other_federation_with_national_title_hidden(self):
+        # Federação estadual (FCT/RJ) com "Nacional" no título NÃO vaza para SP —
+        # escopo é pela organização, não pelo título (caso real FEST/PE).
+        other_nat = self._edition(self.fct_rj, 'fedscope-other-nat', 'FEST TÊNIS Etapa Nacional G3')
+        ids = self._list_ids()
+        self.assertNotIn(other_nat.id, ids)
+
     def test_no_federation_profile_sees_all(self):
         self.profile.federation = None
         self.profile.save(update_fields=['federation'])

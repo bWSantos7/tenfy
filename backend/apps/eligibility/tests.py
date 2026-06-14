@@ -772,10 +772,26 @@ class FederationScopeTestCase(TestCase):
         self.assertTrue(res['included'])
         self.assertEqual(res['status'], DISTANCE_NATIONAL)
 
-    def test_national_keyword_overrides_state_org(self):
+    def test_national_keyword_does_not_override_state_federation(self):
+        from apps.eligibility.location import profile_state_result, DISTANCE_OTHER_FEDERATION
+        # Decisão de produto: o escopo é decidido pela ORGANIZAÇÃO, nunca pelo
+        # título. Um evento de uma federação estadual (FCT/RJ) NÃO é aberto a
+        # outras federações mesmo titulado "Nacional"/"Brasileiro" — torneio
+        # nacional de verdade é atribuído à CBT (confederação). Ex. real: "FEST
+        # TÊNIS 2026 TOUR – Etapa NACIONAL" da FPET-PE não deve aparecer p/ SP.
+        ed = self._edition(self.fct, circuit='', name='FEST TÊNIS – Etapa Nacional', state='RJ')
+        res = profile_state_result(self.profile, ed)
+        self.assertFalse(res['included'])
+        self.assertEqual(res['status'], DISTANCE_OTHER_FEDERATION)
+
+    def test_national_title_still_promotes_when_org_not_federation(self):
         from apps.eligibility.location import profile_state_result, DISTANCE_NATIONAL
-        # Even if linked to a state federation, a clearly national title is open.
-        ed = self._edition(self.fct, circuit='', name='Campeonato Brasileiro Juvenil', state='RJ')
+        from apps.sources.models import Organization
+        # Org que não é federação (ex.: clube) com título nacional segue sendo
+        # tratada como nacional — a exceção vale só para federações estaduais.
+        club = Organization.objects.create(
+            name='Clube Nacional Teste', short_name='CLB', type=Organization.TYPE_CLUB)
+        ed = self._edition(club, circuit='', name='Campeonato Brasileiro Juvenil', state='RJ')
         res = profile_state_result(self.profile, ed)
         self.assertTrue(res['included'])
         self.assertEqual(res['status'], DISTANCE_NATIONAL)

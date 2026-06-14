@@ -87,6 +87,27 @@ def _slug(text: str) -> str:
     return re.sub(r'[^a-z0-9]+', '-', s.lower()).strip('-')[:60] or 'torneio'
 
 
+_UTR_TOURNAMENT_KEYWORDS = re.compile(
+    r'\b(copa|open|torneio|campeonato|championship|cup|grand prix|masters?|etapa|'
+    r'challenger|circuit|trophy|series|stage|round|tournament|aberto|classic|'
+    r'invitational|nacional|estadual|municipal|brasil|brazil|club|clube|academy)\b',
+    re.I,
+)
+
+
+def _enrich_utr_name(name: str, categories: list) -> str:
+    """UTR events often store the host player as event name (e.g. 'Lara Macerou').
+    Append the first category to make the title meaningful when no tournament
+    keywords or digits are present in the name.
+    """
+    if re.search(r'\d', name) or _UTR_TOURNAMENT_KEYWORDS.search(name):
+        return name
+    first_cat = next((c.get('name') or c.get('source_text') or '' for c in categories if c), '')
+    if first_cat:
+        return f'{name} – {first_cat}'
+    return name
+
+
 def _country_code(value, hint: str | None = None) -> str:
     """Resolve um código de país 3-letras para a bandeira. ``hint`` (ex.: ITF
     hostNationCode) tem prioridade. Passa adiante valores que já são código."""
@@ -265,6 +286,8 @@ class Command(BaseCommand):
         # mesmo que o schema ainda tenha dado antigo quebrado. Origem já corrigida
         # no extractor; aqui garante que o Tenfy nunca persista nome quebrado.
         name = demojibake((t.get('name') or '').strip())
+        if source == 'utr':
+            name = _enrich_utr_name(name, t.get('categories') or [])
         year = None
         for d in (t.get('start_date'), t.get('end_date')):
             if d is not None:

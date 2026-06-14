@@ -128,9 +128,7 @@ export const TournamentDetailPage: React.FC = () => {
     try {
       const data = await getEditionRegistrants(edId);
       setRegistrants(data);
-      if (data.categories.length > 0) {
-        setExpandedCats(new Set([data.categories[0].category_text]));
-      }
+      // Todas as listas de inscritos começam FECHADAS; o usuário abre ao clicar.
     } catch {
       toast.error('Não foi possível carregar os inscritos.');
     } finally {

@@ -6,14 +6,13 @@ import { STATUS_LABELS, fmtBRL, fmtDateRange, fmtRelative, fmtDateTime, statusBg
 import { editionCountry } from '../utils/country';
 import { orgLogoUrl } from '../utils/orgLogos';
 
-import logoFPT from '../assets/logos/FPT.jpg';
 import logoCBT from '../assets/logos/CBT.jpg';
 import logoCOSAT from '../assets/logos/COSAT.jpg';
 import logoFCT from '../assets/logos/FCT.webp';
 import logoITF from '../assets/logos/ITF.jpg';
 
 const LOCAL_ORG_LOGOS: Record<string, string> = {
-  FPT:   logoFPT,
+  FPT:   '/logo_federacao/FPT.jpg',  // served from public/
   CBT:   logoCBT,
   COSAT: logoCOSAT,
   FCT:   logoFCT,

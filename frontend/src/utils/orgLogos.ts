@@ -28,13 +28,14 @@ const BY_NAME: Record<string, string> = {
   'Federação Gaúcha de Tênis': 'Federação Gaúcha de Tênis.jpg',
   'Federação Catarinense de Tênis': 'Federação Catarinense de Tênis.jpg',
   'Federação Sergipana de Tênis': 'Federação Sergipana de Tênis.jpg',
-  'Federação Paulista de Tênis': 'Federação Paulista de Tênis.jpg',
+  'Federação Paulista de Tênis': 'FPT.jpg',
   'Federação Tocantinense de Tênis': 'Federação Tocantinense de Tênis.jpg',
 };
 
 const BY_SHORT: Record<string, string> = {
   CBT: 'CBT.jpg',
   COSAT: 'COSAT.jpg',
+  FPT: 'FPT.jpg',
   UTR: 'utr.png',
 };
 

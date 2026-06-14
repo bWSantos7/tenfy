@@ -486,7 +486,7 @@ export const TournamentsPage: React.FC = () => {
               </select>
             </div>
             <div>
-              <label className="text-xs text-text-secondary mb-1 block">Data inicial</label>
+              <label className="text-xs text-text-secondary mb-1 block">Data inicial (a partir de)</label>
               <input
                 type="date"
                 className="input-base"
@@ -495,7 +495,7 @@ export const TournamentsPage: React.FC = () => {
               />
             </div>
             <div>
-              <label className="text-xs text-text-secondary mb-1 block">Data final</label>
+              <label className="text-xs text-text-secondary mb-1 block">Data final (até)</label>
               <input
                 type="date"
                 className="input-base"
@@ -503,6 +503,9 @@ export const TournamentsPage: React.FC = () => {
                 onChange={(e) => { setPage(1); setFilters((f) => ({ ...f, to_date: e.target.value || undefined })); }}
               />
             </div>
+            <p className="col-span-2 -mt-1 text-[11px] leading-snug text-text-muted">
+              Filtra pela <strong className="font-semibold">data de início</strong> do torneio: mostra os torneios que começam dentro do período selecionado.
+            </p>
             <SearchableSelect
               label="Entidade / fonte"
               value={filters.organization != null ? String(filters.organization) : ''}

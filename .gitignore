@@ -118,3 +118,6 @@ qa-agent/dist/
 
 # Test plan files
 *.xlsx
+
+# Extractor tem repositório próprio (bWSantos7/sync)
+sync/

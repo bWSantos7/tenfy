@@ -276,9 +276,11 @@ export const SubscriptionPage: React.FC = () => {
         </div>
 
         <div className="grid sm:grid-cols-2 gap-3">
-          {plans.map((plan) => {
+          {/* Por hora exibe somente o plano tester; os demais ficam ocultos (não
+              removidos). Para reexibir, troque o filtro abaixo. */}
+          {plans.filter((plan) => plan.slug === 'tester').map((plan) => {
             const isCurrent = currentPlan?.id === plan.id && (sub?.is_active || sub?.status === 'pending');
-            const isUnavailable = plan.slug !== 'free';
+            const isUnavailable = plan.slug !== 'tester';
             const price = billingPeriod === 'yearly' ? plan.price_yearly : plan.price_monthly;
             return (
               <div key={plan.id} className={`card !p-4 space-y-3 relative ${isUnavailable ? 'opacity-60' : ''}`}>

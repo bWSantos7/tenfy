@@ -373,7 +373,10 @@ export const RegisterPage: React.FC = () => {
               <div className="py-6 flex justify-center"><Loader2 className="w-6 h-6 text-accent-neon animate-spin" /></div>
             ) : (
               <div className="space-y-2">
-                {(['tester','free','individual','familia'] as PlanSlug[]).map((slug) => {
+                {/* Por hora exibe somente os planos disponíveis (AVAILABLE_PLANS = ['tester']);
+                    os demais ficam ocultos (não removidos). Para reexibir, basta
+                    voltar a listar os slugs aqui / em AVAILABLE_PLANS. */}
+                {AVAILABLE_PLANS.map((slug) => {
                   const meta = PLAN_META[slug];
                   const available = isPlanAvailable(slug);
                   const selected = planSlug === slug && available;

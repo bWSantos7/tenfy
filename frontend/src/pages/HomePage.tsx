@@ -98,19 +98,11 @@ export const HomePage: React.FC = () => {
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      // Active profile id (responsável → dependente ativo) scopes the listing to
-      // the declared federation server-side. Null for players sem seleção → o
-      // backend cai no perfil primário do próprio usuário.
-      const scopeId = user?.id ? getActiveProfileId(user.id) : null;
-      // Fetch data that doesn't depend on profile in parallel
-      const [closingData, recentData, alerts] = await Promise.all([
-        closingSoon(14, scopeId ? { profile_id: String(scopeId) } : {}).catch(() => [] as TournamentEditionList[]),
-        listEditions({ page_size: 8, ordering: '-created_at', ...(scopeId ? { profile_id: scopeId } : {}) }).catch(() => ({ results: [] as TournamentEditionList[] })),
-        unreadAlerts().catch(() => [] as any[]),
-      ]);
 
-      setUnreadCount((alerts || []).length);
-
+      // Resolve o perfil ativo PRIMEIRO. O responsável enxerga os torneios pelo
+      // perfil do dependente ativo — mesmo escopo de federação que o dependente
+      // vê (sua federação + CBT/ITF/COSAT/UTR). Por isso o closing-soon/recentes
+      // só são buscados depois, já com o profile_id resolvido.
       let primary: PlayerProfile | null = null;
       let childName: string | null = null;
       let options: ProfileOption[] = [];
@@ -131,9 +123,14 @@ export const HomePage: React.FC = () => {
         setHasProfile(profiles.length > 0);
 
         const activeId = getActiveProfileId(user.id);
-        const activeOption = activeId
-          ? options.find((o) => o.profile.id === activeId)
-          : options.length === 1 ? options[0] : null; // auto-select se só houver 1
+        // Dependente ativo selecionado; senão o "melhor" perfil — nunca null
+        // quando há dependentes, para o responsável jamais ver outras federações.
+        const activeOption =
+          (activeId ? options.find((o) => o.profile.id === activeId) : null)
+          ?? (() => {
+            const best = pickBestProfile(profiles);
+            return options.find((o) => o.profile.id === best?.id) ?? null;
+          })();
         primary = activeOption?.profile ?? null;
         childName = activeOption?.childName ?? null;
       } else {
@@ -144,6 +141,18 @@ export const HomePage: React.FC = () => {
 
       setProfile(primary);
       setActiveChildName(childName);
+
+      // Escopo de federação: passa o id do perfil ativo resolvido. Assim o
+      // closing-soon/recentes vêm filtrados no servidor pela federação do
+      // dependente (igual ao que o dependente vê), não por todas as federações.
+      const scopeId = primary?.id ?? null;
+      const [closingData, recentData, alerts] = await Promise.all([
+        closingSoon(14, scopeId ? { profile_id: String(scopeId) } : {}).catch(() => [] as TournamentEditionList[]),
+        listEditions({ page_size: 8, ordering: '-created_at', ...(scopeId ? { profile_id: scopeId } : {}) }).catch(() => ({ results: [] as TournamentEditionList[] })),
+        unreadAlerts().catch(() => [] as any[]),
+      ]);
+
+      setUnreadCount((alerts || []).length);
 
       // Apply modality + level filters now that we know the active profile
       const modality = primary?.preferred_modality;

@@ -117,7 +117,7 @@ def _entrants_for(tournament_id: int) -> list[dict]:
             FROM {_q('entrants')} e
             LEFT JOIN {_q('tournament_categories')} c ON c.id = e.category_id
             WHERE e.tournament_id = %s
-            ORDER BY c.name NULLS LAST, e.position NULLS LAST, e.name
+            ORDER BY c.name NULLS LAST, e.position NULLS LAST, e.id
             """,
             [tournament_id],
         )

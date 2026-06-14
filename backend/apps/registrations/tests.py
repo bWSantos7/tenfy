@@ -2103,3 +2103,61 @@ class MatchRespectsWithdrawalTestCase(TestCase):
         # não deve criar uma segunda inscrição ativa
         self.assertEqual(TournamentRegistration.objects.filter(profile=p, edition=self.ed).count(), 1)
         self.assertTrue(TournamentRegistration.objects.get(pk=reg.pk).is_withdrawn)
+
+
+class PublicListSourceOrderTestCase(TestCase):
+    """A lista pública de inscritos deve seguir a ordem da FONTE (source_order),
+    não ordem alfabética por nome (bug CBT/FPT) nem por ranking."""
+
+    def setUp(self):
+        from apps.sources.models import Organization, DataSource
+        from apps.tournaments.models import Tournament, TournamentEdition
+        self.client = APIClient()
+        self.user = User.objects.create_user(email='order@test.com', password='pass')
+        self.client.force_authenticate(user=self.user)
+        org = Organization.objects.create(name='CBT Order', short_name='CBT',
+                                           type=Organization.TYPE_CONFEDERATION)
+        ds = DataSource.objects.create(organization=org, source_name='x', slug='cbt-order-ds',
+                                       source_type=DataSource.SOURCE_TYPE_JSON,
+                                       base_url='https://x', connector_key='cbt_order')
+        t = Tournament.objects.create(canonical_name='CBT Order Open',
+                                      canonical_slug='cbt-order-open', organization=org)
+        self.ed = TournamentEdition.objects.create(
+            tournament=t, data_source=ds, title='CBT Order Open',
+            season_year=2026, status='open', external_id='cbt:order-open')
+
+    def _entry(self, name, order):
+        from apps.registrations.models import FederationEntry
+        return FederationEntry.objects.create(
+            edition=self.ed, category_text='12 Anos Masculino', player_name=name,
+            player_external_id=f'cbt:{order}', source='cbt', source_order=order,
+            ranking_position=None,
+        )
+
+    def _names(self):
+        res = self.client.get(f'/api/registrations/edition/{self.ed.id}/public/')
+        self.assertEqual(res.status_code, 200, res.data)
+        cats = res.data['categories']
+        self.assertEqual(len(cats), 1)
+        return [e['player_name'] for e in cats[0]['entries']]
+
+    def test_entries_follow_source_order_not_alphabetical(self):
+        # Ordem da fonte (site): Eduardo(0), Joao(1), Bernardo(2), Rafael(3) —
+        # propositalmente NÃO-alfabética para flagrar o sort por nome.
+        self._entry('Eduardo Soares', 0)
+        self._entry('Joao Guilherme', 1)
+        self._entry('Bernardo Horta', 2)
+        self._entry('Rafael Verissimo', 3)
+        self.assertEqual(
+            self._names(),
+            ['Eduardo Soares', 'Joao Guilherme', 'Bernardo Horta', 'Rafael Verissimo'],
+        )
+
+    def test_slot_position_follows_source_order(self):
+        # #1 na chave deve ser o primeiro da fonte, não o primeiro alfabético.
+        self._entry('Zeca Primeiro', 0)
+        self._entry('Ana Ultima', 1)
+        res = self.client.get(f'/api/registrations/edition/{self.ed.id}/public/')
+        entries = res.data['categories'][0]['entries']
+        self.assertEqual(entries[0]['player_name'], 'Zeca Primeiro')
+        self.assertEqual(entries[0]['slot_position'], 1)

@@ -337,7 +337,7 @@ class Command(BaseCommand):
         if source == 'federations':
             fed = (t.get('federation') or '').strip()
             entry_source = (_slug(fed) or 'federations') if fed else 'federations'
-        for e in entrants:
+        for idx, e in enumerate(entrants):
             name = (e.get('name') or '').strip()
             if not name:
                 continue  # nunca inventar atleta
@@ -374,6 +374,11 @@ class Command(BaseCommand):
                 source=entry_source[:50],
                 defaults={
                     'player_name': name[:200],
+                    # Ordem em que o inscrito aparece na fonte (site). entrants já
+                    # vem na ordem do site (extractor_reader ordena por position,
+                    # depois e.id = ordem de scrape). Usada para exibir a lista na
+                    # MESMA ordem do site.
+                    'source_order': idx,
                     'ranking_position': e.get('position') or _int_or_none(e.get('ranking')),
                     'payment_status': pay,
                     'removed_or_replaced': removed,

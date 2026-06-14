@@ -409,23 +409,26 @@ class RegistrationViewSet(viewsets.GenericViewSet):
             for tc in edition.categories.all()
         }
 
+        # Ordem da lista = ordem da FONTE (site). source_order guarda a posição
+        # em que o inscrito aparece no site (preenchido na ingestão); cai para
+        # created_at (ordem de inserção) quando ausente (dados legados). Não
+        # ordenamos por nome nem por ranking — o site é a ordem autoritativa.
         entries = FederationEntry.objects.filter(edition=edition).order_by(
             'category_text',
-            F('ranking_position').asc(nulls_last=True),
+            F('source_order').asc(nulls_last=True),
             'created_at',
         )
 
         # slot_position por (edição, categoria, seção do quadro). A seção
         # (Main/Qualifying/Alternates) só é preenchida pelo COSAT; nas demais
-        # fontes draw_section='' (partição única) e o número segue como antes.
-        # Como ranking_position é global crescente (Main, depois Qualifying...),
-        # ordenar por ele mantém as seções contíguas e na ordem da fonte.
+        # fontes draw_section='' (partição única). Segue a ordem da fonte
+        # (source_order), mantendo as seções contíguas e na ordem do site.
         entries = entries.annotate(
             slot_position=Window(
                 expression=RowNumber(),
                 partition_by=[F('edition_id'), F('category_text'), F('draw_section')],
                 order_by=[
-                    F('ranking_position').asc(nulls_last=True),
+                    F('source_order').asc(nulls_last=True),
                     F('created_at').asc(),
                 ],
             )
@@ -740,6 +743,10 @@ class FederationEntryViewSet(viewsets.GenericViewSet):
 
                 defaults = {
                     'player_name': player_name,
+                    # Ordem da fonte (site): usa o valor explícito quando enviado,
+                    # senão o índice da linha (a lista chega na ordem do site).
+                    'source_order': (entry_data.get('source_order')
+                                     if entry_data.get('source_order') is not None else i),
                     'ranking_position': entry_data.get('ranking_position') or None,
                     'payment_status': raw_payment,
                     'removed_or_replaced': bool(entry_data.get('removed_or_replaced', False)),

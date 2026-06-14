@@ -179,6 +179,14 @@ class FederationEntry(TimestampedModel):
         blank=True,
         help_text='Posição no ranking (menor = melhor)',
     )
+    source_order = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text='Ordem em que o inscrito aparece na fonte (site). Usada para '
+                  'exibir a lista na MESMA ordem do site, em vez de ordenar por '
+                  'nome/ranking. Menor = aparece antes.',
+    )
     payment_status = models.CharField(
         max_length=20,
         choices=PAYMENT_CHOICES,

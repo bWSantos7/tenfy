@@ -163,6 +163,19 @@ export const TournamentDetailPage: React.FC = () => {
     });
   }
 
+  // Seleção exclusiva entre variantes do mesmo grupo (ex.: G1+ e GA): ao escolher
+  // uma, as outras do grupo são desmarcadas (não pode ter as duas ativas). Clicar
+  // na que já está ativa colapsa o grupo.
+  function selectVariant(groupKeys: string[], text: string) {
+    setExpandedCats((prev) => {
+      const next = new Set(prev);
+      const wasActive = next.has(text);
+      groupKeys.forEach((k) => next.delete(k));
+      if (!wasActive) next.add(text);
+      return next;
+    });
+  }
+
   async function handleWithdraw() {
     if (!myReg) return;
     const ok = window.confirm('Tem certeza que deseja cancelar sua inscrição neste torneio?');
@@ -387,7 +400,7 @@ export const TournamentDetailPage: React.FC = () => {
                     baseName={baseName}
                     cats={cats}
                     expandedCats={expandedCats}
-                    onToggle={toggleCat}
+                    onSelectVariant={selectVariant}
                   />
                 )
               )}
@@ -690,14 +703,15 @@ function variantLabel(text: string): string {
 // ── Grouped category: multiple variants (GA, G1+) side by side ───────────────
 
 function GroupedCategoryCard({
-  baseName, cats, expandedCats, onToggle,
+  baseName, cats, expandedCats, onSelectVariant,
 }: {
   baseName: string;
   cats: RegistrantCategory[];
   expandedCats: Set<string>;
-  onToggle: (key: string) => void;
+  onSelectVariant: (groupKeys: string[], key: string) => void;
 }) {
   const activeCat = cats.find((c) => expandedCats.has(c.category_text)) ?? null;
+  const groupKeys = cats.map((c) => c.category_text);
 
   return (
     <div className="card p-0 overflow-hidden">
@@ -716,7 +730,7 @@ function GroupedCategoryCard({
           return (
             <button
               key={cat.category_text}
-              onClick={() => onToggle(cat.category_text)}
+              onClick={() => onSelectVariant(groupKeys, cat.category_text)}
               className={`shrink-0 flex flex-col items-center gap-0.5 px-4 py-2.5 rounded-xl border transition-colors text-xs font-semibold ${
                 isActive
                   ? 'bg-accent-neon text-bg-base border-accent-neon'

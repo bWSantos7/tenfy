@@ -9,8 +9,14 @@ User = get_user_model()
 class AdminPanelAuthTestCase(TestCase):
     def setUp(self):
         self.client = APIClient()
+        # Master (superusuário): enxerga todas as abas/endpoints do painel.
         self.admin = User.objects.create_user(
-            email='admin@example.com', password='pass', role='admin', is_staff=True
+            email='admin@example.com', password='pass', role='admin',
+            is_staff=True, is_superuser=True,
+        )
+        # Admin comum (staff, sem superuser): só Estatísticas, Usuários e Leads.
+        self.staff = User.objects.create_user(
+            email='staff@example.com', password='pass', role='admin', is_staff=True,
         )
         self.regular = User.objects.create_user(
             email='user@example.com', password='pass', role='player'
@@ -21,18 +27,37 @@ class AdminPanelAuthTestCase(TestCase):
         res = self.client.get('/api/admin-panel/dashboard/')
         self.assertEqual(res.status_code, 403)
 
-    def test_dashboard_accessible_by_admin(self):
+    def test_dashboard_accessible_by_master(self):
         self.client.force_authenticate(user=self.admin)
         res = self.client.get('/api/admin-panel/dashboard/')
         self.assertEqual(res.status_code, 200)
         self.assertIn('counts', res.data)
+
+    def test_master_only_endpoints_blocked_for_staff_admin(self):
+        """Admin comum (staff não-superuser) não acessa abas master-only."""
+        self.client.force_authenticate(user=self.staff)
+        for url in (
+            '/api/admin-panel/dashboard/',
+            '/api/admin-panel/sources/',
+            '/api/admin-panel/review-queue/',
+            '/api/admin-panel/connector-status/',
+            '/api/admin-panel/editions-list/',
+        ):
+            res = self.client.get(url)
+            self.assertEqual(res.status_code, 403, url)
+
+    def test_staff_admin_sees_stats_users_leads(self):
+        """Admin comum (staff) mantém acesso às abas permitidas."""
+        self.client.force_authenticate(user=self.staff)
+        self.assertEqual(self.client.get('/api/admin-panel/stats/').status_code, 200)
+        self.assertEqual(self.client.get('/api/admin-panel/users/').status_code, 200)
 
     def test_sources_list_requires_admin(self):
         self.client.force_authenticate(user=self.regular)
         res = self.client.get('/api/admin-panel/sources/')
         self.assertEqual(res.status_code, 403)
 
-    def test_sources_list_accessible_by_admin(self):
+    def test_sources_list_accessible_by_master(self):
         self.client.force_authenticate(user=self.admin)
         res = self.client.get('/api/admin-panel/sources/')
         self.assertEqual(res.status_code, 200)
@@ -77,7 +102,8 @@ class AdminEditionsListingTestCase(TestCase):
     def setUp(self):
         self.client = APIClient()
         self.admin = User.objects.create_user(
-            email='admin2@example.com', password='pass', role='admin', is_staff=True
+            email='admin2@example.com', password='pass', role='admin',
+            is_staff=True, is_superuser=True,
         )
         self.player = User.objects.create_user(
             email='player2@example.com', password='pass', role='player'

@@ -58,11 +58,11 @@ class UserSerializer(serializers.ModelSerializer):
             'id', 'email', 'full_name', 'phone', 'avatar', 'role',
             'email_verified',
             'consent_version', 'consented_at', 'marketing_consent',
-            'is_staff', 'created_at',
+            'is_staff', 'is_superuser', 'created_at',
             'managed_by_parent', 'parent_info', 'ti_avatar_url',
         )
         read_only_fields = (
-            'id', 'is_staff', 'consent_version', 'consented_at', 'created_at',
+            'id', 'is_staff', 'is_superuser', 'consent_version', 'consented_at', 'created_at',
             'email_verified', 'managed_by_parent', 'parent_info', 'ti_avatar_url',
         )
 

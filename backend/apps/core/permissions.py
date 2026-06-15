@@ -27,3 +27,9 @@ class IsAdmin(BasePermission):
         return request.user.is_authenticated and (
             request.user.is_staff or request.user.is_superuser
         )
+
+
+class IsSuperUser(BasePermission):
+    """Acesso restrito ao master (superusuário). Admins comuns (staff) são barrados."""
+    def has_permission(self, request, view):
+        return request.user.is_authenticated and request.user.is_superuser

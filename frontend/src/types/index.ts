@@ -73,6 +73,7 @@ export interface User {
   consented_at: string | null;
   marketing_consent: boolean;
   is_staff: boolean;
+  is_superuser?: boolean;
   created_at: string;
   // Foto do Tênis Integrado (fallback quando user.avatar é nulo)
   ti_avatar_url?: string | null;

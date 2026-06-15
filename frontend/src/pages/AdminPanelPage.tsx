@@ -14,6 +14,7 @@ import api, { extractApiError } from '../services/api';
 import { TournamentEditionList } from '../types';
 import { TournamentCard } from '../components/TournamentCard';
 import { ErrorBoundary } from '../components/ErrorBoundary';
+import { useAuth } from '../contexts/AuthContext';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -135,8 +136,28 @@ const UNKNOWN_STATUS_LABEL = 'Status não informado';
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
+// Abas visíveis apenas para o master (superusuário). Admins comuns (staff,
+// sem superuser) só enxergam Estatísticas, Usuários e Leads.
+const MASTER_ONLY_TABS: Tab[] = ['dashboard', 'sources', 'connectors', 'editions'];
+
 export const AdminPanelPage: React.FC = () => {
-  const [tab, setTab] = useState<Tab>('dashboard');
+  const { user } = useAuth();
+  const isMaster = !!user?.is_superuser;
+
+  const tabs: [Tab, string][] = ([
+    ['dashboard',  'Dashboard'],
+    ['stats',      'Estatísticas'],
+    ['users',      'Usuários'],
+    ['leads',      'Leads'],
+    ['sources',    'Fontes'],
+    ['connectors', 'Conectores'],
+    ['editions',   'Torneios'],
+  ] as [Tab, string][]).filter(([key]) => isMaster || !MASTER_ONLY_TABS.includes(key));
+
+  const [tab, setTab] = useState<Tab>(isMaster ? 'dashboard' : 'stats');
+
+  // Se a aba ativa não está disponível para o perfil atual, volta para a primeira permitida.
+  const activeTab = tabs.some(([key]) => key === tab) ? tab : tabs[0][0];
 
   return (
     <div className="space-y-4">
@@ -146,20 +167,12 @@ export const AdminPanelPage: React.FC = () => {
       </div>
 
       <div className="flex gap-1 border-b border-border overflow-x-auto">
-        {([
-          ['dashboard',  'Dashboard'],
-          ['stats',      'Estatísticas'],
-          ['users',      'Usuários'],
-          ['leads',      'Leads'],
-          ['sources',    'Fontes'],
-          ['connectors', 'Conectores'],
-          ['editions',   'Torneios'],
-        ] as [Tab, string][]).map(([key, label]) => (
+        {tabs.map(([key, label]) => (
           <button
             key={key}
             onClick={() => setTab(key)}
             className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap ${
-              tab === key
+              activeTab === key
                 ? 'border-accent-neon text-accent-neon'
                 : 'border-transparent text-text-muted hover:text-text-primary'
             }`}
@@ -169,13 +182,13 @@ export const AdminPanelPage: React.FC = () => {
         ))}
       </div>
 
-      {tab === 'dashboard'  && <ErrorBoundary><DashboardTab /></ErrorBoundary>}
-      {tab === 'stats'      && <ErrorBoundary><StatsTab /></ErrorBoundary>}
-      {tab === 'users'      && <ErrorBoundary><UsersTab /></ErrorBoundary>}
-      {tab === 'leads'      && <ErrorBoundary><WaitlistLeadsTab /></ErrorBoundary>}
-      {tab === 'sources'    && <ErrorBoundary><SourcesTab /></ErrorBoundary>}
-      {tab === 'connectors' && <ErrorBoundary><ConnectorsTab /></ErrorBoundary>}
-      {tab === 'editions'   && <ErrorBoundary><EditionsAdminTab /></ErrorBoundary>}
+      {activeTab === 'dashboard'  && <ErrorBoundary><DashboardTab /></ErrorBoundary>}
+      {activeTab === 'stats'      && <ErrorBoundary><StatsTab /></ErrorBoundary>}
+      {activeTab === 'users'      && <ErrorBoundary><UsersTab /></ErrorBoundary>}
+      {activeTab === 'leads'      && <ErrorBoundary><WaitlistLeadsTab /></ErrorBoundary>}
+      {activeTab === 'sources'    && <ErrorBoundary><SourcesTab /></ErrorBoundary>}
+      {activeTab === 'connectors' && <ErrorBoundary><ConnectorsTab /></ErrorBoundary>}
+      {activeTab === 'editions'   && <ErrorBoundary><EditionsAdminTab /></ErrorBoundary>}
     </div>
   );
 };

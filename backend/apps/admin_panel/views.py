@@ -18,7 +18,7 @@ from rest_framework import serializers, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
-from apps.core.permissions import IsAdmin
+from apps.core.permissions import IsAdmin, IsSuperUser
 from apps.tournaments.models import TournamentEdition
 from apps.sources.models import DataSource, Organization
 from apps.ingestion.models import IngestionRun
@@ -500,7 +500,7 @@ def user_manage_link(request, pk):
 
 
 @api_view(['GET'])
-@permission_classes([IsAdmin])
+@permission_classes([IsSuperUser])
 def dashboard(request):
     now = timezone.now()
     last_24h = now - timedelta(hours=24)
@@ -631,7 +631,7 @@ def stats(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAdmin])
+@permission_classes([IsSuperUser])
 def review_queue(request):
     """Editions that need human curation."""
     from apps.tournaments.models import TournamentChangeEvent
@@ -697,7 +697,7 @@ class AdminEditionListSerializer(serializers.ModelSerializer):
 
 
 @api_view(['GET'])
-@permission_classes([IsAdmin])
+@permission_classes([IsSuperUser])
 def admin_editions_list(request):
     """
     Admin-only listing of TournamentEdition that INCLUDES unpublished items.
@@ -805,7 +805,7 @@ class EditionCreateSerializer(serializers.ModelSerializer):
 
 
 @api_view(['POST'])
-@permission_classes([IsAdmin])
+@permission_classes([IsSuperUser])
 def edition_create(request):
     """
     Manually create a tournament edition — for COSAT/ITF/UTR entries
@@ -819,7 +819,7 @@ def edition_create(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAdmin])
+@permission_classes([IsSuperUser])
 def connector_status(request):
     """
     Return status of each registered connector — last run, last status,
@@ -855,7 +855,7 @@ def connector_status(request):
 
 
 @api_view(['PATCH'])
-@permission_classes([IsAdmin])
+@permission_classes([IsSuperUser])
 def edition_patch(request, pk):
     """Inline admin edit for a TournamentEdition (manual override / curation)."""
     try:
@@ -891,7 +891,7 @@ class DataSourceSerializer(serializers.ModelSerializer):
 
 
 @api_view(['GET'])
-@permission_classes([IsAdmin])
+@permission_classes([IsSuperUser])
 def data_sources_list(request):
     """List all data sources with optional filter by enabled status."""
     qs = DataSource.objects.select_related('organization').order_by('organization__short_name', 'priority')
@@ -902,7 +902,7 @@ def data_sources_list(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAdmin])
+@permission_classes([IsSuperUser])
 def execution_logs(request):
     """Return recent ingestion runs with timestamps, status, errors and service info."""
     limit = min(int(request.query_params.get('limit', 50)), 200)
@@ -933,7 +933,7 @@ def execution_logs(request):
 
 
 @api_view(['PATCH'])
-@permission_classes([IsAdmin])
+@permission_classes([IsSuperUser])
 def data_source_patch(request, pk):
     """Toggle or update a data source configuration."""
     try:
@@ -950,7 +950,7 @@ def data_source_patch(request, pk):
 
 
 @api_view(['GET'])
-@permission_classes([IsAdmin])
+@permission_classes([IsSuperUser])
 def debug_itf_sample(request):
     """
     GET /api/admin-panel/debug/itf-sample/?key=J-J100-GTM-2026-001
@@ -982,7 +982,7 @@ def debug_itf_sample(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAdmin])
+@permission_classes([IsSuperUser])
 def trigger_itf_sync(request):
     """
     POST /api/admin-panel/sync/itf/
@@ -999,7 +999,7 @@ def trigger_itf_sync(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAdmin])
+@permission_classes([IsSuperUser])
 def trigger_db_cleanup(request):
     """
     POST /api/admin-panel/maintenance/cleanup/
@@ -1016,7 +1016,7 @@ def trigger_db_cleanup(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAdmin])
+@permission_classes([IsSuperUser])
 def trigger_cosat_sync(request):
     """
     POST /api/admin-panel/sync/cosat/
@@ -1033,7 +1033,7 @@ def trigger_cosat_sync(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAdmin])
+@permission_classes([IsSuperUser])
 def ingestion_runs_list(request):
     """Recent ingestion runs (last 50)."""
     qs = (

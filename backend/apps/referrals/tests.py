@@ -531,3 +531,115 @@ class CommissionWebhookTests(TestCase):
         self._post(payload)
         self._post(payload)  # webhook reprocessado
         self.assertEqual(CommissionLedger.objects.filter(subscription=self.sub).count(), 1)
+
+
+# ── Fase 4 — painel admin ────────────────────────────────────────────────────────
+
+def make_superuser(email='master@ex.com'):
+    u = User.objects.create_user(email=email, password='x', full_name='Master')
+    u.is_staff = True
+    u.is_superuser = True
+    u.save(update_fields=['is_staff', 'is_superuser'])
+    return u
+
+
+class AdminReferralsAuthTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+
+    def test_staff_non_superuser_blocked(self):
+        staff = User.objects.create_user(email='staff@ex.com', password='x', full_name='Staff')
+        staff.is_staff = True
+        staff.save(update_fields=['is_staff'])
+        self.client.force_authenticate(user=staff)
+        res = self.client.get('/api/admin-panel/partners/')
+        self.assertEqual(res.status_code, 403)
+
+    def test_anon_blocked(self):
+        res = self.client.get('/api/admin-panel/partners/')
+        self.assertEqual(res.status_code, 401)
+
+
+class AdminReferralsCrudTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.master = make_superuser()
+        self.client.force_authenticate(user=self.master)
+
+    def test_partner_create_and_list(self):
+        res = self.client.post('/api/admin-panel/partners/', {
+            'name': 'Influ X', 'type': Partner.TYPE_INFLUENCER, 'email': 'x@ex.com',
+        }, format='json')
+        self.assertEqual(res.status_code, 201)
+        pid = res.data['id']
+        res = self.client.get('/api/admin-panel/partners/')
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(any(p['id'] == pid for p in res.data['results']))
+
+    def test_coupon_create_and_patch(self):
+        partner = make_partner()
+        res = self.client.post('/api/admin-panel/coupons/', {
+            'code': 'promo10', 'partner': partner.id,
+            'discount_type': Coupon.DISCOUNT_PERCENT, 'discount_value': '10',
+            'plan_scope': Coupon.SCOPE_BOTH, 'status': Coupon.STATUS_ACTIVE,
+        }, format='json')
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(res.data['code'], 'PROMO10')  # normalizado
+        cid = res.data['id']
+        res = self.client.patch(f'/api/admin-panel/coupons/{cid}/', {'status': Coupon.STATUS_INACTIVE}, format='json')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data['status'], Coupon.STATUS_INACTIVE)
+
+    def test_commission_rule_create(self):
+        partner = make_partner()
+        res = self.client.post('/api/admin-panel/commission-rules/', {
+            'partner': partner.id, 'commission_type': CommissionRule.COMMISSION_PERCENT,
+            'commission_value': '20',
+        }, format='json')
+        self.assertEqual(res.status_code, 201)
+
+    def test_commissions_list_and_filter(self):
+        partner, coupon, rule, user, plan, sub = make_commission_scenario()
+        pay = Payment.objects.create(user=user, subscription=sub, amount=Decimal('44.91'), paid_net_amount=Decimal('44.91'))
+        generate_commission_for_payment(pay, sub)
+        res = self.client.get('/api/admin-panel/commissions/', {'partner': partner.id, 'status': 'pending'})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data['count'], 1)
+        self.assertEqual(res.data['results'][0]['partner_name'], partner.name)
+
+    def test_commissions_summary(self):
+        partner, coupon, rule, user, plan, sub = make_commission_scenario('20')
+        pay = Payment.objects.create(user=user, subscription=sub, amount=Decimal('44.91'), paid_net_amount=Decimal('44.91'))
+        generate_commission_for_payment(pay, sub)
+        res = self.client.get('/api/admin-panel/commissions/summary/')
+        self.assertEqual(res.status_code, 200)
+        row = next(r for r in res.data['results'] if r['partner_id'] == partner.id)
+        self.assertEqual(row['payable_amount'], '8.98')
+
+    def test_commission_approve_then_block_invalid(self):
+        partner, coupon, rule, user, plan, sub = make_commission_scenario()
+        pay = Payment.objects.create(user=user, subscription=sub, amount=Decimal('44.91'), paid_net_amount=Decimal('44.91'))
+        led = generate_commission_for_payment(pay, sub)
+        res = self.client.patch(f'/api/admin-panel/commissions/{led.id}/', {'status': 'approved'}, format='json')
+        self.assertEqual(res.status_code, 200)
+        # paid não é transição válida por aqui (só via payout)
+        res = self.client.patch(f'/api/admin-panel/commissions/{led.id}/', {'status': 'paid'}, format='json')
+        self.assertEqual(res.status_code, 400)
+
+    def test_payout_consolidates_and_marks_paid(self):
+        partner, coupon, rule, user, plan, sub = make_commission_scenario('20')
+        pay = Payment.objects.create(user=user, subscription=sub, amount=Decimal('44.91'), paid_net_amount=Decimal('44.91'))
+        led = generate_commission_for_payment(pay, sub)
+        res = self.client.post('/api/admin-panel/payouts/', {
+            'partner': partner.id, 'method': 'pix', 'reference': 'comprovante123',
+        }, format='json')
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(res.data['amount'], '8.98')
+        led.refresh_from_db()
+        self.assertEqual(led.status, CommissionLedger.STATUS_PAID)
+        self.assertEqual(led.payout_id, res.data['id'])
+
+    def test_payout_no_pending_returns_400(self):
+        partner = make_partner()
+        res = self.client.post('/api/admin-panel/payouts/', {'partner': partner.id}, format='json')
+        self.assertEqual(res.status_code, 400)

@@ -9,6 +9,12 @@ from .views import (
     trigger_itf_sync, trigger_cosat_sync, debug_itf_sample, trigger_db_cleanup,
     waitlist_leads,
 )
+from .referrals_views import (
+    partners, partner_detail, coupons, coupon_detail,
+    commission_rules, commission_rule_detail,
+    commissions, commission_detail, commissions_summary,
+    payouts,
+)
 
 urlpatterns = [
     path('dashboard/', dashboard, name='admin-dashboard'),
@@ -33,4 +39,16 @@ urlpatterns = [
     path('debug/itf-sample/', debug_itf_sample, name='admin-debug-itf-sample'),
     path('maintenance/cleanup/', trigger_db_cleanup, name='admin-db-cleanup'),
     path('waitlist-leads/', waitlist_leads, name='admin-waitlist-leads'),
+
+    # Programa de parceiros (cupons/comissões/repasses) — master apenas
+    path('partners/', partners, name='admin-partners'),
+    path('partners/<int:pk>/', partner_detail, name='admin-partner-detail'),
+    path('coupons/', coupons, name='admin-coupons'),
+    path('coupons/<int:pk>/', coupon_detail, name='admin-coupon-detail'),
+    path('commission-rules/', commission_rules, name='admin-commission-rules'),
+    path('commission-rules/<int:pk>/', commission_rule_detail, name='admin-commission-rule-detail'),
+    path('commissions/', commissions, name='admin-commissions'),
+    path('commissions/summary/', commissions_summary, name='admin-commissions-summary'),
+    path('commissions/<int:pk>/', commission_detail, name='admin-commission-detail'),
+    path('payouts/', payouts, name='admin-payouts'),
 ]

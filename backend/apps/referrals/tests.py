@@ -262,9 +262,14 @@ class ValidateCouponEndpointTests(TestCase):
         self.assertFalse(res.data['valid'])
         self.assertEqual(res.data['reason'], 'not_found')
 
-    def test_requires_auth(self):
-        res = APIClient().post('/api/billing/checkout/validate-coupon/', {'coupon_code': 'X'}, format='json')
-        self.assertEqual(res.status_code, 401)
+    def test_allows_anonymous(self):
+        # Usado no cadastro antes de existir conta — deve aceitar anônimo.
+        make_coupon(self.partner, code='ANON10', discount_value=Decimal('10'))
+        res = APIClient().post('/api/billing/checkout/validate-coupon/', {
+            'coupon_code': 'ANON10', 'plan_slug': 'individual',
+        }, format='json')
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.data['valid'])
 
 
 @override_settings(ASAAS_API_KEY='')

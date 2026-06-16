@@ -7,7 +7,7 @@ import {
 import toast from 'react-hot-toast';
 import { register, sendEmailOtp, verifyEmailOtp, createChildAccount } from '../services/auth';
 import { createProfile } from '../services/data';
-import { checkout, fetchPlans, Plan } from '../services/billing';
+import { checkout, fetchPlans, validateCoupon, Plan, CouponValidation } from '../services/billing';
 import { useAuth } from '../contexts/AuthContext';
 import { extractApiError } from '../services/api';
 import { User as UserType } from '../types';
@@ -45,11 +45,13 @@ const PLAN_META: Record<PlanSlug, {
 }> = {
   tester:     { label: 'Tester (Beta)', price: 'Grátis',       description: 'Acesso completo durante o período beta. Todas as funcionalidades liberadas.', icon: (p) => <FlaskConical {...p} /> },
   free:       { label: 'Free',          price: 'Grátis',       description: 'Acesso básico. Consulte e explore torneios.', icon: (p) => <Zap {...p} /> },
-  individual: { label: 'Individual',    price: 'R$ 19,90/mês', description: 'Alertas, agenda e filtros avançados para 1 jogador.', icon: (p) => <User {...p} /> },
-  familia:    { label: 'Família',       price: 'R$ 34,90/mês', description: 'Até 4 perfis. Gerencie toda a família em uma conta.', icon: (p) => <Users {...p} /> },
+  individual: { label: 'Individual',    price: 'R$ 49,90/mês', description: 'Alertas, agenda e filtros avançados para 1 jogador.', icon: (p) => <User {...p} /> },
+  familia:    { label: 'Família',       price: 'R$ 89,90/mês', description: 'Até 4 perfis. Gerencie toda a família em uma conta.', icon: (p) => <Users {...p} /> },
 };
 
-const AVAILABLE_PLANS: PlanSlug[] = ['tester'];
+// Planos pagos ficam invisíveis ao público; em ambiente de teste liberamos os três
+// para validar a lógica de cupons. O checkout pago só passa com cupom válido.
+const AVAILABLE_PLANS: PlanSlug[] = ['tester', 'individual', 'familia'];
 
 const STATES = [
   'AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB',
@@ -73,6 +75,11 @@ export const RegisterPage: React.FC = () => {
   const [planSlug, setPlanSlug] = useState<PlanSlug>('tester');
   const [apiPlans, setApiPlans] = useState<Plan[]>([]);
   const [loadingPlans, setLoadingPlans] = useState(true);
+
+  // Cupom (obrigatório p/ planos pagos enquanto eles ficam invisíveis ao público)
+  const [couponCode, setCouponCode] = useState('');
+  const [couponResult, setCouponResult] = useState<CouponValidation | null>(null);
+  const [validatingCoupon, setValidatingCoupon] = useState(false);
 
   // Payment
   const [paymentLoading, setPaymentLoading] = useState(false);
@@ -142,6 +149,29 @@ export const RegisterPage: React.FC = () => {
     if (p) return `R$ ${parseFloat(p.price_monthly).toFixed(2).replace('.', ',')} / mês`;
     return PLAN_META[slug].price;
   }
+
+  async function applyCoupon() {
+    const code = couponCode.trim();
+    if (!code || !isPaidPlan(planSlug)) return;
+    setValidatingCoupon(true);
+    try {
+      const r = await validateCoupon({ coupon_code: code, plan_slug: planSlug as 'individual' | 'familia', billing_period: 'monthly' });
+      setCouponResult(r);
+      if (r.valid) toast.success('Cupom válido!');
+      else toast.error(r.detail || 'Cupom inválido.');
+    } catch (err) {
+      toast.error(extractApiError(err));
+    } finally { setValidatingCoupon(false); }
+  }
+
+  function selectPlan(slug: PlanSlug) {
+    setPlanSlug(slug);
+    setCouponResult(null);   // desconto depende do plano — revalida ao trocar
+  }
+
+  // Plano pago exige cupom válido para o slug atual (espelha o gate do backend).
+  const couponOkForPlan = !!couponResult?.valid;
+  const canContinuePlan = !isPaidPlan(planSlug) || couponOkForPlan;
 
   // Role derived from plan + isResponsible (igual ao mobile)
   const role = ((planSlug === 'familia' || planSlug === 'tester') && form.isResponsible)
@@ -226,6 +256,7 @@ export const RegisterPage: React.FC = () => {
         plan_slug: planSlug as 'individual' | 'familia',
         billing_period: 'monthly',
         payment_method: 'pix',
+        coupon_code: couponResult?.valid ? couponCode.trim() : undefined,
       });
       if (result.pix?.copia_e_cola) {
         setPixCode(result.pix.copia_e_cola);
@@ -383,7 +414,7 @@ export const RegisterPage: React.FC = () => {
                   const apiPlan = apiPlans.find((p) => p.slug === (slug as any));
                   return (
                     <button key={slug} type="button" disabled={!available}
-                      onClick={() => available && setPlanSlug(slug)}
+                      onClick={() => available && selectPlan(slug)}
                       className={`w-full text-left p-4 rounded-xl border transition-all ${selected ? 'border-accent-neon bg-accent-neon/10' : available ? 'border-border-subtle bg-bg-card hover:border-accent-neon/40' : 'border-border-subtle bg-bg-card opacity-50 cursor-not-allowed'}`}>
                       <div className="flex items-start gap-3">
                         <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${selected ? 'bg-accent-neon/20' : 'bg-bg-elevated'}`}>
@@ -424,9 +455,50 @@ export const RegisterPage: React.FC = () => {
                 })}
               </div>
             )}
-            <button className="btn-primary w-full flex items-center justify-center gap-2" onClick={() => setStep('form')} disabled={loadingPlans}>
+
+            {/* Cupom — obrigatório p/ planos pagos (gate do backend) */}
+            {isPaidPlan(planSlug) && (
+              <div className="rounded-xl border border-border-subtle bg-bg-card p-3 space-y-2">
+                <div className="text-xs font-semibold text-text-secondary">Cupom de parceiro</div>
+                <div className="text-[11px] text-text-muted">
+                  Os planos pagos estão disponíveis com cupom de parceiro. Informe o cupom para continuar.
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    className="input-base flex-1 text-sm uppercase"
+                    placeholder="SEUCUPOM"
+                    value={couponCode}
+                    onChange={(e) => { setCouponCode(e.target.value); setCouponResult(null); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); applyCoupon(); } }}
+                    disabled={validatingCoupon}
+                  />
+                  <button type="button" className="btn-primary !text-sm px-4" onClick={applyCoupon} disabled={validatingCoupon || !couponCode.trim()}>
+                    {validatingCoupon ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Aplicar'}
+                  </button>
+                </div>
+                {couponResult && (
+                  couponResult.valid ? (
+                    <div className="text-[11px] text-accent-neon">
+                      Cupom aplicado: <strong>R$ {parseFloat(couponResult.final).toFixed(2).replace('.', ',')}</strong> na 1ª mensalidade
+                      {' '}(economia de R$ {parseFloat(couponResult.discount).toFixed(2).replace('.', ',')}).
+                    </div>
+                  ) : (
+                    <div className="text-[11px] text-red-400">{couponResult.detail || 'Cupom inválido.'}</div>
+                  )
+                )}
+              </div>
+            )}
+
+            <button
+              className="btn-primary w-full flex items-center justify-center gap-2"
+              onClick={() => setStep('form')}
+              disabled={loadingPlans || !canContinuePlan}
+            >
               Continuar <ArrowRight className="w-4 h-4" />
             </button>
+            {isPaidPlan(planSlug) && !couponOkForPlan && (
+              <p className="text-[11px] text-text-muted text-center">Aplique um cupom válido para continuar com este plano.</p>
+            )}
           </div>
         )}
 

@@ -238,11 +238,13 @@ def subscription_checkout(request):
 
 
 @api_view(['POST'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.AllowAny])
 def checkout_validate_coupon(request):
     """
     Valida um cupom para um plano/período e retorna valor original, desconto e
     valor final (RF-006/RF-007). Sem efeitos colaterais (NFR < 2s).
+    AllowAny: usado também no cadastro (antes de existir conta). Cupons são
+    feitos para serem compartilhados; não expõe dado sensível.
     POST /api/billing/checkout/validate-coupon/
     Body: {coupon_code, plan_slug, billing_period}
     """
@@ -256,8 +258,9 @@ def checkout_validate_coupon(request):
     if plan is None:
         return Response({'detail': 'Plano não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
 
+    user = request.user if request.user.is_authenticated else None
     from apps.referrals.services.coupons import validate_coupon
-    result = validate_coupon(code, plan, billing_period, request.user)
+    result = validate_coupon(code, plan, billing_period, user)
     payload = {
         'valid':    result.valid,
         'code':     code.upper(),

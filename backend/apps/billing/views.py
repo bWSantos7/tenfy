@@ -13,6 +13,7 @@ Endpoints:
 """
 import logging
 from datetime import date
+from decimal import Decimal
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -97,18 +98,26 @@ def subscription_checkout(request):
     ser.is_valid(raise_exception=True)
     d = ser.validated_data
 
-    # Paid plans temporarily unavailable — only Free plan supported for now.
-    _TEMPORARILY_UNAVAILABLE = {'individual', 'familia'}
-    if d['plan_slug'] in _TEMPORARILY_UNAVAILABLE and not getattr(settings, 'TESTING', False):
-        return Response(
-            {'detail': 'Este plano está temporariamente indisponível. Apenas o plano Free está disponível no momento.'},
-            status=status.HTTP_403_FORBIDDEN,
-        )
-
     try:
         plan = Plan.objects.get(slug=d['plan_slug'], is_active=True)
     except Plan.DoesNotExist:
         return Response({'detail': 'Plano não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+
+    # Programa de parceiros — valida cupom (se informado) antes do gate (Fluxo B).
+    coupon_validation = None
+    if d.get('coupon_code', '').strip():
+        from apps.referrals.services.coupons import validate_coupon
+        coupon_validation = validate_coupon(d['coupon_code'], plan, d['billing_period'], request.user)
+    has_valid_coupon = bool(coupon_validation and coupon_validation.valid)
+
+    # Planos pagos ficam invisíveis ao público; o checkout pago só é liberado para
+    # contas de teste (TESTING) ou quando há um cupom válido (acesso controlado).
+    _PAID_PLANS = {'individual', 'familia'}
+    if plan.slug in _PAID_PLANS and not getattr(settings, 'TESTING', False) and not has_valid_coupon:
+        return Response(
+            {'detail': 'Este plano está disponível apenas com um cupom válido no momento.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
 
     with transaction.atomic():
         is_tester = plan.slug == Plan.SLUG_TESTER
@@ -126,6 +135,13 @@ def subscription_checkout(request):
         asaas_result = None
         pix_qr = None
 
+        # Programa de parceiros — vincula cupom/parceiro à assinatura (RN-004).
+        discount_amount = coupon_validation.discount if has_valid_coupon else Decimal('0')
+        if has_valid_coupon:
+            sub.partner = coupon_validation.partner
+            sub.coupon = coupon_validation.coupon
+            sub.save(update_fields=['partner', 'coupon', 'updated_at'])
+
         if is_tester:
             # Tester plan: activate immediately — no payment required
             sub.plan = plan
@@ -142,7 +158,8 @@ def subscription_checkout(request):
             sub.save(update_fields=['pending_plan', 'pending_billing_period', 'cancel_at_period_end', 'updated_at'])
             try:
                 from .services.asaas_service import (
-                    create_subscription, get_subscription_first_pix_qr, AsaasNotConfiguredError,
+                    create_subscription, create_subscription_with_first_discount,
+                    get_subscription_first_pix_qr, get_pix_qr_code, AsaasNotConfiguredError,
                 )
                 payment_method_map = {
                     'credit_card': 'CREDIT_CARD',
@@ -150,22 +167,42 @@ def subscription_checkout(request):
                     'boleto': 'BOLETO',
                     'debit_card': 'DEBIT_CARD',
                 }
+                method = payment_method_map[d['payment_method']]
                 # PCI-DSS: only card_token accepted — raw card data is tokenized
                 # client-side by the mobile app directly with Asaas.
-                asaas_result = create_subscription(
-                    user=request.user,
-                    plan=plan,
-                    billing_period=d['billing_period'],
-                    payment_method=payment_method_map[d['payment_method']],
-                    card_token=d.get('card_token', ''),
-                )
-                sub.asaas_subscription_id = asaas_result.get('id', '')
-                sub.save(update_fields=['asaas_subscription_id', 'updated_at'])
-                logger.info('Asaas subscription %s created for user %s', sub.asaas_subscription_id, request.user.id)
+                if discount_amount and discount_amount > 0:
+                    # Com cupom: 1ª cobrança avulsa descontada + recorrência cheia.
+                    combo = create_subscription_with_first_discount(
+                        user=request.user,
+                        plan=plan,
+                        billing_period=d['billing_period'],
+                        payment_method=method,
+                        discount_amount=discount_amount,
+                        card_token=d.get('card_token', ''),
+                    )
+                    asaas_result = combo['subscription']
+                    first_payment = combo.get('first_payment') or {}
+                    sub.asaas_subscription_id = asaas_result.get('id', '')
+                    sub.save(update_fields=['asaas_subscription_id', 'updated_at'])
+                    logger.info('Asaas subscription %s (cupom) created for user %s', sub.asaas_subscription_id, request.user.id)
+                    # Pix: QR vem da cobrança avulsa (1º pagamento descontado)
+                    if d['payment_method'] == 'pix' and first_payment.get('id'):
+                        pix_qr = get_pix_qr_code(first_payment['id'])
+                else:
+                    asaas_result = create_subscription(
+                        user=request.user,
+                        plan=plan,
+                        billing_period=d['billing_period'],
+                        payment_method=method,
+                        card_token=d.get('card_token', ''),
+                    )
+                    sub.asaas_subscription_id = asaas_result.get('id', '')
+                    sub.save(update_fields=['asaas_subscription_id', 'updated_at'])
+                    logger.info('Asaas subscription %s created for user %s', sub.asaas_subscription_id, request.user.id)
 
-                # For Pix: fetch QR code from first pending payment
-                if d['payment_method'] == 'pix' and sub.asaas_subscription_id:
-                    pix_qr = get_subscription_first_pix_qr(sub.asaas_subscription_id)
+                    # For Pix: fetch QR code from first pending payment
+                    if d['payment_method'] == 'pix' and sub.asaas_subscription_id:
+                        pix_qr = get_subscription_first_pix_qr(sub.asaas_subscription_id)
 
             except Exception as exc:  # AsaasNotConfiguredError or network error
                 logger.warning('Asaas not available (%s); subscription created locally.', exc)
@@ -186,7 +223,52 @@ def subscription_checkout(request):
             'copia_e_cola':  pix_qr.get('payload', ''),
             'expiration':    pix_qr.get('expirationDate', ''),
         }
+    if coupon_validation is not None:
+        resp_data['coupon'] = {
+            'applied':  has_valid_coupon,
+            'code':     d['coupon_code'].strip().upper(),
+            'original': str(coupon_validation.original),
+            'discount': str(coupon_validation.discount),
+            'final':    str(coupon_validation.final),
+        }
+        if not has_valid_coupon:
+            resp_data['coupon']['reason'] = coupon_validation.reason
+            resp_data['coupon']['detail'] = coupon_validation.message
     return Response(resp_data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def checkout_validate_coupon(request):
+    """
+    Valida um cupom para um plano/período e retorna valor original, desconto e
+    valor final (RF-006/RF-007). Sem efeitos colaterais (NFR < 2s).
+    POST /api/billing/checkout/validate-coupon/
+    Body: {coupon_code, plan_slug, billing_period}
+    """
+    code = (request.data.get('coupon_code') or request.data.get('code') or '').strip()
+    plan_slug = request.data.get('plan_slug')
+    billing_period = request.data.get('billing_period', 'monthly')
+    if not code:
+        return Response({'valid': False, 'detail': 'Informe um cupom.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    plan = Plan.objects.filter(slug=plan_slug, is_active=True).first()
+    if plan is None:
+        return Response({'detail': 'Plano não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+
+    from apps.referrals.services.coupons import validate_coupon
+    result = validate_coupon(code, plan, billing_period, request.user)
+    payload = {
+        'valid':    result.valid,
+        'code':     code.upper(),
+        'original': str(result.original),
+        'discount': str(result.discount),
+        'final':    str(result.final),
+    }
+    if not result.valid:
+        payload['reason'] = result.reason
+        payload['detail'] = result.message
+    return Response(payload)
 
 
 @api_view(['POST'])

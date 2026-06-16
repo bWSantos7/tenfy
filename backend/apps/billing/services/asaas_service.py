@@ -229,6 +229,80 @@ def create_subscription(
     return _request('POST', '/subscriptions', json=payload)
 
 
+def create_subscription_with_first_discount(
+    user,
+    plan,
+    billing_period: str,
+    payment_method: str,
+    discount_amount,
+    card_token: str = '',
+) -> dict:
+    """
+    Programa de parceiros — desconto só na 1ª mensalidade (decisão fixada):
+    cria uma COBRANÇA AVULSA descontada para o 1º ciclo e uma ASSINATURA a preço
+    cheio começando no ciclo seguinte (nextDueDate = hoje + 1 ciclo).
+
+    Assim o desconto incide apenas no 1º pagamento (base da comissão) e a
+    recorrência segue cheia, sem reestruturar o domínio (RN-006/RN-010).
+
+    Retorna {'subscription': <dict>, 'first_payment': <dict>}.
+    Se discount_amount <= 0, recai no fluxo normal de assinatura.
+    """
+    from datetime import date
+    from decimal import Decimal
+    from dateutil.relativedelta import relativedelta
+
+    discount = Decimal(discount_amount or 0)
+    if discount <= 0:
+        return {'subscription': create_subscription(
+            user, plan, billing_period, payment_method, card_token,
+        ), 'first_payment': {}}
+
+    if payment_method.upper() == 'CREDIT_CARD' and not card_token:
+        raise ValueError('card_token is required for CREDIT_CARD payment — raw card data is never accepted.')
+
+    customer_id = get_or_create_customer(user)
+    full_price = Decimal(plan.price_for_period(billing_period))
+    first_price = (full_price - discount)
+    if first_price < 0:
+        first_price = Decimal('0')
+    cycle = 'MONTHLY' if billing_period == 'monthly' else 'YEARLY'
+    delta = relativedelta(months=1) if billing_period == 'monthly' else relativedelta(years=1)
+    next_due = (date.today() + delta).isoformat()
+    billing_type = payment_method.upper()
+
+    # 1) Cobrança avulsa descontada — 1º pagamento
+    first_payload = {
+        'customer': customer_id,
+        'billingType': billing_type,
+        'value': float(first_price.quantize(Decimal('0.01'))),
+        'dueDate': date.today().isoformat(),
+        'description': f'Tenfy — Plano {plan.name} (1ª mensalidade c/ cupom)',
+        'externalReference': str(user.id),
+    }
+    if billing_type == 'CREDIT_CARD':
+        first_payload['creditCardToken'] = card_token
+    logger.info('Creating discounted first charge for user %s plan %s', user.id, plan.slug)
+    first_payment = _request('POST', '/payments', json=first_payload)
+
+    # 2) Assinatura a preço cheio, começando no próximo ciclo
+    sub_payload = {
+        'customer': customer_id,
+        'billingType': billing_type,
+        'value': float(full_price.quantize(Decimal('0.01'))),
+        'nextDueDate': next_due,
+        'cycle': cycle,
+        'description': f'Tenfy — Plano {plan.name}',
+        'externalReference': str(user.id),
+    }
+    if billing_type == 'CREDIT_CARD':
+        sub_payload['creditCardToken'] = card_token
+    logger.info('Creating full-price recurrence for user %s starting %s', user.id, next_due)
+    subscription = _request('POST', '/subscriptions', json=sub_payload)
+
+    return {'subscription': subscription, 'first_payment': first_payment}
+
+
 def get_subscription_first_pix_qr(asaas_subscription_id: str, max_attempts: int = 3) -> dict:
     """
     Fetch the Pix QR code for the first pending payment of a subscription.

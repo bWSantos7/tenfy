@@ -517,6 +517,16 @@ def _handle_payment_confirmed(payload: dict):
         )
         return
 
+    # A cobrança avulsa da 1ª mensalidade com cupom não traz o `subscription` do Asaas.
+    # Resolve a assinatura do usuário (OneToOne) para ativar e comissionar o 1º pagamento.
+    if sub is None:
+        sub = (
+            Subscription.objects
+            .select_related('user', 'plan', 'pending_plan')
+            .filter(user=user)
+            .first()
+        )
+
     # Programa de parceiros — valor líquido (RN-006) e desconto aplicado (informativo).
     # Calculado antes da ativação, pois ela limpa pending_plan/pending_billing_period.
     _net = p.get('netValue')

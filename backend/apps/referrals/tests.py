@@ -523,6 +523,18 @@ class CommissionWebhookTests(TestCase):
         self.coupon.refresh_from_db()
         self.assertEqual(self.coupon.times_used, 0)
 
+    def test_avulsa_without_subscription_id_generates_commission(self):
+        # Cobrança avulsa da 1ª mensalidade não traz subscription do Asaas;
+        # resolve via externalReference (id do usuário) e comissiona.
+        res = self._post({
+            'event': 'PAYMENT_CONFIRMED',
+            'payment': {'id': 'pay_avulsa', 'externalReference': str(self.user.id), 'value': 44.91, 'netValue': 43.50, 'billingType': 'PIX'},
+        })
+        self.assertEqual(res.status_code, 200)
+        led = CommissionLedger.objects.get(subscription=self.sub)
+        self.assertEqual(led.base_amount, Decimal('43.50'))
+        self.assertEqual(led.commission_amount, Decimal('8.70'))
+
     def test_duplicate_confirmed_webhook_no_double_commission(self):
         payload = {
             'event': 'PAYMENT_CONFIRMED',

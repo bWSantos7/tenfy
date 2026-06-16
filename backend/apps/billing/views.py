@@ -517,12 +517,27 @@ def _handle_payment_confirmed(payload: dict):
         )
         return
 
-    Payment.objects.update_or_create(
+    # Programa de parceiros — valor líquido (RN-006) e desconto aplicado (informativo).
+    # Calculado antes da ativação, pois ela limpa pending_plan/pending_billing_period.
+    _net = p.get('netValue')
+    paid_net = Decimal(str(_net)) if _net is not None else Decimal(str(p.get('value', 0) or 0))
+    discount = Decimal('0')
+    if sub and sub.coupon_id:
+        _plan = sub.pending_plan or sub.plan
+        _period = sub.pending_billing_period or sub.billing_period
+        gross = Decimal(str(_plan.price_for_period(_period)))
+        discount = gross - Decimal(str(p.get('value', 0) or 0))
+        if discount < 0:
+            discount = Decimal('0')
+
+    payment_obj, _created = Payment.objects.update_or_create(
         asaas_payment_id=p.get('id', ''),
         defaults={
             'user': user,
             'subscription': sub,
             'amount': p.get('value', 0),
+            'discount_amount': discount,
+            'paid_net_amount': paid_net,
             'payment_method': _map_billing_type(p.get('billingType', '')),
             'status': Payment.STATUS_PAID,
             'transaction_id': p.get('id', ''),
@@ -552,6 +567,11 @@ def _handle_payment_confirmed(payload: dict):
         ])
         logger.info('Subscription %s activated after payment confirmed', sub.id)
 
+    # Comissão de parceiro (Fluxo C) — 1º pagamento confirmado. Idempotente.
+    if sub:
+        from apps.referrals.services.commission import generate_commission_for_payment
+        generate_commission_for_payment(payment_obj, sub)
+
 
 def _handle_payment_overdue(payload: dict):
     p = payload.get('payment', {})
@@ -578,6 +598,11 @@ def _handle_payment_deleted(payload: dict):
 def _handle_payment_refunded(payload: dict):
     p = payload.get('payment', {})
     Payment.objects.filter(asaas_payment_id=p.get('id', '')).update(status=Payment.STATUS_REFUNDED)
+    # Estorno reverte a comissão (RF-014/RN-009).
+    payment = Payment.objects.filter(asaas_payment_id=p.get('id', '')).first()
+    if payment:
+        from apps.referrals.services.commission import reverse_commission_for_payment
+        reverse_commission_for_payment(payment)
 
 
 def _handle_payment_chargeback(payload: dict):
@@ -587,6 +612,11 @@ def _handle_payment_chargeback(payload: dict):
     if sub and _transition_subscription(sub, Subscription.STATUS_UNPAID, 'chargeback'):
         sub.status = Subscription.STATUS_UNPAID
         sub.save(update_fields=['status', 'updated_at'])
+    # Chargeback também reverte a comissão (RN-009).
+    payment = Payment.objects.filter(asaas_payment_id=p.get('id', '')).first()
+    if payment:
+        from apps.referrals.services.commission import reverse_commission_for_payment
+        reverse_commission_for_payment(payment)
     logger.warning('Chargeback dispute for payment %s', p.get('id'))
 
 

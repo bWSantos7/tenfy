@@ -14,6 +14,9 @@ from apps.referrals.models import (
     CommissionLedger, CommissionRule, Coupon, Partner, Payout,
 )
 from apps.referrals.services.coupons import compute_discount, validate_coupon
+from apps.referrals.services.commission import (
+    generate_commission_for_payment, reverse_commission_for_payment,
+)
 
 User = get_user_model()
 
@@ -359,3 +362,172 @@ class AsaasFirstDiscountTests(TestCase):
             )
         m.assert_called_once()
         self.assertEqual(out['subscription']['id'], 'sub_x')
+
+
+# ── Fase 3 — geração e reversão de comissão ─────────────────────────────────────
+
+def make_commission_scenario(commission_value='20', base=None, max_total=None, with_coupon=True):
+    base = base or CommissionRule.BASE_NET
+    partner = make_partner()
+    coupon = None
+    rule = None
+    if with_coupon:
+        coupon = make_coupon(partner, code='PROMO10', discount_value=Decimal('10'), max_total_uses=max_total)
+        rule = CommissionRule.objects.create(
+            partner=partner, coupon=coupon,
+            commission_type=CommissionRule.COMMISSION_PERCENT,
+            commission_value=Decimal(commission_value), base_amount_type=base,
+        )
+    user = User.objects.create_user(email=f'c{Partner.objects.count()}@ex.com', password='x', full_name='C')
+    plan = make_paid_plan('individual', '49.90')
+    sub = Subscription.objects.create(
+        user=user, plan=plan,
+        partner=partner if with_coupon else None,
+        coupon=coupon,
+    )
+    return partner, coupon, rule, user, plan, sub
+
+
+class CommissionGenerationTests(TestCase):
+    def _payment(self, user, sub, amount='44.91', net='44.91'):
+        return Payment.objects.create(
+            user=user, subscription=sub,
+            amount=Decimal(amount), paid_net_amount=Decimal(net),
+        )
+
+    def test_generates_on_first_payment_net_base(self):
+        partner, coupon, rule, user, plan, sub = make_commission_scenario('20')
+        pay = self._payment(user, sub)
+        led = generate_commission_for_payment(pay, sub)
+        self.assertIsNotNone(led)
+        self.assertEqual(led.status, CommissionLedger.STATUS_PENDING)
+        self.assertEqual(led.base_amount, Decimal('44.91'))
+        self.assertEqual(led.commission_amount, Decimal('8.98'))  # 20% de 44.91
+        coupon.refresh_from_db()
+        self.assertEqual(coupon.times_used, 1)
+
+    def test_no_commission_without_coupon(self):
+        partner, coupon, rule, user, plan, sub = make_commission_scenario(with_coupon=False)
+        pay = self._payment(user, sub)
+        self.assertIsNone(generate_commission_for_payment(pay, sub))
+        self.assertEqual(CommissionLedger.objects.count(), 0)
+
+    def test_idempotent_same_payment(self):
+        partner, coupon, rule, user, plan, sub = make_commission_scenario()
+        pay = self._payment(user, sub)
+        generate_commission_for_payment(pay, sub)
+        self.assertIsNone(generate_commission_for_payment(pay, sub))
+        self.assertEqual(CommissionLedger.objects.filter(subscription=sub).count(), 1)
+
+    def test_only_first_payment(self):
+        partner, coupon, rule, user, plan, sub = make_commission_scenario()
+        first = self._payment(user, sub)
+        generate_commission_for_payment(first, sub)
+        second = self._payment(user, sub, amount='49.90', net='49.90')
+        self.assertIsNone(generate_commission_for_payment(second, sub))
+        self.assertEqual(CommissionLedger.objects.filter(subscription=sub).count(), 1)
+
+    def test_no_rule_skips(self):
+        partner, coupon, rule, user, plan, sub = make_commission_scenario()
+        rule.delete()
+        pay = self._payment(user, sub)
+        self.assertIsNone(generate_commission_for_payment(pay, sub))
+
+    def test_gross_base(self):
+        partner, coupon, rule, user, plan, sub = make_commission_scenario('20', base=CommissionRule.BASE_GROSS)
+        pay = self._payment(user, sub, amount='44.91', net='40.00')
+        led = generate_commission_for_payment(pay, sub)
+        self.assertEqual(led.base_amount, Decimal('44.91'))  # usa amount (bruto)
+
+    def test_exhausts_coupon_at_limit(self):
+        partner, coupon, rule, user, plan, sub = make_commission_scenario(max_total=1)
+        pay = self._payment(user, sub)
+        generate_commission_for_payment(pay, sub)
+        coupon.refresh_from_db()
+        self.assertEqual(coupon.status, Coupon.STATUS_EXHAUSTED)
+
+
+class CommissionReversalTests(TestCase):
+    def test_reverses_and_decrements(self):
+        partner, coupon, rule, user, plan, sub = make_commission_scenario()
+        pay = Payment.objects.create(user=user, subscription=sub, amount=Decimal('44.91'), paid_net_amount=Decimal('44.91'))
+        generate_commission_for_payment(pay, sub)
+        rev = reverse_commission_for_payment(pay)
+        self.assertEqual(rev.status, CommissionLedger.STATUS_REVERSED)
+        coupon.refresh_from_db()
+        self.assertEqual(coupon.times_used, 0)
+
+    def test_reverse_unexhausts(self):
+        partner, coupon, rule, user, plan, sub = make_commission_scenario(max_total=1)
+        pay = Payment.objects.create(user=user, subscription=sub, amount=Decimal('44.91'), paid_net_amount=Decimal('44.91'))
+        generate_commission_for_payment(pay, sub)
+        reverse_commission_for_payment(pay)
+        coupon.refresh_from_db()
+        self.assertEqual(coupon.status, Coupon.STATUS_ACTIVE)
+        self.assertEqual(coupon.times_used, 0)
+
+    def test_reverse_none_when_no_commission(self):
+        user = User.objects.create_user(email='nc@ex.com', password='x', full_name='NC')
+        pay = Payment.objects.create(user=user, amount=Decimal('10'))
+        self.assertIsNone(reverse_commission_for_payment(pay))
+
+
+class CommissionWebhookTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.partner = make_partner()
+        self.coupon = make_coupon(self.partner, code='PROMO10', discount_value=Decimal('10'))
+        self.rule = CommissionRule.objects.create(
+            partner=self.partner, coupon=self.coupon,
+            commission_type=CommissionRule.COMMISSION_PERCENT, commission_value=Decimal('20'),
+        )
+        self.user = User.objects.create_user(email='wh@ex.com', password='x', full_name='WH')
+        self.plan = make_paid_plan('individual', '49.90')
+        self.sub = Subscription.objects.create(
+            user=self.user, plan=self.plan, status=Subscription.STATUS_PENDING,
+            pending_plan=self.plan, asaas_subscription_id='sub_comm',
+            partner=self.partner, coupon=self.coupon,
+        )
+
+    def _post(self, payload, token='test_token'):
+        with patch.dict('django.conf.settings.__dict__', {'ASAAS_WEBHOOK_TOKEN': token}):
+            return self.client.post(
+                '/api/billing/webhooks/asaas/', payload, format='json',
+                HTTP_ASAAS_WEBHOOK_TOKEN=token,
+            )
+
+    def test_payment_confirmed_generates_commission_net_base(self):
+        res = self._post({
+            'event': 'PAYMENT_CONFIRMED',
+            'payment': {
+                'id': 'pay_c1', 'subscription': 'sub_comm',
+                'value': 44.91, 'netValue': 43.50, 'billingType': 'PIX',
+            },
+        })
+        self.assertEqual(res.status_code, 200)
+        led = CommissionLedger.objects.get(subscription=self.sub)
+        self.assertEqual(led.status, CommissionLedger.STATUS_PENDING)
+        self.assertEqual(led.base_amount, Decimal('43.50'))         # líquido (RN-006)
+        self.assertEqual(led.commission_amount, Decimal('8.70'))    # 20% de 43.50
+        self.coupon.refresh_from_db()
+        self.assertEqual(self.coupon.times_used, 1)
+
+    def test_refund_reverses_commission(self):
+        self._post({
+            'event': 'PAYMENT_CONFIRMED',
+            'payment': {'id': 'pay_c1', 'subscription': 'sub_comm', 'value': 44.91, 'netValue': 43.50, 'billingType': 'PIX'},
+        })
+        self._post({'event': 'PAYMENT_REFUNDED', 'payment': {'id': 'pay_c1'}})
+        led = CommissionLedger.objects.get(subscription=self.sub)
+        self.assertEqual(led.status, CommissionLedger.STATUS_REVERSED)
+        self.coupon.refresh_from_db()
+        self.assertEqual(self.coupon.times_used, 0)
+
+    def test_duplicate_confirmed_webhook_no_double_commission(self):
+        payload = {
+            'event': 'PAYMENT_CONFIRMED',
+            'payment': {'id': 'pay_dupc', 'subscription': 'sub_comm', 'value': 44.91, 'netValue': 43.50, 'billingType': 'PIX'},
+        }
+        self._post(payload)
+        self._post(payload)  # webhook reprocessado
+        self.assertEqual(CommissionLedger.objects.filter(subscription=self.sub).count(), 1)

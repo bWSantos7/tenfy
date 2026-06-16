@@ -135,6 +135,17 @@ class Subscription(TimestampedModel):
     )
     pending_billing_period = models.CharField(max_length=10, choices=Plan.BILLING_CHOICES, blank=True)
 
+    # Programa de parceiros — RN-004: no máximo 1 parceiro comissionável por assinatura.
+    # String refs evitam import circular (referrals referencia billing).
+    partner = models.ForeignKey(
+        'referrals.Partner', null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='subscriptions',
+    )
+    coupon = models.ForeignKey(
+        'referrals.Coupon', null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='subscriptions',
+    )
+
     class Meta:
         indexes = [
             models.Index(fields=['status']),
@@ -196,6 +207,10 @@ class Payment(TimestampedModel):
         Subscription, null=True, blank=True, on_delete=models.SET_NULL, related_name='payments'
     )
     amount           = models.DecimalField(max_digits=10, decimal_places=2)
+    # Programa de parceiros — desconto aplicado e valor líquido efetivamente recebido (RN-006).
+    # paid_net_amount NULL = ainda não informado pela fonte (Asaas); base de comissão cai p/ amount.
+    discount_amount  = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    paid_net_amount  = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     payment_method   = models.CharField(max_length=15, choices=METHOD_CHOICES, blank=True)
     status           = models.CharField(max_length=15, choices=STATUS_CHOICES, default=STATUS_PENDING)
     transaction_id   = models.CharField(max_length=120, blank=True)  # Asaas payment ID

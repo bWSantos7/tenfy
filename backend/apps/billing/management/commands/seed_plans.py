@@ -65,8 +65,8 @@ PLANS = [
     {
         'name': 'Individual',
         'slug': 'individual',
-        'price_monthly': '19.90',
-        'price_yearly':  '199.00',
+        'price_monthly': '49.90',
+        'price_yearly':  '499.00',
         'description': 'Para o atleta que quer centralizar seus torneios e evoluir no tênis.',
         'highlight_label': '',
         'display_order': 1,
@@ -76,8 +76,8 @@ PLANS = [
     {
         'name': 'Família',
         'slug': 'familia',
-        'price_monthly': '34.90',
-        'price_yearly':  '349.00',
+        'price_monthly': '89.90',
+        'price_yearly':  '899.00',
         'description': 'Até 4 perfis na mesma conta.',
         'highlight_label': 'Mais popular',
         'display_order': 2,

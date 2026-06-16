@@ -14,6 +14,7 @@ import api, { extractApiError } from '../services/api';
 import { TournamentEditionList } from '../types';
 import { TournamentCard } from '../components/TournamentCard';
 import { ErrorBoundary } from '../components/ErrorBoundary';
+import { ReferralsAdminTab } from '../components/admin/ReferralsAdminTab';
 import { useAuth } from '../contexts/AuthContext';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -102,7 +103,7 @@ interface AdminStats {
   totals: { users: number; active_users: number; new_users_period: number };
 }
 
-type Tab = 'dashboard' | 'stats' | 'users' | 'leads' | 'sources' | 'connectors' | 'editions';
+type Tab = 'dashboard' | 'stats' | 'users' | 'leads' | 'sources' | 'connectors' | 'editions' | 'partners';
 
 const EDITION_STATUS_LABELS: Record<string, string> = {
   unknown:   'Não informado',
@@ -138,7 +139,7 @@ const UNKNOWN_STATUS_LABEL = 'Status não informado';
 
 // Abas visíveis apenas para o master (superusuário). Admins comuns (staff,
 // sem superuser) só enxergam Estatísticas, Usuários e Leads.
-const MASTER_ONLY_TABS: Tab[] = ['dashboard', 'sources', 'connectors', 'editions'];
+const MASTER_ONLY_TABS: Tab[] = ['dashboard', 'sources', 'connectors', 'editions', 'partners'];
 
 export const AdminPanelPage: React.FC = () => {
   const { user } = useAuth();
@@ -152,6 +153,7 @@ export const AdminPanelPage: React.FC = () => {
     ['sources',    'Fontes'],
     ['connectors', 'Conectores'],
     ['editions',   'Torneios'],
+    ['partners',   'Parceiros'],
   ] as [Tab, string][]).filter(([key]) => isMaster || !MASTER_ONLY_TABS.includes(key));
 
   const [tab, setTab] = useState<Tab>(isMaster ? 'dashboard' : 'stats');
@@ -189,6 +191,7 @@ export const AdminPanelPage: React.FC = () => {
       {activeTab === 'sources'    && <ErrorBoundary><SourcesTab /></ErrorBoundary>}
       {activeTab === 'connectors' && <ErrorBoundary><ConnectorsTab /></ErrorBoundary>}
       {activeTab === 'editions'   && <ErrorBoundary><EditionsAdminTab /></ErrorBoundary>}
+      {activeTab === 'partners'   && <ErrorBoundary><ReferralsAdminTab /></ErrorBoundary>}
     </div>
   );
 };

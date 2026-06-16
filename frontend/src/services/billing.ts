@@ -41,6 +41,16 @@ export interface Subscription {
   updated_at: string;
 }
 
+export interface CouponInfo {
+  applied: boolean;
+  code: string;
+  original: string;
+  discount: string;
+  final: string;
+  reason?: string;
+  detail?: string;
+}
+
 export interface CheckoutResponse extends Subscription {
   pix?: {
     qr_code_image: string;
@@ -48,6 +58,17 @@ export interface CheckoutResponse extends Subscription {
     expiration: string;
   };
   asaas?: { id: string; [key: string]: unknown };
+  coupon?: CouponInfo;
+}
+
+export interface CouponValidation {
+  valid: boolean;
+  code: string;
+  original: string;
+  discount: string;
+  final: string;
+  reason?: string;
+  detail?: string;
 }
 
 export interface FamilyMember {
@@ -74,8 +95,18 @@ export async function checkout(payload: {
   billing_period?: 'monthly' | 'yearly';
   payment_method?: 'pix' | 'credit_card' | 'debit_card';
   card_token?: string;
+  coupon_code?: string;
 }): Promise<CheckoutResponse> {
   const res = await api.post('/api/billing/subscription/checkout/', payload);
+  return res.data;
+}
+
+export async function validateCoupon(payload: {
+  coupon_code: string;
+  plan_slug: 'individual' | 'familia';
+  billing_period?: 'monthly' | 'yearly';
+}): Promise<CouponValidation> {
+  const res = await api.post('/api/billing/checkout/validate-coupon/', payload);
   return res.data;
 }
 

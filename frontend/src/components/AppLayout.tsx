@@ -1,12 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { Home, Calendar, Star, User, ShieldCheck, Sun, Moon, Award, Users, Bell, LogOut, UserCheck, Loader2 } from 'lucide-react';
+import { Home, Calendar, Star, User, ShieldCheck, Sun, Moon, Award, Users, Bell, LogOut, UserCheck, Loader2, CreditCard } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { BetaModal } from './BetaModal';
 import { unreadAlerts, listReceivedInvites, respondDependentInvite } from '../services/data';
+import { fetchSubscription } from '../services/billing';
 import { DependentInvite } from '../types';
+
+// Rotas liberadas mesmo com assinatura paga pendente (para o usuário conseguir pagar/gerenciar).
+const ALLOWED_WHEN_UNPAID = ['/assinatura', '/configuracoes'];
 
 // Nav principal — aparece no bottom bar (mobile) e no header (desktop)
 const navItems = [
@@ -24,6 +28,22 @@ export const AppLayout: React.FC = () => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [pendingInvites, setPendingInvites] = useState<DependentInvite[]>([]);
   const [respondingInvite, setRespondingInvite] = useState<number | null>(null);
+  // Paywall — bloqueia o app quando há plano pago pendente/inadimplente até confirmar o pagamento.
+  const [paywall, setPaywall] = useState<{ checked: boolean; blocked: boolean }>({ checked: false, blocked: false });
+
+  useEffect(() => {
+    let active = true;
+    fetchSubscription()
+      .then((s) => {
+        const paid = s.plan_slug === 'individual' || s.plan_slug === 'familia';
+        const unpaid = s.status === 'pending' || s.status === 'unpaid';
+        if (active) setPaywall({ checked: true, blocked: paid && unpaid });
+      })
+      .catch(() => { if (active) setPaywall({ checked: true, blocked: false }); });
+    return () => { active = false; };
+  }, [user?.id, location.pathname]);
+
+  const paywallBlocking = paywall.blocked && !ALLOWED_WHEN_UNPAID.includes(location.pathname);
 
   const refreshUnread = () =>
     unreadAlerts().then((a) => setUnreadCount(Array.isArray(a) ? a.length : 0)).catch(() => {});
@@ -190,7 +210,25 @@ export const AppLayout: React.FC = () => {
       {/* ─── Content ──────────────────────────────────────────────────────────── */}
       {/* pb-24 no mobile (espaço para bottom nav); pb-6 no desktop */}
       <main className="flex-1 mx-auto w-full max-w-6xl px-4 pt-4 pb-24 md:pb-8">
-        <Outlet />
+        {paywallBlocking ? (
+          <div className="max-w-md mx-auto card text-center py-10 space-y-4 mt-6">
+            <CreditCard className="w-10 h-10 text-accent-neon mx-auto" />
+            <div>
+              <p className="font-semibold text-lg">Pagamento pendente</p>
+              <p className="text-sm text-text-muted mt-1">
+                Sua assinatura ainda não foi confirmada. Conclua o pagamento para liberar o acesso ao Tenfy.
+              </p>
+            </div>
+            <NavLink to="/assinatura" className="btn-primary inline-flex items-center gap-2">
+              <CreditCard className="w-4 h-4" /> Concluir pagamento
+            </NavLink>
+            <button onClick={logout} className="block w-full text-xs text-text-muted hover:text-text-secondary mt-2">
+              Sair
+            </button>
+          </div>
+        ) : (
+          <Outlet />
+        )}
       </main>
 
       {/* ─── Bottom nav — apenas mobile (< md) ───────────────────────────────── */}

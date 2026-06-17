@@ -7,7 +7,7 @@ import {
 import toast from 'react-hot-toast';
 import { register, sendEmailOtp, verifyEmailOtp, createChildAccount } from '../services/auth';
 import { createProfile } from '../services/data';
-import { checkout, fetchPlans, validateCoupon, Plan, CouponValidation } from '../services/billing';
+import { checkout, fetchPlans, fetchSubscription, validateCoupon, Plan, CouponValidation } from '../services/billing';
 import { useAuth } from '../contexts/AuthContext';
 import { extractApiError } from '../services/api';
 import { User as UserType } from '../types';
@@ -109,6 +109,7 @@ export const RegisterPage: React.FC = () => {
   const [pixCode, setPixCode] = useState('');
   const [pixQR, setPixQR] = useState('');
   const [pixCopied, setPixCopied] = useState(false);
+  const [verifyingPayment, setVerifyingPayment] = useState(false);
 
   // Registration form
   const [form, setForm] = useState({
@@ -308,6 +309,21 @@ export const RegisterPage: React.FC = () => {
   function proceedAfterPayment() {
     if (role === 'parent') setStep('dependent');
     else setStep('profile');
+  }
+
+  // "Já paguei" — só avança se a assinatura realmente confirmou (item 2).
+  async function verifyPaymentAndContinue() {
+    setVerifyingPayment(true);
+    try {
+      const s = await fetchSubscription();
+      if (s.status === 'active' || s.status === 'trial') {
+        proceedAfterPayment();
+      } else {
+        toast('Pagamento ainda não confirmado. Assim que o Asaas confirmar, o acesso é liberado.');
+      }
+    } catch {
+      toast('Pagamento ainda não confirmado. Tente novamente em instantes.');
+    } finally { setVerifyingPayment(false); }
   }
 
   function copyPix() {
@@ -705,18 +721,20 @@ export const RegisterPage: React.FC = () => {
                   </div>
                 </div>
                 <div className="rounded-lg bg-accent-neon/8 border border-accent-neon/20 p-3">
-                  <p className="text-xs text-text-muted">Após o pagamento, o plano será ativado automaticamente. Clique em "Já paguei" para continuar.</p>
+                  <p className="text-xs text-text-muted">Após o pagamento, o plano é ativado automaticamente. Clique em "Já paguei" para verificar.</p>
                 </div>
-                <button className="btn-primary w-full" onClick={proceedAfterPayment}>Já paguei — continuar</button>
-                <button className="w-full text-xs text-text-muted hover:text-text-secondary text-center"
-                  onClick={() => { if (registeredUser) setUser(registeredUser); nav('/inicio', { replace: true }); }}>
-                  Pagar depois (entrar no app)
+                <button className="btn-primary w-full flex items-center justify-center gap-2" onClick={verifyPaymentAndContinue} disabled={verifyingPayment}>
+                  {verifyingPayment && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Já paguei — continuar
                 </button>
+                <p className="text-[11px] text-text-muted text-center">
+                  O acesso ao app é liberado somente após a confirmação do pagamento.
+                </p>
               </>
             ) : (
               <>
-                <p className="text-sm text-text-secondary">Não foi possível gerar o PIX. Complete em "Minha assinatura" após entrar.</p>
-                <button className="btn-primary w-full" onClick={proceedAfterPayment}>Continuar cadastro</button>
+                <p className="text-sm text-text-secondary">Não foi possível gerar a cobrança agora. Tente novamente.</p>
+                <button className="btn-primary w-full" onClick={startCheckout} disabled={paymentLoading}>Tentar novamente</button>
               </>
             )}
           </div>

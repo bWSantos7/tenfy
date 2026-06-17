@@ -51,16 +51,16 @@ export function getTutorialSteps(role?: Role): TutorialStep[] {
     {
       icon: UserPlus,
       title: 'Cadastre um dependente',
-      body: 'Esta é a tela de Configurações. Na seção "Meus dependentes" você cria o perfil esportivo do seu filho(a) ou atleta e pode convidar dependentes que já têm conta.',
-      hint: 'Configurações da conta → seção "Meus dependentes".',
-      route: '/configuracoes',
+      body: 'Esta é a aba Perfil. Como responsável, é aqui que você cadastra um dependente: toque em "Novo dependente" para criar o perfil esportivo do seu atleta, ou em "Vincular existente" para vincular alguém que já tem conta no Tenfy.',
+      hint: 'Aba Perfil → "Novo dependente" ou "Vincular existente".',
+      route: '/perfil',
     },
     {
       icon: Repeat,
       title: 'Alterne entre dependentes',
-      body: 'De volta à tela Início: com mais de um dependente, use o seletor de perfil no topo para trocar qual atleta você acompanha. Torneios, agenda e elegibilidade se ajustam ao perfil ativo.',
-      hint: 'Tela Início → seletor de perfil no topo.',
-      route: '/inicio',
+      body: 'Depois de cadastrar, um seletor de perfil aparece aqui no topo da aba Perfil (e na tela Início) para você escolher qual dependente está acompanhando. Torneios, agenda e resultados se ajustam ao perfil ativo. Com nenhum dependente ainda, esse seletor não aparece.',
+      hint: 'Aba Perfil / Início → seletor no topo (aparece após cadastrar um dependente).',
+      route: '/perfil',
     },
   ];
 
@@ -142,7 +142,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     icon: UserPlus,
     title: 'Cadastro de dependentes',
     what: 'Permite que um responsável acompanhe e gerencie o perfil esportivo de um ou mais dependentes (filhos ou atletas).',
-    how: 'Vá em Configurações da conta → seção "Meus dependentes". Você pode criar o perfil esportivo do dependente ou convidar alguém que já tenha conta. Para acompanhar um dependente específico, use o seletor de perfil no topo da tela Início.',
+    how: 'Na aba Perfil, toque em "Novo dependente" para criar o perfil esportivo do seu atleta, ou em "Vincular existente" para vincular alguém que já tem conta. Depois que houver dependentes, um seletor aparece no topo da aba Perfil (e da tela Início) para escolher qual deles acompanhar. A gestão também fica disponível em Configurações.',
     when: 'Use quando você é pai, mãe ou responsável e quer acompanhar torneios, agenda e resultados em nome do dependente.',
     keywords: ['filho', 'responsável', 'pai', 'mãe', 'convite', 'vínculo', 'criança', 'menor'],
     roles: ['parent'],

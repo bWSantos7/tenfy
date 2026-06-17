@@ -53,6 +53,17 @@ class RegistrationTestCase(TestCase):
         u = User.objects.get(email='cpf@example.com')
         self.assertEqual(u.cpf, '11144477735')  # normalizado p/ dígitos
 
+    def test_register_duplicate_cpf_returns_400(self):
+        User.objects.create_user(email='first@example.com', password='x', cpf='11144477735')
+        res = self.client.post('/api/auth/register/', {
+            'email': 'second@example.com',
+            'password': 'Str0ngPass!', 'password_confirm': 'Str0ngPass!',
+            'full_name': 'Second', 'phone': '+5511999999999',
+            'cpf': '111.444.777-35', 'accept_terms': True,
+        }, format='json')
+        self.assertEqual(res.status_code, 400)
+        self.assertIn('cpf', res.data)
+
     def test_register_invalid_cpf_returns_400(self):
         res = self.client.post('/api/auth/register/', {
             'email': 'badcpf@example.com',

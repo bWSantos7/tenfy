@@ -140,6 +140,8 @@ class RegisterSerializer(serializers.ModelSerializer):
             digits = only_digits(cpf_raw)
             if not is_valid_cpf(digits):
                 raise serializers.ValidationError({'cpf': 'CPF inválido.'})
+            if User.objects.filter(cpf=digits).exists():
+                raise serializers.ValidationError({'cpf': 'Já existe uma conta com este CPF.'})
             attrs['cpf'] = digits
         else:
             attrs['cpf'] = ''

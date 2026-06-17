@@ -85,6 +85,14 @@ class User(AbstractBaseUser, PermissionsMixin, TimestampedModel):
 
     class Meta:
         ordering = ['-created_at']
+        constraints = [
+            # CPF único quando informado (permite vários em branco para contas sem CPF).
+            models.UniqueConstraint(
+                fields=['cpf'],
+                condition=~Q(cpf=''),
+                name='unique_cpf_when_present',
+            ),
+        ]
 
     def __str__(self):
         return self.email

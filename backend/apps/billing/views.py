@@ -359,6 +359,78 @@ def checkout_session(request):
     return Response(resp)
 
 
+def _resolve_pending_checkout(request):
+    """Resolve (pending, plan, discount) p/ checkout de cadastro pendente. Retorna (data, error_response)."""
+    from apps.accounts.models import PendingRegistration
+    pending = PendingRegistration.objects.filter(token=request.data.get('token', ''), consumed=False).first()
+    if pending is None or pending.is_expired:
+        return None, Response({'detail': 'Cadastro não encontrado ou expirado.'}, status=status.HTTP_404_NOT_FOUND)
+    if not pending.email_verified:
+        return None, Response({'detail': 'Confirme o e-mail antes de pagar.'}, status=status.HTTP_400_BAD_REQUEST)
+    plan = Plan.objects.filter(slug=pending.plan_slug, is_active=True).first()
+    if plan is None or plan.slug not in ('individual', 'familia'):
+        return None, Response({'detail': 'Plano inválido para pagamento.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    coupon_validation = None
+    if pending.coupon_code:
+        from apps.referrals.services.coupons import validate_coupon
+        coupon_validation = validate_coupon(pending.coupon_code, plan, pending.billing_period, None)
+    has_valid_coupon = bool(coupon_validation and coupon_validation.valid)
+    if not getattr(settings, 'TESTING', False) and not has_valid_coupon:
+        return None, Response(
+            {'detail': 'Este plano está disponível apenas com um cupom válido no momento.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    discount = coupon_validation.discount if has_valid_coupon else Decimal('0')
+    return {'pending': pending, 'plan': plan, 'discount': discount, 'coupon': coupon_validation, 'valid': has_valid_coupon}, None
+
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def checkout_pending_pix(request):
+    """Pix no app para um cadastro pendente (sem conta ainda). Retorna QR + copia-e-cola."""
+    data, err = _resolve_pending_checkout(request)
+    if err:
+        return err
+    try:
+        from .services.asaas_service import create_pending_first_pix
+        result = create_pending_first_pix(data['pending'], data['plan'], data['discount'])
+    except Exception as exc:
+        logger.error('Pending Pix checkout failed: %s', exc)
+        return Response({'detail': 'Não foi possível gerar o Pix. Tente novamente.'}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+    qr = result.get('qr') or {}
+    resp = {'pix': {
+        'qr_code_image': qr.get('encodedImage', ''),
+        'copia_e_cola': qr.get('payload', ''),
+        'expiration': qr.get('expirationDate', ''),
+    }}
+    if data['coupon'] is not None:
+        resp['coupon'] = {'applied': data['valid'], 'original': str(data['coupon'].original),
+                          'discount': str(data['coupon'].discount), 'final': str(data['coupon'].final)}
+    return Response(resp)
+
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def checkout_pending_session(request):
+    """Checkout hospedado (Pix+Cartão) para um cadastro pendente. Retorna checkout_url."""
+    data, err = _resolve_pending_checkout(request)
+    if err:
+        return err
+    frontend = getattr(settings, 'FRONTEND_URL', '').rstrip('/')
+    token = data['pending'].token
+    success_url = f'{frontend}/pagamento?status=sucesso&reg={token}'
+    cancel_url = f'{frontend}/pagamento?status=cancelado&reg={token}'
+    try:
+        from .services.asaas_service import create_pending_checkout_session
+        result = create_pending_checkout_session(data['pending'], data['plan'], data['discount'], success_url, cancel_url)
+    except Exception as exc:
+        logger.error('Pending checkout session failed: %s', exc)
+        return Response({'detail': 'Não foi possível iniciar o pagamento. Tente novamente.'}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+    return Response({'checkout_url': result.get('link') or result.get('url') or '', 'checkout_id': result.get('id', '')})
+
+
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def subscription_cancel(request):
@@ -596,12 +668,26 @@ def _handle_payment_confirmed(payload: dict):
     asaas_sub_id = p.get('subscription', '')
     sub = _find_subscription_by_asaas(asaas_sub_id) if asaas_sub_id else None
 
-    user = sub.user if sub else _user_from_external_ref(p.get('externalReference', ''))
+    ref = p.get('externalReference', '')
+    user = sub.user if sub else None
+    if user is None and ref:
+        if ref.startswith('reg:'):
+            # Cadastro diferido: materializa a conta só agora (pagamento confirmado).
+            from apps.accounts.models import PendingRegistration
+            from apps.accounts.registration import materialize_full
+            pending = PendingRegistration.objects.filter(token=ref[4:]).first()
+            if pending and not pending.is_expired:
+                try:
+                    user = materialize_full(pending)
+                except Exception as exc:  # noqa: BLE001
+                    logger.error('Failed to materialize pending %s: %s', ref, exc)
+        else:
+            user = _user_from_external_ref(ref)
     if user is None:
         logger.error(
             'PAYMENT_CONFIRMED: user not found for asaas_payment_id=%s externalReference=%s — '
-            'payment record not created. Check externalReference in Asaas subscription.',
-            p.get('id', ''), p.get('externalReference', ''),
+            'payment record not created.',
+            p.get('id', ''), ref,
         )
         return
 

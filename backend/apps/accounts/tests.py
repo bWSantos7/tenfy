@@ -7,9 +7,69 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 
 from apps.billing.models import Plan, Subscription
-from .models import ParentChild
+from .models import ParentChild, PendingRegistration
 
 User = get_user_model()
+
+
+class DeferredRegistrationTests(TestCase):
+    """Cadastro diferido: conta só criada quando o usuário entra de fato."""
+    def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
+        self.client = APIClient()
+        Plan.objects.create(name='Tester', slug='tester', price_monthly='0', max_members=4)
+        Plan.objects.create(name='Individual', slug='individual', price_monthly='49.90', max_members=1)
+
+    def _start(self, plan_slug='tester', email='novo@example.com', cpf='111.444.777-35'):
+        return self.client.post('/api/auth/register/start/', {
+            'email': email, 'full_name': 'Novo User', 'phone': '11999999999',
+            'cpf': cpf, 'password': 'Str0ngPass!', 'password_confirm': 'Str0ngPass!',
+            'accept_terms': True, 'plan_slug': plan_slug, 'billing_period': 'monthly',
+        }, format='json')
+
+    def _code_for(self, email):
+        from django.core.cache import cache
+        from apps.accounts.otp import _email_identifier, _code_key
+        return cache.get(_code_key(_email_identifier(email), 'dependent_email'))
+
+    @patch('apps.accounts.tasks.send_otp_email.delay')
+    def test_start_does_not_create_user(self, _delay):
+        res = self._start('tester')
+        self.assertEqual(res.status_code, 201)
+        self.assertIn('token', res.data)
+        self.assertFalse(User.objects.filter(email='novo@example.com').exists())
+        self.assertTrue(PendingRegistration.objects.filter(email='novo@example.com').exists())
+
+    @patch('apps.accounts.tasks.send_otp_email.delay')
+    def test_complete_tester_creates_user_and_logs_in(self, _delay):
+        token = self._start('tester').data['token']
+        code = self._code_for('novo@example.com')
+        self.assertIsNotNone(code)
+        v = self.client.post('/api/auth/register/verify-email/', {'token': token, 'code': code}, format='json')
+        self.assertEqual(v.status_code, 200)
+        c = self.client.post('/api/auth/register/complete/', {'token': token}, format='json')
+        self.assertEqual(c.status_code, 201)
+        self.assertIn('access', c.data)
+        u = User.objects.get(email='novo@example.com')
+        self.assertTrue(u.email_verified)
+        self.assertEqual(u.subscription.status, Subscription.STATUS_ACTIVE)
+
+    @patch('apps.accounts.tasks.send_otp_email.delay')
+    def test_complete_paid_requires_payment(self, _delay):
+        token = self._start('individual').data['token']
+        code = self._code_for('novo@example.com')
+        self.client.post('/api/auth/register/verify-email/', {'token': token, 'code': code}, format='json')
+        c = self.client.post('/api/auth/register/complete/', {'token': token}, format='json')
+        self.assertEqual(c.status_code, 400)  # plano pago exige pagamento
+        self.assertFalse(User.objects.filter(email='novo@example.com').exists())
+
+    @patch('apps.accounts.tasks.send_otp_email.delay')
+    def test_duplicate_cpf_blocked_at_start(self, _delay):
+        User.objects.create_user(email='ex@example.com', password='x', cpf='11144477735')
+        res = self._start('tester', email='outro@example.com')
+        self.assertEqual(res.status_code, 400)
+        self.assertIn('cpf', res.data)
 
 
 class RegistrationTestCase(TestCase):

@@ -145,6 +145,54 @@ class ParentChild(TimestampedModel):
         return f'{self.parent.email} -> {self.child.email}'
 
 
+def _reg_token():
+    return f'reg_{uuid.uuid4().hex}'
+
+
+def _reg_expires():
+    return timezone.now() + timedelta(hours=24)
+
+
+class PendingRegistration(TimestampedModel):
+    """
+    Cadastro pendente: guarda os dados ANTES de criar o usuário. A conta em
+    ``accounts.User`` só é materializada quando o usuário entra de fato
+    (grátis/tester ao concluir; pago após pagamento confirmado). Quem abandona
+    o pagamento não vira conta — o pendente expira.
+
+    A senha é guardada já com hash (make_password). Não há PII além do necessário.
+    """
+    token            = models.CharField(max_length=40, unique=True, default=_reg_token, editable=False)
+    email            = models.EmailField(db_index=True)
+    full_name        = models.CharField(max_length=150, blank=True)
+    phone            = models.CharField(max_length=20, blank=True)
+    cpf              = models.CharField(max_length=11, blank=True)
+    password         = models.CharField(max_length=255)  # hash (make_password)
+    role             = models.CharField(max_length=20, default='player')
+    marketing_consent = models.BooleanField(default=False)
+    plan_slug        = models.CharField(max_length=30, default='tester')
+    billing_period   = models.CharField(max_length=10, default='monthly')
+    coupon_code      = models.CharField(max_length=40, blank=True)
+    email_verified   = models.BooleanField(default=False)
+    asaas_customer_id = models.CharField(max_length=60, blank=True)
+    consumed         = models.BooleanField(default=False)
+    expires_at       = models.DateTimeField(default=_reg_expires)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['email']),
+            models.Index(fields=['consumed', 'expires_at']),
+        ]
+
+    def __str__(self):
+        return f'PendingRegistration({self.email}, consumed={self.consumed})'
+
+    @property
+    def is_expired(self) -> bool:
+        return timezone.now() > self.expires_at
+
+
 def _invite_token():
     return f'inv_{uuid.uuid4().hex}'
 

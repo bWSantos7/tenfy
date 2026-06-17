@@ -124,15 +124,9 @@ const App: React.FC = () => {
           />
         </Route>
 
-        {/* Retorno do pagamento (Asaas) — fora do app (sem nav/paywall). */}
-        <Route
-          path="/pagamento"
-          element={
-            <ProtectedRoute>
-              <PaymentReturnPage />
-            </ProtectedRoute>
-          }
-        />
+        {/* Retorno do pagamento (Asaas) — público: no cadastro diferido a conta
+            ainda não existe ao voltar; a página faz login quando o pagamento confirma. */}
+        <Route path="/pagamento" element={<PaymentReturnPage />} />
 
         <Route path="/politica-privacidade" element={<PrivacyPolicyPage />} />
 

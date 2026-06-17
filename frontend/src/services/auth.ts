@@ -23,6 +23,42 @@ export async function register(payload: {
   return res.data;
 }
 
+// ── Cadastro diferido (conta só criada quando o usuário entra de fato) ──────────
+
+export interface RegisterStartPayload {
+  email: string; full_name: string; phone?: string; cpf: string;
+  password: string; password_confirm: string; role?: string;
+  accept_terms: boolean; marketing_consent?: boolean;
+  plan_slug: string; billing_period?: string; coupon_code?: string;
+}
+
+export async function registerStart(payload: RegisterStartPayload): Promise<{ token: string; email_otp_sent: boolean }> {
+  const res = await api.post('/api/auth/register/start/', payload);
+  return res.data;
+}
+
+export async function registerVerifyEmail(token: string, code: string): Promise<{ verified: boolean }> {
+  const res = await api.post('/api/auth/register/verify-email/', { token, code });
+  return res.data;
+}
+
+export async function registerResendEmail(token: string): Promise<{ email_otp_sent: boolean }> {
+  const res = await api.post('/api/auth/register/resend-email/', { token });
+  return res.data;
+}
+
+export async function registerComplete(token: string): Promise<LoginResponse> {
+  const res = await api.post<LoginResponse>('/api/auth/register/complete/', { token });
+  persistAuth(res.data);
+  return res.data;
+}
+
+export async function registerStatus(token: string): Promise<{ ready: boolean } & Partial<LoginResponse>> {
+  const res = await api.post('/api/auth/register/status/', { token });
+  if (res.data?.ready && res.data?.access) persistAuth(res.data as LoginResponse);
+  return res.data;
+}
+
 export async function fetchMe(): Promise<User> {
   const res = await api.get<User>('/api/auth/me/');
   localStorage.setItem(USER_KEY, JSON.stringify(res.data));

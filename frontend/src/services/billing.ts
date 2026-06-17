@@ -126,6 +126,23 @@ export async function createCheckoutSession(payload: {
   return res.data;
 }
 
+// ── Cadastro diferido: checkout por token (sem conta ainda) ─────────────────────
+
+export interface PendingPixResponse {
+  pix: { qr_code_image: string; copia_e_cola: string; expiration: string };
+  coupon?: CouponInfo;
+}
+
+export async function checkoutPendingPix(token: string): Promise<PendingPixResponse> {
+  const res = await api.post('/api/billing/checkout/pending/pix/', { token });
+  return res.data;
+}
+
+export async function checkoutPendingSession(token: string): Promise<CheckoutSession> {
+  const res = await api.post('/api/billing/checkout/pending/session/', { token });
+  return res.data;
+}
+
 export async function cancelSubscription(immediate = false): Promise<Subscription> {
   const res = await api.post('/api/billing/subscription/cancel/', { immediate });
   return res.data;

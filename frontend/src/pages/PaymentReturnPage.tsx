@@ -2,26 +2,43 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Loader2, CheckCircle, Clock, CreditCard } from 'lucide-react';
 import { fetchSubscription } from '../services/billing';
+import { registerStatus } from '../services/auth';
+import { useAuth } from '../contexts/AuthContext';
 
 type Status = 'checking' | 'active' | 'pending';
 
 export const PaymentReturnPage: React.FC = () => {
   const nav = useNavigate();
+  const { setUser } = useAuth();
+  const params = new URLSearchParams(window.location.search);
+  const regToken = params.get('reg') || '';
+  const canceled = params.get('status') === 'cancelado';
+
   const [status, setStatus] = useState<Status>('checking');
   const [attempts, setAttempts] = useState(0);
-  const canceled = new URLSearchParams(window.location.search).get('status') === 'cancelado';
 
   const check = useCallback(async () => {
     setStatus('checking');
     try {
-      const s = await fetchSubscription();
-      setStatus(s.status === 'active' || s.status === 'trial' ? 'active' : 'pending');
+      if (regToken) {
+        // Cadastro diferido: a conta só nasce quando o pagamento confirma.
+        const r = await registerStatus(regToken);
+        if (r.ready && r.user) {
+          setUser(r.user);
+          setStatus('active');
+        } else {
+          setStatus('pending');
+        }
+      } else {
+        // Upgrade de usuário já existente (autenticado).
+        const s = await fetchSubscription();
+        setStatus(s.status === 'active' || s.status === 'trial' ? 'active' : 'pending');
+      }
     } catch {
       setStatus('pending');
     }
-  }, []);
+  }, [regToken, setUser]);
 
-  // Verifica ao montar e, se ainda pendente, refaz algumas vezes (webhook é assíncrono).
   useEffect(() => { check(); }, [check]);
   useEffect(() => {
     if (status !== 'pending' || attempts >= 5) return;
@@ -50,7 +67,7 @@ export const PaymentReturnPage: React.FC = () => {
             <CheckCircle className="w-12 h-12 text-accent-neon mx-auto" />
             <div>
               <p className="font-semibold text-lg">Pagamento confirmado!</p>
-              <p className="text-sm text-text-muted mt-1">Sua assinatura está ativa.</p>
+              <p className="text-sm text-text-muted mt-1">Sua conta está ativa.</p>
             </div>
             <button className="btn-primary w-full" onClick={() => nav('/inicio', { replace: true })}>
               Entrar no app
@@ -68,14 +85,14 @@ export const PaymentReturnPage: React.FC = () => {
               <p className="text-sm text-text-muted mt-1">
                 {canceled
                   ? 'Você pode tentar novamente ou escolher outra forma de pagamento.'
-                  : 'Assim que o pagamento for confirmado, seu acesso é liberado. Pode levar alguns instantes.'}
+                  : 'Assim que o pagamento for confirmado, sua conta é criada e o acesso liberado. Pode levar alguns instantes.'}
               </p>
             </div>
             <button className="btn-primary w-full" onClick={check}>
               Verificar novamente
             </button>
-            <button className="btn-secondary w-full flex items-center justify-center gap-2" onClick={() => nav('/assinatura', { replace: true })}>
-              <CreditCard className="w-4 h-4" /> Escolher forma de pagamento
+            <button className="btn-secondary w-full flex items-center justify-center gap-2" onClick={() => nav('/login', { replace: true })}>
+              <CreditCard className="w-4 h-4" /> Voltar ao início
             </button>
           </div>
         )}

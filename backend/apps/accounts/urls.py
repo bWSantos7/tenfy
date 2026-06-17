@@ -4,6 +4,11 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework_simplejwt.views import TokenRefreshView
 from .views import (
     RegisterView,
+    register_start,
+    register_verify_email,
+    register_resend_email,
+    register_complete,
+    register_status,
     CustomTokenObtainPairView,
     MeView,
     change_password,
@@ -34,6 +39,12 @@ router.register('invites', DependentInviteViewSet, basename='dependent-invite')
 urlpatterns = [
     path('', include(router.urls)),
     path('register/', RegisterView.as_view(), name='register'),
+    # Cadastro diferido (conta só criada na 1ª entrada)
+    path('register/start/', register_start, name='register_start'),
+    path('register/verify-email/', register_verify_email, name='register_verify_email'),
+    path('register/resend-email/', register_resend_email, name='register_resend_email'),
+    path('register/complete/', register_complete, name='register_complete'),
+    path('register/status/', register_status, name='register_status'),
     path('login/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('token/refresh/', ThrottledTokenRefreshView.as_view(), name='token_refresh'),
     path('logout/', logout, name='logout'),

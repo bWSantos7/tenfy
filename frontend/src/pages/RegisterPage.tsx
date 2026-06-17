@@ -5,9 +5,9 @@ import {
   Users, User, Zap, FlaskConical, ShieldCheck,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { register, sendEmailOtp, verifyEmailOtp, createChildAccount } from '../services/auth';
+import { createChildAccount, registerStart, registerVerifyEmail, registerResendEmail, registerComplete, registerStatus } from '../services/auth';
 import { createProfile } from '../services/data';
-import { checkout, fetchPlans, fetchSubscription, validateCoupon, createCheckoutSession, Plan, CouponValidation } from '../services/billing';
+import { fetchPlans, validateCoupon, checkoutPendingPix, checkoutPendingSession, Plan, CouponValidation } from '../services/billing';
 import { useAuth } from '../contexts/AuthContext';
 import { extractApiError } from '../services/api';
 import { User as UserType } from '../types';
@@ -88,6 +88,7 @@ export const RegisterPage: React.FC = () => {
   const { setUser, isAuthenticated } = useAuth();
 
   const [step, setStep] = useState<Step>('form');
+  const [regToken, setRegToken] = useState('');   // token do cadastro pendente (conta ainda não criada)
   const [registeredUser, setRegisteredUser] = useState<UserType | null>(null);
   const [duplicateEmail, setDuplicateEmail] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -218,11 +219,11 @@ export const RegisterPage: React.FC = () => {
     setStep('plan');
   }
 
-  // ─── Cria a conta (após escolher o plano) ───────────────────────────────────
+  // ─── Inicia o cadastro PENDENTE (não cria conta ainda) ──────────────────────
   async function doRegister() {
     setSubmitting(true);
     try {
-      const data = await register({
+      const data = await registerStart({
         full_name: form.full_name.trim(),
         email: form.email.trim(),
         phone: form.phone.trim(),
@@ -232,13 +233,16 @@ export const RegisterPage: React.FC = () => {
         role,
         accept_terms: form.accept_terms,
         marketing_consent: form.marketing_consent,
+        plan_slug: planSlug,
+        billing_period: 'monthly',
+        coupon_code: couponResult?.valid ? couponCode.trim() : '',
       });
-      setRegisteredUser(data.user);
+      setRegToken(data.token);
       setProfile((p) => ({ ...p, display_name: form.full_name.trim() }));
       if (data.email_otp_sent === false) {
-        toast('Conta criada, mas não conseguimos enviar o código. Tente reenviar em instantes.');
+        toast('Não conseguimos enviar o código. Tente reenviar em instantes.');
       } else {
-        toast.success('Conta criada! Verifique seu e-mail.');
+        toast.success('Enviamos um código para o seu e-mail.');
       }
       setStep('otp');
       setTimeout(() => otpInputRef.current?.focus(), 100);
@@ -258,22 +262,21 @@ export const RegisterPage: React.FC = () => {
     e.preventDefault();
     setSubmitting(true);
     try {
-      await verifyEmailOtp(otpCode.trim());
+      await registerVerifyEmail(regToken, otpCode.trim());
       toast.success('E-mail verificado!');
 
-      if (planSlug === 'tester') {
-        // Tester: cria assinatura em background, sem pagamento.
-        // Usar 'tester' para que responsáveis possam cadastrar múltiplos dependentes
-        // (tester tem max_members=4; 'individual' bloquearia o segundo dependente).
-        checkout({ plan_slug: 'tester' as any, billing_period: 'monthly', payment_method: 'pix' }).catch(() => {});
+      if (planSlug === 'tester' || planSlug === 'free') {
+        // Sem pagamento: materializa a conta agora e faz login.
+        const data = await registerComplete(regToken);
+        setRegisteredUser(data.user);
         if (role === 'parent') {
+          setUser(data.user);
           setStep('done_parent');
         } else {
           setStep('profile');
         }
-      } else if (planSlug === 'free') {
-        setStep('profile');
       } else {
+        // Plano pago: a conta só será criada após o pagamento confirmar.
         setStep('payment');
       }
     } catch (err) {
@@ -281,18 +284,13 @@ export const RegisterPage: React.FC = () => {
     } finally { setSubmitting(false); }
   }
 
-  // ─── Step: Payment ────────────────────────────────────────────────────────
+  // ─── Step: Payment (cadastro pendente — conta criada só após pagar) ─────────
   // Pix: gera QR + copia-e-cola NO APP (sem sair).
   async function startPixCheckout() {
     setPaymentLoading(true);
     setPixCode(''); setPixQR('');
     try {
-      const res = await checkout({
-        plan_slug: planSlug as 'individual' | 'familia',
-        billing_period: 'monthly',
-        payment_method: 'pix',
-        coupon_code: couponResult?.valid ? couponCode.trim() : undefined,
-      });
+      const res = await checkoutPendingPix(regToken);
       if (res.pix?.copia_e_cola) {
         setPixCode(res.pix.copia_e_cola);
         setPixQR(res.pix.qr_code_image ?? '');
@@ -308,11 +306,7 @@ export const RegisterPage: React.FC = () => {
   async function startCardCheckout() {
     setPaymentLoading(true);
     try {
-      const res = await createCheckoutSession({
-        plan_slug: planSlug as 'individual' | 'familia',
-        billing_period: 'monthly',
-        coupon_code: couponResult?.valid ? couponCode.trim() : undefined,
-      });
+      const res = await checkoutPendingSession(regToken);
       if (res.checkout_url) {
         window.location.href = res.checkout_url;
       } else {
@@ -328,13 +322,16 @@ export const RegisterPage: React.FC = () => {
     else setStep('profile');
   }
 
-  // "Já paguei" — só avança se a assinatura realmente confirmou (item 2).
+  // "Já paguei" — a conta só existe quando o pagamento confirma (webhook).
+  // Faz polling do status; quando pronto, loga e entra no app.
   async function verifyPaymentAndContinue() {
     setVerifyingPayment(true);
     try {
-      const s = await fetchSubscription();
-      if (s.status === 'active' || s.status === 'trial') {
-        proceedAfterPayment();
+      const r = await registerStatus(regToken);
+      if (r.ready && r.user) {
+        setUser(r.user);
+        toast.success('Pagamento confirmado! Bem-vindo ao Tenfy.');
+        nav('/inicio', { replace: true });
       } else {
         toast('Pagamento ainda não confirmado. Assim que o Asaas confirmar, o acesso é liberado.');
       }
@@ -408,7 +405,7 @@ export const RegisterPage: React.FC = () => {
 
   async function resendOtp() {
     setResending(true);
-    try { await sendEmailOtp(); toast.success('Novo código enviado.'); }
+    try { await registerResendEmail(regToken); toast.success('Novo código enviado.'); }
     catch { toast.error('Não foi possível reenviar.'); }
     finally { setResending(false); }
   }

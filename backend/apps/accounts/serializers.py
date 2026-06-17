@@ -162,6 +162,39 @@ class RegisterSerializer(serializers.ModelSerializer):
         return user
 
 
+class PendingRegisterSerializer(serializers.Serializer):
+    """Valida os dados do cadastro SEM criar a conta (vai para PendingRegistration)."""
+    email             = serializers.EmailField()
+    full_name         = serializers.CharField(max_length=150)
+    phone             = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    cpf               = serializers.CharField()
+    password          = serializers.CharField(write_only=True, validators=[validate_password])
+    password_confirm  = serializers.CharField(write_only=True)
+    role              = serializers.CharField(required=False, allow_blank=True)
+    accept_terms      = serializers.BooleanField()
+    marketing_consent = serializers.BooleanField(required=False, default=False)
+    plan_slug         = serializers.CharField()
+    billing_period    = serializers.CharField(required=False, allow_blank=True, default='monthly')
+    coupon_code       = serializers.CharField(required=False, allow_blank=True, default='')
+
+    def validate(self, attrs):
+        if attrs['password'] != attrs.pop('password_confirm'):
+            raise serializers.ValidationError({'password': 'As senhas não conferem.'})
+        if not attrs.pop('accept_terms'):
+            raise serializers.ValidationError({'accept_terms': 'É necessário aceitar os termos.'})
+        if User.objects.filter(email__iexact=attrs['email']).exists():
+            raise serializers.ValidationError({'email': 'Já existe um cadastro com este e-mail.'})
+        if full_name_taken(attrs.get('full_name', '')):
+            raise serializers.ValidationError({'full_name': 'Já existe um cadastro com este nome completo.'})
+        digits = only_digits(attrs.get('cpf', ''))
+        if not is_valid_cpf(digits):
+            raise serializers.ValidationError({'cpf': 'CPF inválido.'})
+        if User.objects.filter(cpf=digits).exists():
+            raise serializers.ValidationError({'cpf': 'Já existe uma conta com este CPF.'})
+        attrs['cpf'] = digits
+        return attrs
+
+
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     @classmethod
     def get_token(cls, user):

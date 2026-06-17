@@ -348,6 +348,74 @@ def create_checkout_session(
     return _request('POST', '/checkouts', json=payload)
 
 
+def ensure_customer_for_pending(pending) -> str:
+    """Cria (ou retorna) o cliente Asaas a partir de um PendingRegistration (sem User)."""
+    if pending.asaas_customer_id:
+        return pending.asaas_customer_id
+    payload = {
+        'name': pending.full_name or pending.email,
+        'email': pending.email,
+        'phone': pending.phone or '',
+        'externalReference': f'reg:{pending.token}',
+    }
+    if pending.cpf:
+        payload['cpfCnpj'] = pending.cpf
+    cust = _request('POST', '/customers', json=payload)
+    cid = cust.get('id', '')
+    pending.asaas_customer_id = cid
+    pending.save(update_fields=['asaas_customer_id', 'updated_at'])
+    return cid
+
+
+def create_pending_first_pix(pending, plan, discount_amount) -> dict:
+    """Cobrança avulsa Pix descontada do 1º pagamento p/ um cadastro pendente. Retorna {payment, qr}."""
+    from datetime import date
+    from decimal import Decimal
+    cid = ensure_customer_for_pending(pending)
+    full = Decimal(plan.price_for_period(pending.billing_period))
+    value = full - Decimal(discount_amount or 0)
+    if value < 0:
+        value = Decimal('0')
+    payload = {
+        'customer': cid, 'billingType': 'PIX',
+        'value': float(value.quantize(Decimal('0.01'))),
+        'dueDate': date.today().isoformat(),
+        'description': f'Tenfy — Plano {plan.name} (1ª mensalidade)'[:255],
+        'externalReference': f'reg:{pending.token}',
+    }
+    payment = _request('POST', '/payments', json=payload)
+    qr = {}
+    if payment.get('id'):
+        try:
+            qr = get_pix_qr_code(payment['id'])
+        except Exception:  # noqa: BLE001
+            qr = {}
+    return {'payment': payment, 'qr': qr}
+
+
+def create_pending_checkout_session(pending, plan, discount_amount, success_url, cancel_url) -> dict:
+    """Checkout hospedado (Pix+Cartão) p/ um cadastro pendente (sem User). Retorna o checkout (com 'link')."""
+    from decimal import Decimal
+    full = Decimal(plan.price_for_period(pending.billing_period))
+    value = full - Decimal(discount_amount or 0)
+    if value < 0:
+        value = Decimal('0')
+    payload = {
+        'billingTypes': ['CREDIT_CARD', 'PIX'],
+        'chargeTypes': ['DETACHED'],
+        'minutesToExpire': 60,
+        'callback': {'successUrl': success_url, 'cancelUrl': cancel_url},
+        'items': [{
+            'name': f'Plano {plan.name}'[:30],
+            'description': f'Tenfy — Plano {plan.name} (1ª mensalidade)'[:255],
+            'quantity': 1,
+            'value': float(value.quantize(Decimal('0.01'))),
+        }],
+        'externalReference': f'reg:{pending.token}',
+    }
+    return _request('POST', '/checkouts', json=payload)
+
+
 def create_recurrence_after_first_payment(
     user,
     plan,

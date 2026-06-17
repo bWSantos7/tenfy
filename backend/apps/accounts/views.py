@@ -147,6 +147,117 @@ class RegisterView(generics.CreateAPIView):
         }, status=status.HTTP_201_CREATED)
 
 
+# ── Cadastro diferido (conta só criada quando o usuário entra de fato) ──────────
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+@throttle_classes([RegisterThrottle])
+def register_start(request):
+    """Valida os dados e cria um cadastro PENDENTE (não cria conta). Envia OTP por e-mail."""
+    from django.contrib.auth.hashers import make_password
+    from .serializers import PendingRegisterSerializer
+    from .models import PendingRegistration
+
+    ser = PendingRegisterSerializer(data=request.data)
+    ser.is_valid(raise_exception=True)
+    d = ser.validated_data
+
+    PendingRegistration.objects.filter(email__iexact=d['email'], consumed=False).delete()
+    pending = PendingRegistration.objects.create(
+        email=d['email'], full_name=d['full_name'], phone=d.get('phone', ''),
+        cpf=d['cpf'], password=make_password(d['password']),
+        role=d.get('role') or 'player', marketing_consent=d.get('marketing_consent', False),
+        plan_slug=d['plan_slug'], billing_period=d.get('billing_period') or 'monthly',
+        coupon_code=d.get('coupon_code', ''),
+    )
+    otp_sent = _send_dependent_email_code(d['email'])
+    return Response({'token': pending.token, 'email_otp_sent': otp_sent}, status=status.HTTP_201_CREATED)
+
+
+def _get_pending(token):
+    from .models import PendingRegistration
+    return PendingRegistration.objects.filter(token=token, consumed=False).first()
+
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def register_verify_email(request):
+    from .otp import verify_email_code
+    pending = _get_pending(request.data.get('token', ''))
+    if pending is None or pending.is_expired:
+        return Response({'detail': 'Cadastro não encontrado ou expirado.'}, status=status.HTTP_404_NOT_FOUND)
+    if not verify_email_code(pending.email, (request.data.get('code') or '').strip()):
+        return Response({'detail': 'Código inválido ou expirado.'}, status=status.HTTP_400_BAD_REQUEST)
+    pending.email_verified = True
+    pending.save(update_fields=['email_verified', 'updated_at'])
+    return Response({'verified': True})
+
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def register_resend_email(request):
+    pending = _get_pending(request.data.get('token', ''))
+    if pending is None or pending.is_expired:
+        return Response({'detail': 'Cadastro não encontrado ou expirado.'}, status=status.HTTP_404_NOT_FOUND)
+    return Response({'email_otp_sent': _send_dependent_email_code(pending.email)})
+
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def register_complete(request):
+    """Grátis/tester: materializa a conta agora (sem pagamento) e devolve o login."""
+    from .registration import materialize_full
+    pending = _get_pending(request.data.get('token', ''))
+    if pending is None or pending.is_expired:
+        return Response({'detail': 'Cadastro não encontrado ou expirado.'}, status=status.HTTP_404_NOT_FOUND)
+    if not pending.email_verified:
+        return Response({'detail': 'Confirme o e-mail primeiro.'}, status=status.HTTP_400_BAD_REQUEST)
+    if pending.plan_slug not in ('tester', 'free'):
+        return Response({'detail': 'Este plano exige pagamento.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    user = materialize_full(pending)
+    if pending.plan_slug == 'tester':
+        from apps.billing.models import Plan, Subscription
+        try:
+            tester = Plan.objects.get(slug='tester')
+            sub = user.subscription
+            sub.plan = tester
+            sub.status = Subscription.STATUS_ACTIVE
+            sub.pending_plan = None
+            sub.pending_billing_period = ''
+            sub.save(update_fields=['plan', 'status', 'pending_plan', 'pending_billing_period', 'updated_at'])
+        except Exception:  # noqa: BLE001
+            logger.exception('Failed to activate tester subscription for user %s', user.id)
+
+    refresh = RefreshToken.for_user(user)
+    return Response({
+        'user': UserSerializer(user, context={'request': request}).data,
+        'access': str(refresh.access_token), 'refresh': str(refresh),
+    }, status=status.HTTP_201_CREATED)
+
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def register_status(request):
+    """Polling pós-pagamento: se a conta já foi materializada (webhook), devolve o login."""
+    from .models import PendingRegistration
+    token = request.data.get('token', '')
+    pending = PendingRegistration.objects.filter(token=token).first()
+    if pending is None:
+        return Response({'ready': False}, status=status.HTTP_404_NOT_FOUND)
+    if not pending.consumed:
+        return Response({'ready': False})
+    user = User.objects.filter(email__iexact=pending.email).first()
+    if user is None:
+        return Response({'ready': False})
+    refresh = RefreshToken.for_user(user)
+    return Response({
+        'ready': True,
+        'user': UserSerializer(user, context={'request': request}).data,
+        'access': str(refresh.access_token), 'refresh': str(refresh),
+    })
+
+
 class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
 

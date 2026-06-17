@@ -336,9 +336,23 @@ def user_detail(request, pk):
     if request.method == 'DELETE':
         if user.is_superuser:
             return Response({'detail': 'Não é possível deletar um superusuário.'}, status=status.HTTP_400_BAD_REQUEST)
+        from django.db import transaction
+        from django.db.models import ProtectedError
         _audit(request.user, AuditLog.ACTION_DELETE, user.id,
                diff={'email': user.email}, reason='Usuário excluído pelo administrador.', request=request)
-        user.delete()
+        try:
+            with transaction.atomic():
+                # Payment.user é PROTECT — remover os pagamentos antes da exclusão
+                # (exclusão de conta é irreversível por design). As comissões
+                # vinculadas ficam com payment=NULL (SET_NULL), preservando o ledger
+                # do parceiro; a assinatura e os vínculos de família caem por CASCADE.
+                user.payments.all().delete()
+                user.delete()
+        except ProtectedError:
+            return Response(
+                {'detail': 'Não foi possível excluir: o usuário possui registros vinculados que impedem a exclusão.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     # PATCH

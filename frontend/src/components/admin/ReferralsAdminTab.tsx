@@ -441,8 +441,12 @@ const CommissionsSection: React.FC = () => {
 
   return (
     <div className="space-y-3">
-      <div className="flex justify-between items-center">
+      <div className="flex items-center gap-2">
         <button className="btn-secondary !text-xs" onClick={load}><RefreshCcw className="w-3 h-3 inline mr-1" />Atualizar</button>
+        <select className="input-base !text-xs !w-auto !py-1" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+          <option value="">Todos os status</option>
+          {Object.entries(COMMISSION_STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+        </select>
       </div>
 
       {/* Consolidação por parceiro */}
@@ -473,13 +477,7 @@ const CommissionsSection: React.FC = () => {
       )}
 
       {/* Lista de lançamentos */}
-      <div className="flex items-center justify-between pt-2">
-        <div className="text-xs font-semibold text-text-muted">Lançamentos</div>
-        <select className="input-base !text-xs" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-          <option value="">Todos os status</option>
-          {Object.entries(COMMISSION_STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-        </select>
-      </div>
+      <div className="text-xs font-semibold text-text-muted pt-2">Lançamentos</div>
       {!loading && items.length === 0 ? <Empty text="Nenhum lançamento." /> : (
         <div className="space-y-1.5">
           {items.map((c) => (

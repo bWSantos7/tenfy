@@ -40,6 +40,7 @@ const AdminPanelPage      = lazyPage(() => import('./pages/AdminPanelPage').then
 const ResultsPage         = lazyPage(() => import('./pages/ResultsPage').then(m => ({ default: m.ResultsPage })));
 const CoachPage           = lazyPage(() => import('./pages/CoachPage').then(m => ({ default: m.CoachPage })));
 const SubscriptionPage    = lazyPage(() => import('./pages/SubscriptionPage').then(m => ({ default: m.SubscriptionPage })));
+const PaymentReturnPage   = lazyPage(() => import('./pages/PaymentReturnPage').then(m => ({ default: m.PaymentReturnPage })));
 const PrivacyPolicyPage   = lazyPage(() => import('./pages/PrivacyPolicyPage').then(m => ({ default: m.PrivacyPolicyPage })));
 const AccountDeletionPage = lazyPage(() => import('./pages/AccountDeletionPage').then(m => ({ default: m.AccountDeletionPage })));
 const InscricoesPage      = lazyPage(() => import('./pages/InscricoesPage').then(m => ({ default: m.InscricoesPage })));
@@ -122,6 +123,16 @@ const App: React.FC = () => {
             }
           />
         </Route>
+
+        {/* Retorno do pagamento (Asaas) — fora do app (sem nav/paywall). */}
+        <Route
+          path="/pagamento"
+          element={
+            <ProtectedRoute>
+              <PaymentReturnPage />
+            </ProtectedRoute>
+          }
+        />
 
         <Route path="/politica-privacidade" element={<PrivacyPolicyPage />} />
 

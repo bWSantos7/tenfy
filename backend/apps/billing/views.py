@@ -329,9 +329,10 @@ def checkout_session(request):
         ])
 
     # URLs fixas (FRONTEND_URL) — evita open redirect a partir de input do cliente.
+    # Retorna para uma página dedicada de pagamento (fora do app), não para /assinatura.
     frontend = getattr(settings, 'FRONTEND_URL', '').rstrip('/')
-    success_url = f'{frontend}/assinatura'
-    cancel_url = f'{frontend}/assinatura'
+    success_url = f'{frontend}/pagamento?status=sucesso'
+    cancel_url = f'{frontend}/pagamento?status=cancelado'
 
     try:
         from .services.asaas_service import create_checkout_session

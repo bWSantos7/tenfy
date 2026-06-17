@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   ArrowRight, CheckCircle, Check, Loader2, Mail, CreditCard,
-  Users, User, Zap, FlaskConical, ShieldCheck,
+  Users, User, Zap, FlaskConical, ShieldCheck, Tag, X,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { createChildAccount, registerStart, registerVerifyEmail, registerResendEmail, registerComplete, registerStatus } from '../services/auth';
@@ -100,9 +100,10 @@ export const RegisterPage: React.FC = () => {
   const [apiPlans, setApiPlans] = useState<Plan[]>([]);
   const [loadingPlans, setLoadingPlans] = useState(true);
 
-  // Cupom (obrigatório p/ planos pagos enquanto eles ficam invisíveis ao público)
+  // Cupom — planos pagos ficam invisíveis e só aparecem quando um cupom válido é aplicado.
   const [couponCode, setCouponCode] = useState('');
-  const [couponResult, setCouponResult] = useState<CouponValidation | null>(null);
+  const [couponResults, setCouponResults] = useState<Record<string, CouponValidation>>({});
+  const [couponApplied, setCouponApplied] = useState(false);
   const [validatingCoupon, setValidatingCoupon] = useState(false);
 
   // Payment
@@ -176,28 +177,36 @@ export const RegisterPage: React.FC = () => {
     return PLAN_META[slug].price;
   }
 
+  // Valida o cupom contra os planos pagos e revela os que ele libera.
   async function applyCoupon() {
     const code = couponCode.trim();
-    if (!code || !isPaidPlan(planSlug)) return;
+    if (!code) return;
     setValidatingCoupon(true);
     try {
-      const r = await validateCoupon({ coupon_code: code, plan_slug: planSlug as 'individual' | 'familia', billing_period: 'monthly' });
-      setCouponResult(r);
-      if (r.valid) toast.success('Cupom válido!');
-      else toast.error(r.detail || 'Cupom inválido.');
+      const slugs: ('individual' | 'familia')[] = ['individual', 'familia'];
+      const results = await Promise.all(
+        slugs.map((s) => validateCoupon({ coupon_code: code, plan_slug: s, billing_period: 'monthly' })),
+      );
+      const map: Record<string, CouponValidation> = {};
+      slugs.forEach((s, i) => { map[s] = results[i]; });
+      setCouponResults(map);
+      setCouponApplied(true);
+      if (results.some((r) => r.valid)) toast.success('Cupom aplicado! Planos liberados abaixo.');
+      else toast.error(results[0]?.detail || 'Cupom inválido.');
     } catch (err) {
       toast.error(extractApiError(err));
     } finally { setValidatingCoupon(false); }
   }
 
-  function selectPlan(slug: PlanSlug) {
-    setPlanSlug(slug);
-    setCouponResult(null);   // desconto depende do plano — revalida ao trocar
+  function clearCoupon() {
+    setCouponCode(''); setCouponResults({}); setCouponApplied(false);
+    if (isPaidPlan(planSlug)) setPlanSlug('tester');
   }
 
-  // Plano pago exige cupom válido para o slug atual (espelha o gate do backend).
-  const couponOkForPlan = !!couponResult?.valid;
-  const canContinuePlan = !isPaidPlan(planSlug) || couponOkForPlan;
+  function selectPlan(slug: PlanSlug) { setPlanSlug(slug); }
+
+  // Plano pago só é selecionável quando há cupom válido para ele (espelha o gate do backend).
+  const canContinuePlan = !isPaidPlan(planSlug) || !!couponResults[planSlug]?.valid;
 
   // Role derived from plan + isResponsible (igual ao mobile)
   const role = ((planSlug === 'familia' || planSlug === 'tester') && form.isResponsible)
@@ -235,7 +244,7 @@ export const RegisterPage: React.FC = () => {
         marketing_consent: form.marketing_consent,
         plan_slug: planSlug,
         billing_period: 'monthly',
-        coupon_code: couponResult?.valid ? couponCode.trim() : '',
+        coupon_code: couponResults[planSlug]?.valid ? couponCode.trim() : '',
       });
       setRegToken(data.token);
       setProfile((p) => ({ ...p, display_name: form.full_name.trim() }));
@@ -464,92 +473,96 @@ export const RegisterPage: React.FC = () => {
               <h2 className="text-lg font-bold">Escolha o plano</h2>
               <p className="text-xs text-text-muted mt-0.5">Pode fazer upgrade depois.</p>
             </div>
+
+            {/* Cupom — revela os planos pagos (invisíveis ao público) */}
+            <div className="rounded-xl border border-border-subtle bg-bg-card p-3 space-y-2">
+              <div className="text-xs font-semibold text-text-secondary flex items-center gap-1.5">
+                <Tag className="w-3.5 h-3.5 text-accent-neon" /> Tem um cupom de parceiro?
+              </div>
+              <div className="flex gap-2">
+                <input
+                  className="input-base flex-1 text-sm uppercase"
+                  placeholder="SEUCUPOM"
+                  value={couponCode}
+                  onChange={(e) => { setCouponCode(e.target.value); setCouponResults({}); setCouponApplied(false); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); applyCoupon(); } }}
+                  disabled={validatingCoupon}
+                />
+                {couponApplied ? (
+                  <button type="button" className="btn-secondary !text-sm px-3" onClick={clearCoupon} disabled={validatingCoupon}>
+                    <X className="w-4 h-4" />
+                  </button>
+                ) : (
+                  <button type="button" className="btn-primary !text-sm px-4" onClick={applyCoupon} disabled={validatingCoupon || !couponCode.trim()}>
+                    {validatingCoupon ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Aplicar'}
+                  </button>
+                )}
+              </div>
+              {couponApplied && !(['individual', 'familia'] as PlanSlug[]).some((s) => couponResults[s]?.valid) && (
+                <div className="text-[11px] text-red-400">{couponResults['individual']?.detail || 'Cupom inválido.'}</div>
+              )}
+            </div>
+
             {loadingPlans ? (
               <div className="py-6 flex justify-center"><Loader2 className="w-6 h-6 text-accent-neon animate-spin" /></div>
             ) : (
               <div className="space-y-2">
-                {/* Por hora exibe somente os planos disponíveis (AVAILABLE_PLANS = ['tester']);
-                    os demais ficam ocultos (não removidos). Para reexibir, basta
-                    voltar a listar os slugs aqui / em AVAILABLE_PLANS. */}
-                {AVAILABLE_PLANS.map((slug) => {
-                  const meta = PLAN_META[slug];
-                  const available = isPlanAvailable(slug);
-                  const selected = planSlug === slug && available;
-                  const apiPlan = apiPlans.find((p) => p.slug === (slug as any));
-                  return (
-                    <button key={slug} type="button" disabled={!available}
-                      onClick={() => available && selectPlan(slug)}
-                      className={`w-full text-left p-4 rounded-xl border transition-all ${selected ? 'border-accent-neon bg-accent-neon/10' : available ? 'border-border-subtle bg-bg-card hover:border-accent-neon/40' : 'border-border-subtle bg-bg-card opacity-50 cursor-not-allowed'}`}>
-                      <div className="flex items-start gap-3">
-                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${selected ? 'bg-accent-neon/20' : 'bg-bg-elevated'}`}>
-                          <meta.icon className={`w-4 h-4 ${selected ? 'text-accent-neon' : 'text-text-muted'}`} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className={`font-semibold text-sm ${selected ? 'text-accent-neon' : 'text-text-primary'}`}>{meta.label}</span>
-                            <span className={`text-sm font-bold ${selected ? 'text-accent-neon' : 'text-text-secondary'}`}>{getPlanPrice(slug)}</span>
-                            {!available ? (
-                              <span className="text-[10px] font-bold text-text-muted bg-bg-elevated px-1.5 py-0.5 rounded">EM BREVE</span>
-                            ) : slug === 'tester' ? (
-                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-accent-neon/20 text-accent-neon">PERÍODO BETA</span>
-                            ) : apiPlan?.highlight_label ? (
-                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-accent-neon/20 text-accent-neon">{apiPlan.highlight_label.toUpperCase()}</span>
-                            ) : null}
+                {/* Tester sempre; planos pagos só quando um cupom válido os libera. */}
+                {(['tester', 'individual', 'familia'] as PlanSlug[])
+                  .filter((slug) => slug === 'tester' || couponResults[slug]?.valid)
+                  .map((slug) => {
+                    const meta = PLAN_META[slug];
+                    const selected = planSlug === slug;
+                    const apiPlan = apiPlans.find((p) => p.slug === (slug as any));
+                    const cv = couponResults[slug];
+                    const hasCoupon = !!cv?.valid;
+                    return (
+                      <button key={slug} type="button"
+                        onClick={() => selectPlan(slug)}
+                        className={`w-full text-left p-4 rounded-xl border transition-all ${selected ? 'border-accent-neon bg-accent-neon/10' : 'border-border-subtle bg-bg-card hover:border-accent-neon/40'}`}>
+                        <div className="flex items-start gap-3">
+                          <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${selected ? 'bg-accent-neon/20' : 'bg-bg-elevated'}`}>
+                            <meta.icon className={`w-4 h-4 ${selected ? 'text-accent-neon' : 'text-text-muted'}`} />
                           </div>
-                          <p className="text-xs text-text-muted mt-0.5">{meta.description}</p>
-                          {available && apiPlan && apiPlan.features.length > 0 && (
-                            <div className="mt-1.5 space-y-0.5">
-                              {apiPlan.features.slice(0, 3).map((f) => (
-                                <div key={f.code} className="flex items-center gap-1 text-[11px] text-accent-neon">
-                                  <Check className="w-3 h-3 shrink-0" />{f.name}
-                                </div>
-                              ))}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className={`font-semibold text-sm ${selected ? 'text-accent-neon' : 'text-text-primary'}`}>{meta.label}</span>
+                              {hasCoupon ? (
+                                <span className="text-sm font-bold text-accent-neon">
+                                  R$ {parseFloat(cv.final).toFixed(2).replace('.', ',')}
+                                  <span className="text-xs text-text-muted line-through ml-1">R$ {parseFloat(cv.original).toFixed(2).replace('.', ',')}</span>
+                                </span>
+                              ) : (
+                                <span className={`text-sm font-bold ${selected ? 'text-accent-neon' : 'text-text-secondary'}`}>{getPlanPrice(slug)}</span>
+                              )}
+                              {slug === 'tester' ? (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-accent-neon/20 text-accent-neon">PERÍODO BETA</span>
+                              ) : hasCoupon ? (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-accent-neon/20 text-accent-neon">CUPOM</span>
+                              ) : null}
                             </div>
-                          )}
-                        </div>
-                        {available && (
+                            <p className="text-xs text-text-muted mt-0.5">{meta.description}</p>
+                            {hasCoupon && (
+                              <p className="text-[11px] text-accent-neon mt-0.5">1ª mensalidade com desconto; depois {getPlanPrice(slug)}.</p>
+                            )}
+                            {apiPlan && apiPlan.features.length > 0 && (
+                              <div className="mt-1.5 space-y-0.5">
+                                {apiPlan.features.slice(0, 3).map((f) => (
+                                  <div key={f.code} className="flex items-center gap-1 text-[11px] text-accent-neon">
+                                    <Check className="w-3 h-3 shrink-0" />{f.name}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                           <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 mt-1 ${selected ? 'border-accent-neon bg-accent-neon' : 'border-border-subtle'}`}
                             style={selected ? { color: 'rgb(var(--btn-text))' } : undefined}>
                             {selected && <Check className="w-3 h-3" />}
                           </div>
-                        )}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Cupom — obrigatório p/ planos pagos (gate do backend) */}
-            {isPaidPlan(planSlug) && (
-              <div className="rounded-xl border border-border-subtle bg-bg-card p-3 space-y-2">
-                <div className="text-xs font-semibold text-text-secondary">Cupom de parceiro</div>
-                <div className="text-[11px] text-text-muted">
-                  Os planos pagos estão disponíveis com cupom de parceiro. Informe o cupom para continuar.
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    className="input-base flex-1 text-sm uppercase"
-                    placeholder="SEUCUPOM"
-                    value={couponCode}
-                    onChange={(e) => { setCouponCode(e.target.value); setCouponResult(null); }}
-                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); applyCoupon(); } }}
-                    disabled={validatingCoupon}
-                  />
-                  <button type="button" className="btn-primary !text-sm px-4" onClick={applyCoupon} disabled={validatingCoupon || !couponCode.trim()}>
-                    {validatingCoupon ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Aplicar'}
-                  </button>
-                </div>
-                {couponResult && (
-                  couponResult.valid ? (
-                    <div className="text-[11px] text-accent-neon">
-                      Cupom aplicado: <strong>R$ {parseFloat(couponResult.final).toFixed(2).replace('.', ',')}</strong> na 1ª mensalidade
-                      {' '}(economia de R$ {parseFloat(couponResult.discount).toFixed(2).replace('.', ',')}).
-                    </div>
-                  ) : (
-                    <div className="text-[11px] text-red-400">{couponResult.detail || 'Cupom inválido.'}</div>
-                  )
-                )}
+                        </div>
+                      </button>
+                    );
+                  })}
               </div>
             )}
 
@@ -567,9 +580,6 @@ export const RegisterPage: React.FC = () => {
                 Criar conta
               </button>
             </div>
-            {isPaidPlan(planSlug) && !couponOkForPlan && (
-              <p className="text-[11px] text-text-muted text-center">Aplique um cupom válido para continuar com este plano.</p>
-            )}
           </div>
         )}
 
@@ -716,11 +726,11 @@ export const RegisterPage: React.FC = () => {
               <CreditCard className="w-5 h-5 text-accent-neon" />
               <h2 className="font-semibold">Pagamento — Plano {PLAN_META[planSlug].label}</h2>
             </div>
-            {couponResult?.valid ? (
+            {couponResults[planSlug]?.valid ? (
               <div className="rounded-lg bg-accent-neon/8 border border-accent-neon/20 p-3 text-sm">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-lg font-bold text-accent-neon">R$ {parseFloat(couponResult.final).toFixed(2).replace('.', ',')}</span>
-                  <span className="text-xs text-text-muted line-through">R$ {parseFloat(couponResult.original).toFixed(2).replace('.', ',')}</span>
+                  <span className="text-lg font-bold text-accent-neon">R$ {parseFloat(couponResults[planSlug].final).toFixed(2).replace('.', ',')}</span>
+                  <span className="text-xs text-text-muted line-through">R$ {parseFloat(couponResults[planSlug].original).toFixed(2).replace('.', ',')}</span>
                 </div>
                 <p className="text-[11px] text-accent-neon">1ª mensalidade com cupom {couponCode.trim().toUpperCase()}.</p>
               </div>

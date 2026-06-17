@@ -25,13 +25,10 @@ const rootErrorFallback = () => (
   </div>
 );
 
-// When a new service worker activates (skipWaiting), reload the page so users
-// immediately see the new version instead of needing incognito / manual clear.
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    window.location.reload();
-  });
-}
+// Não recarregamos a página automaticamente quando o service worker atualiza:
+// isso causava "refresh do nada" no meio do uso (ex.: digitando um cadastro).
+// O PWA atualiza o cache em segundo plano e a versão nova entra na próxima
+// navegação/recarga manual, sem interromper o usuário nem perder o que digitou.
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

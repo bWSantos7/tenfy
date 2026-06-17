@@ -669,6 +669,36 @@ def _handle_payment_confirmed(payload: dict):
         from apps.referrals.services.commission import generate_commission_for_payment
         generate_commission_for_payment(payment_obj, sub)
 
+    # Recorrência: o 1º pagamento veio de um checkout hospedado/avulsa (sem subscription
+    # do Asaas). Cria a assinatura recorrente a preço cheio a partir do próximo ciclo.
+    # Protegido: falha aqui não pode reverter ativação/comissão.
+    if (
+        sub and not asaas_sub_id and not sub.asaas_subscription_id
+        and sub.plan.slug in ('individual', 'familia')
+    ):
+        try:
+            billing_type = p.get('billingType', 'PIX')
+            card_token = (p.get('creditCard') or {}).get('creditCardToken', '')
+            if billing_type == 'CREDIT_CARD' and not card_token:
+                # Token não veio no webhook — busca o pagamento p/ habilitar recorrência no cartão.
+                try:
+                    from .services.asaas_service import get_payment
+                    card_token = (get_payment(p.get('id', '')).get('creditCard') or {}).get('creditCardToken', '')
+                except Exception:
+                    card_token = ''
+            from .services.asaas_service import create_recurrence_after_first_payment
+            rec = create_recurrence_after_first_payment(
+                user=user, plan=sub.plan, billing_period=sub.billing_period,
+                billing_type=billing_type, card_token=card_token,
+            )
+            rec_id = rec.get('id', '')
+            if rec_id:
+                sub.asaas_subscription_id = rec_id
+                sub.save(update_fields=['asaas_subscription_id', 'updated_at'])
+                logger.info('Recurrence subscription %s created for sub %s', rec_id, sub.id)
+        except Exception as exc:
+            logger.error('Failed to create recurrence for sub %s: %s — manual follow-up needed', sub.id, exc)
+
 
 def _handle_payment_overdue(payload: dict):
     p = payload.get('payment', {})

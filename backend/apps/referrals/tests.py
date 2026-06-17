@@ -572,6 +572,57 @@ class CommissionWebhookTests(TestCase):
         self.assertEqual(CommissionLedger.objects.filter(subscription=self.sub).count(), 1)
 
 
+class RecurrenceWebhookTests(TestCase):
+    """1º pagamento do checkout hospedado (sem subscription do Asaas) cria a recorrência."""
+    def setUp(self):
+        self.client = APIClient()
+        self.partner = make_partner()
+        self.coupon = make_coupon(self.partner, code='PROMO10', discount_value=Decimal('10'))
+        self.rule = CommissionRule.objects.create(
+            partner=self.partner, coupon=self.coupon,
+            commission_type=CommissionRule.COMMISSION_PERCENT, commission_value=Decimal('20'),
+        )
+        self.user = User.objects.create_user(email='rec@ex.com', password='x', full_name='Rec')
+        self.plan = make_paid_plan('individual', '49.90')
+        self.sub = Subscription.objects.create(
+            user=self.user, plan=self.plan, status=Subscription.STATUS_PENDING,
+            pending_plan=self.plan, asaas_subscription_id='',  # checkout hospedado: sem sub Asaas ainda
+            partner=self.partner, coupon=self.coupon,
+        )
+
+    def _post(self, payload, token='test_token'):
+        with patch.dict('django.conf.settings.__dict__', {'ASAAS_WEBHOOK_TOKEN': token}):
+            return self.client.post('/api/billing/webhooks/asaas/', payload, format='json', HTTP_ASAAS_WEBHOOK_TOKEN=token)
+
+    def test_first_payment_creates_recurrence(self):
+        with patch('apps.billing.services.asaas_service.create_recurrence_after_first_payment',
+                   return_value={'id': 'sub_rec_1'}) as m:
+            res = self._post({
+                'event': 'PAYMENT_CONFIRMED',
+                'payment': {'id': 'pay_first', 'externalReference': str(self.user.id),
+                            'value': 44.91, 'netValue': 43.50, 'billingType': 'PIX'},
+            })
+        self.assertEqual(res.status_code, 200)
+        m.assert_called_once()
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.asaas_subscription_id, 'sub_rec_1')
+        self.assertEqual(self.sub.status, Subscription.STATUS_ACTIVE)
+
+    def test_recurrence_failure_does_not_break_activation(self):
+        with patch('apps.billing.services.asaas_service.create_recurrence_after_first_payment',
+                   side_effect=Exception('asaas down')):
+            res = self._post({
+                'event': 'PAYMENT_CONFIRMED',
+                'payment': {'id': 'pay_first2', 'externalReference': str(self.user.id),
+                            'value': 44.91, 'netValue': 43.50, 'billingType': 'PIX'},
+            })
+        self.assertEqual(res.status_code, 200)
+        self.sub.refresh_from_db()
+        # Ativou e comissionou mesmo com falha na recorrência.
+        self.assertEqual(self.sub.status, Subscription.STATUS_ACTIVE)
+        self.assertEqual(CommissionLedger.objects.filter(subscription=self.sub).count(), 1)
+
+
 # ── Fase 4 — painel admin ────────────────────────────────────────────────────────
 
 def make_superuser(email='master@ex.com'):

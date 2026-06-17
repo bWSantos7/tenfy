@@ -348,6 +348,53 @@ def create_checkout_session(
     return _request('POST', '/checkouts', json=payload)
 
 
+def create_recurrence_after_first_payment(
+    user,
+    plan,
+    billing_period: str,
+    billing_type: str,
+    card_token: str = '',
+) -> dict:
+    """
+    Cria a assinatura RECORRENTE a preço cheio começando no próximo ciclo, após o
+    1º pagamento (hosted checkout / avulsa) ter sido confirmado.
+
+    - PIX: o Asaas gera uma nova cobrança Pix a cada ciclo.
+    - CREDIT_CARD: usa o creditCardToken retornado no 1º pagamento p/ débito
+      automático recorrente.
+
+    Chamada de dentro do webhook — quem chama deve proteger com try/except para
+    não derrubar a ativação/comissão se o Asaas falhar.
+    """
+    from datetime import date
+    from decimal import Decimal
+    from dateutil.relativedelta import relativedelta
+
+    customer_id = get_or_create_customer(user)
+    full_price = float(Decimal(plan.price_for_period(billing_period)).quantize(Decimal('0.01')))
+    cycle = 'MONTHLY' if billing_period == 'monthly' else 'YEARLY'
+    delta = relativedelta(months=1) if billing_period == 'monthly' else relativedelta(years=1)
+    next_due = (date.today() + delta).isoformat()
+    bt = (billing_type or 'PIX').upper()
+
+    payload = {
+        'customer': customer_id,
+        'billingType': bt if bt in ('CREDIT_CARD', 'PIX', 'BOLETO') else 'PIX',
+        'value': full_price,
+        'nextDueDate': next_due,
+        'cycle': cycle,
+        'description': f'Tenfy — Plano {plan.name}',
+        'externalReference': str(user.id),
+    }
+    if bt == 'CREDIT_CARD' and card_token:
+        payload['creditCardToken'] = card_token
+    elif bt == 'CREDIT_CARD' and not card_token:
+        # Sem token não dá p/ recorrência no cartão — cai para Pix.
+        payload['billingType'] = 'PIX'
+    logger.info('Creating recurrence subscription for user %s starting %s (%s)', user.id, next_due, payload['billingType'])
+    return _request('POST', '/subscriptions', json=payload)
+
+
 def get_subscription_first_pix_qr(asaas_subscription_id: str, max_attempts: int = 3) -> dict:
     """
     Fetch the Pix QR code for the first pending payment of a subscription.

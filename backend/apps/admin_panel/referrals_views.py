@@ -9,6 +9,7 @@ from decimal import Decimal
 
 from django.db import transaction
 from django.db.models import Count, Q, Sum
+from django.db.models.deletion import ProtectedError
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
@@ -64,7 +65,7 @@ def partners(request):
     return Response(PartnerSerializer(partner).data, status=status.HTTP_201_CREATED)
 
 
-@api_view(['GET', 'PATCH'])
+@api_view(['GET', 'PATCH', 'DELETE'])
 @permission_classes([IsSuperUser])
 def partner_detail(request, pk):
     partner = Partner.objects.filter(pk=pk).first()
@@ -72,6 +73,17 @@ def partner_detail(request, pk):
         return Response({'detail': 'Parceiro não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
     if request.method == 'GET':
         return Response(PartnerSerializer(partner).data)
+    if request.method == 'DELETE':
+        # Protege histórico financeiro: não exclui parceiro com comissões/repasses.
+        if CommissionLedger.objects.filter(partner=partner).exists() or Payout.objects.filter(partner=partner).exists():
+            return Response(
+                {'detail': 'Parceiro possui comissões ou repasses. Desative-o em vez de excluir (ou remova o histórico antes).'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        pid = partner.id
+        partner.delete()  # cascata: cupons e regras do parceiro
+        _audit(request.user, AuditLog.ACTION_DELETE, 'partner', pid)
+        return Response(status=status.HTTP_204_NO_CONTENT)
     ser = PartnerSerializer(partner, data=request.data, partial=True)
     ser.is_valid(raise_exception=True)
     ser.save()
@@ -104,7 +116,7 @@ def coupons(request):
     return Response(CouponSerializer(coupon).data, status=status.HTTP_201_CREATED)
 
 
-@api_view(['GET', 'PATCH'])
+@api_view(['GET', 'PATCH', 'DELETE'])
 @permission_classes([IsSuperUser])
 def coupon_detail(request, pk):
     coupon = Coupon.objects.select_related('partner').filter(pk=pk).first()
@@ -112,6 +124,11 @@ def coupon_detail(request, pk):
         return Response({'detail': 'Cupom não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
     if request.method == 'GET':
         return Response(CouponSerializer(coupon).data)
+    if request.method == 'DELETE':
+        cid = coupon.id
+        coupon.delete()  # regras do cupom em cascata; comissões/assinaturas mantêm histórico (FK vira NULL)
+        _audit(request.user, AuditLog.ACTION_DELETE, 'coupon', cid)
+        return Response(status=status.HTTP_204_NO_CONTENT)
     ser = CouponSerializer(coupon, data=request.data, partial=True)
     ser.is_valid(raise_exception=True)
     ser.save()
@@ -138,12 +155,17 @@ def commission_rules(request):
     return Response(CommissionRuleSerializer(rule).data, status=status.HTTP_201_CREATED)
 
 
-@api_view(['PATCH'])
+@api_view(['PATCH', 'DELETE'])
 @permission_classes([IsSuperUser])
 def commission_rule_detail(request, pk):
     rule = CommissionRule.objects.filter(pk=pk).first()
     if rule is None:
         return Response({'detail': 'Regra não encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+    if request.method == 'DELETE':
+        rid = rule.id
+        rule.delete()  # comissões já geradas mantêm histórico (FK da regra vira NULL)
+        _audit(request.user, AuditLog.ACTION_DELETE, 'commission_rule', rid)
+        return Response(status=status.HTTP_204_NO_CONTENT)
     ser = CommissionRuleSerializer(rule, data=request.data, partial=True)
     ser.is_valid(raise_exception=True)
     ser.save()
@@ -284,3 +306,20 @@ def payouts(request):
         reason='repasse manual',
     )
     return Response(PayoutSerializer(payout).data, status=status.HTTP_201_CREATED)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsSuperUser])
+def payout_detail(request, pk):
+    """Exclui um repasse: devolve as comissões pagas dele para 'aprovada' (a repassar)."""
+    payout = Payout.objects.filter(pk=pk).first()
+    if payout is None:
+        return Response({'detail': 'Repasse não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+    with transaction.atomic():
+        reverted = CommissionLedger.objects.filter(
+            payout=payout, status=CommissionLedger.STATUS_PAID,
+        ).update(status=CommissionLedger.STATUS_APPROVED, payout=None, updated_at=timezone.now())
+        pid = payout.id
+        payout.delete()
+    _audit(request.user, AuditLog.ACTION_DELETE, 'payout', pid, diff={'commissions_revertidas': reverted})
+    return Response(status=status.HTTP_204_NO_CONTENT)

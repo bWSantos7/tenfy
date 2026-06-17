@@ -123,6 +123,9 @@ export async function updatePartner(id: number, payload: Partial<Partner>): Prom
   const res = await api.patch(`${BASE}/partners/${id}/`, payload);
   return res.data;
 }
+export async function deletePartner(id: number): Promise<void> {
+  await api.delete(`${BASE}/partners/${id}/`);
+}
 
 // ─── Cupons ────────────────────────────────────────────────────────────────────
 
@@ -138,6 +141,9 @@ export async function updateCoupon(id: number, payload: Partial<Coupon>): Promis
   const res = await api.patch(`${BASE}/coupons/${id}/`, payload);
   return res.data;
 }
+export async function deleteCoupon(id: number): Promise<void> {
+  await api.delete(`${BASE}/coupons/${id}/`);
+}
 
 // ─── Regras de comissão ──────────────────────────────────────────────────────────
 
@@ -152,6 +158,9 @@ export async function createCommissionRule(payload: Partial<CommissionRule>): Pr
 export async function updateCommissionRule(id: number, payload: Partial<CommissionRule>): Promise<CommissionRule> {
   const res = await api.patch(`${BASE}/commission-rules/${id}/`, payload);
   return res.data;
+}
+export async function deleteCommissionRule(id: number): Promise<void> {
+  await api.delete(`${BASE}/commission-rules/${id}/`);
 }
 
 // ─── Comissões ───────────────────────────────────────────────────────────────────
@@ -180,4 +189,7 @@ export async function createPayout(payload: {
 }): Promise<Payout> {
   const res = await api.post(`${BASE}/payouts/`, payload);
   return res.data;
+}
+export async function deletePayout(id: number): Promise<void> {
+  await api.delete(`${BASE}/payouts/${id}/`);
 }

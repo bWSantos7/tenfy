@@ -816,3 +816,41 @@ class AdminReferralsCrudTests(TestCase):
         partner = make_partner()
         res = self.client.post('/api/admin-panel/payouts/', {'partner': partner.id}, format='json')
         self.assertEqual(res.status_code, 400)
+
+    def test_delete_coupon_and_rule(self):
+        partner = make_partner()
+        coupon = make_coupon(partner, code='DEL1')
+        rule = CommissionRule.objects.create(partner=partner, coupon=coupon, commission_value=Decimal('10'))
+        r1 = self.client.delete(f'/api/admin-panel/commission-rules/{rule.id}/')
+        self.assertEqual(r1.status_code, 204)
+        r2 = self.client.delete(f'/api/admin-panel/coupons/{coupon.id}/')
+        self.assertEqual(r2.status_code, 204)
+        self.assertFalse(Coupon.objects.filter(id=coupon.id).exists())
+
+    def test_delete_partner_blocked_with_commissions(self):
+        partner, coupon, rule, user, plan, sub = make_commission_scenario('20')
+        pay = Payment.objects.create(user=user, subscription=sub, amount=Decimal('44.91'), paid_net_amount=Decimal('44.91'))
+        generate_commission_for_payment(pay, sub)
+        res = self.client.delete(f'/api/admin-panel/partners/{partner.id}/')
+        self.assertEqual(res.status_code, 400)  # tem comissões → bloqueado
+        self.assertTrue(Partner.objects.filter(id=partner.id).exists())
+
+    def test_delete_partner_without_history(self):
+        partner = make_partner(name='Sem Historico')
+        res = self.client.delete(f'/api/admin-panel/partners/{partner.id}/')
+        self.assertEqual(res.status_code, 204)
+        self.assertFalse(Partner.objects.filter(id=partner.id).exists())
+
+    def test_delete_payout_reverts_commissions(self):
+        partner, coupon, rule, user, plan, sub = make_commission_scenario('20')
+        pay = Payment.objects.create(user=user, subscription=sub, amount=Decimal('44.91'), paid_net_amount=Decimal('44.91'))
+        led = generate_commission_for_payment(pay, sub)
+        po = self.client.post('/api/admin-panel/payouts/', {'partner': partner.id}, format='json')
+        payout_id = po.data['id']
+        led.refresh_from_db()
+        self.assertEqual(led.status, CommissionLedger.STATUS_PAID)
+        res = self.client.delete(f'/api/admin-panel/payouts/{payout_id}/')
+        self.assertEqual(res.status_code, 204)
+        led.refresh_from_db()
+        self.assertEqual(led.status, CommissionLedger.STATUS_APPROVED)  # voltou p/ a repassar
+        self.assertIsNone(led.payout_id)

@@ -1,15 +1,15 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Loader2, Plus, RefreshCcw, Tag, X, Check, Ban, Wallet } from 'lucide-react';
+import { Loader2, Plus, RefreshCcw, Tag, X, Check, Ban, Wallet, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { extractApiError } from '../../services/api';
 import {
   Partner, Coupon, CommissionRule, Commission, Payout, CommissionSummaryRow,
   PartnerType, DiscountType, PlanScope, CouponStatus, BaseAmountType, CommissionStatus,
-  listPartners, createPartner, updatePartner,
-  listCoupons, createCoupon, updateCoupon,
-  listCommissionRules, createCommissionRule, updateCommissionRule,
+  listPartners, createPartner, updatePartner, deletePartner,
+  listCoupons, createCoupon, updateCoupon, deleteCoupon,
+  listCommissionRules, createCommissionRule, updateCommissionRule, deleteCommissionRule,
   listCommissions, updateCommissionStatus, commissionsSummary,
-  listPayouts, createPayout,
+  listPayouts, createPayout, deletePayout,
 } from '../../services/referrals';
 
 // ─── Labels ──────────────────────────────────────────────────────────────────
@@ -130,6 +130,12 @@ const PartnersSection: React.FC = () => {
     finally { setSaving(false); }
   }
 
+  async function del(p: Partner) {
+    if (!window.confirm(`Excluir o parceiro "${p.name}"? Os cupons e regras dele também serão removidos.`)) return;
+    try { await deletePartner(p.id); toast.success('Parceiro excluído.'); await load(); }
+    catch (e) { toast.error(extractApiError(e)); }
+  }
+
   return (
     <div className="space-y-3">
       <div className="flex justify-between items-center">
@@ -178,7 +184,10 @@ const PartnersSection: React.FC = () => {
                 <div className="text-sm font-medium">{p.name} <span className="text-[11px] text-text-muted">({PARTNER_TYPE_LABELS[p.type]})</span></div>
                 <div className="text-[11px] text-text-muted">{p.email || 'sem e-mail'} · {p.coupons_count} cupom(ns) · <span className={p.status === 'active' ? 'text-green-400' : 'text-gray-400'}>{p.status === 'active' ? 'Ativo' : 'Inativo'}</span></div>
               </div>
-              <button className="btn-secondary !text-xs" onClick={() => setForm(p)}>Editar</button>
+              <div className="flex gap-1 shrink-0">
+                <button className="btn-secondary !text-xs" onClick={() => setForm(p)}>Editar</button>
+                <button className="text-red-400 border border-red-400/40 rounded px-2 py-1 text-xs" title="Excluir" onClick={() => del(p)}><Trash2 className="w-3 h-3" /></button>
+              </div>
             </div>
           ))}
         </div>
@@ -222,6 +231,12 @@ const CouponsSection: React.FC = () => {
       setForm(null); await load();
     } catch (e) { toast.error(extractApiError(e)); }
     finally { setSaving(false); }
+  }
+
+  async function del(c: Coupon) {
+    if (!window.confirm(`Excluir o cupom "${c.code}"? As regras vinculadas a ele também serão removidas.`)) return;
+    try { await deleteCoupon(c.id); toast.success('Cupom excluído.'); await load(); }
+    catch (e) { toast.error(extractApiError(e)); }
   }
 
   return (
@@ -283,7 +298,10 @@ const CouponsSection: React.FC = () => {
                   {c.discount_type === 'percent' ? `${c.discount_value}%` : brl(c.discount_value)} · {SCOPE_LABELS[c.plan_scope]} · usos {c.times_used}{c.max_total_uses ? `/${c.max_total_uses}` : ''} · <span className={c.status === 'active' ? 'text-green-400' : 'text-gray-400'}>{COUPON_STATUS_LABELS[c.status]}</span>
                 </div>
               </div>
-              <button className="btn-secondary !text-xs" onClick={() => setForm(c)}>Editar</button>
+              <div className="flex gap-1 shrink-0">
+                <button className="btn-secondary !text-xs" onClick={() => setForm(c)}>Editar</button>
+                <button className="text-red-400 border border-red-400/40 rounded px-2 py-1 text-xs" title="Excluir" onClick={() => del(c)}><Trash2 className="w-3 h-3" /></button>
+              </div>
             </div>
           ))}
         </div>
@@ -327,6 +345,12 @@ const RulesSection: React.FC = () => {
       setForm(null); await load();
     } catch (e) { toast.error(extractApiError(e)); }
     finally { setSaving(false); }
+  }
+
+  async function del(r: CommissionRule) {
+    if (!window.confirm('Excluir esta regra de comissão?')) return;
+    try { await deleteCommissionRule(r.id); toast.success('Regra excluída.'); await load(); }
+    catch (e) { toast.error(extractApiError(e)); }
   }
 
   const couponsForPartner = form?.partner ? coupons.filter((c) => c.partner === form.partner) : [];
@@ -390,7 +414,10 @@ const RulesSection: React.FC = () => {
                   {r.commission_type === 'percent' ? `${r.commission_value}%` : brl(r.commission_value)} · base {r.base_amount_type === 'net_paid' ? 'líquida' : 'bruta'} · <span className={r.status === 'active' ? 'text-green-400' : 'text-gray-400'}>{r.status === 'active' ? 'Ativa' : 'Inativa'}</span>
                 </div>
               </div>
-              <button className="btn-secondary !text-xs" onClick={() => setForm(r)}>Editar</button>
+              <div className="flex gap-1 shrink-0">
+                <button className="btn-secondary !text-xs" onClick={() => setForm(r)}>Editar</button>
+                <button className="text-red-400 border border-red-400/40 rounded px-2 py-1 text-xs" title="Excluir" onClick={() => del(r)}><Trash2 className="w-3 h-3" /></button>
+              </div>
             </div>
           ))}
         </div>
@@ -519,6 +546,12 @@ const PayoutsSection: React.FC = () => {
   }, []);
   useEffect(() => { load(); }, [load]);
 
+  async function del(p: Payout) {
+    if (!window.confirm(`Excluir o repasse de ${brl(p.amount)}? As comissões dele voltam para "a repassar".`)) return;
+    try { await deletePayout(p.id); toast.success('Repasse excluído; comissões devolvidas.'); await load(); }
+    catch (e) { toast.error(extractApiError(e)); }
+  }
+
   return (
     <div className="space-y-3">
       <div className="flex justify-between items-center">
@@ -527,12 +560,15 @@ const PayoutsSection: React.FC = () => {
       {loading ? <Spinner /> : items.length === 0 ? <Empty text="Nenhum repasse registrado." /> : (
         <div className="space-y-1.5">
           {items.map((p) => (
-            <div key={p.id} className="card !p-3 flex justify-between items-center">
-              <div>
+            <div key={p.id} className="card !p-3 flex justify-between items-center gap-2">
+              <div className="min-w-0">
                 <div className="text-sm font-medium">{p.partner_name} <span className="text-[11px] text-text-muted">· {brl(p.amount)}</span></div>
-                <div className="text-[11px] text-text-muted">{p.commissions_count} comissão(ões) · {p.method || '—'} · {p.reference || 'sem ref.'} · {fmtDate(p.paid_at)}</div>
+                <div className="text-[11px] text-text-muted truncate">{p.commissions_count} comissão(ões) · {p.method || '—'} · {p.reference || 'sem ref.'} · {fmtDate(p.paid_at)}</div>
               </div>
-              <span className="text-xs text-green-400">{p.status === 'paid' ? 'Pago' : p.status}</span>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-xs text-green-400">{p.status === 'paid' ? 'Pago' : p.status}</span>
+                <button className="text-red-400 border border-red-400/40 rounded px-2 py-1 text-xs" title="Excluir repasse" onClick={() => del(p)}><Trash2 className="w-3 h-3" /></button>
+              </div>
             </div>
           ))}
         </div>

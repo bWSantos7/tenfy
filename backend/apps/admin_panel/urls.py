@@ -13,7 +13,7 @@ from .referrals_views import (
     partners, partner_detail, coupons, coupon_detail,
     commission_rules, commission_rule_detail,
     commissions, commission_detail, commissions_summary,
-    payouts,
+    payouts, payout_detail,
 )
 
 urlpatterns = [
@@ -51,4 +51,5 @@ urlpatterns = [
     path('commissions/summary/', commissions_summary, name='admin-commissions-summary'),
     path('commissions/<int:pk>/', commission_detail, name='admin-commission-detail'),
     path('payouts/', payouts, name='admin-payouts'),
+    path('payouts/<int:pk>/', payout_detail, name='admin-payout-detail'),
 ]

@@ -75,6 +75,20 @@ class AdminPanelAuthTestCase(TestCase):
         res = self.client.delete(f'/api/admin-panel/users/{self.admin.id}/')
         self.assertEqual(res.status_code, 400)
 
+    def test_delete_user_with_payment(self):
+        """Payment.user é PROTECT — deletar usuário com pagamento deve funcionar
+        (remove pagamentos antes), não estourar 500."""
+        from decimal import Decimal
+        from apps.billing.models import Plan, Subscription, Payment
+        plan = Plan.objects.create(slug='individual', name='Individual', price_monthly=Decimal('49.90'))
+        sub = Subscription.objects.create(user=self.regular, plan=plan, status='active')
+        Payment.objects.create(user=self.regular, subscription=sub, amount=Decimal('49.90'))
+        self.client.force_authenticate(user=self.admin)
+        res = self.client.delete(f'/api/admin-panel/users/{self.regular.id}/')
+        self.assertEqual(res.status_code, 204)
+        self.assertFalse(User.objects.filter(id=self.regular.id).exists())
+        self.assertFalse(Payment.objects.filter(subscription_id=sub.id).exists())
+
     def test_review_queue_returns_sections(self):
         self.client.force_authenticate(user=self.admin)
         res = self.client.get('/api/admin-panel/review-queue/')

@@ -74,14 +74,20 @@ def partner_detail(request, pk):
     if request.method == 'GET':
         return Response(PartnerSerializer(partner).data)
     if request.method == 'DELETE':
-        # Protege histórico financeiro: não exclui parceiro com comissões/repasses.
-        if CommissionLedger.objects.filter(partner=partner).exists() or Payout.objects.filter(partner=partner).exists():
+        # Protege histórico financeiro REAL: bloqueia só com comissões ativas
+        # (a repassar/pagas) ou repasses. Canceladas/revertidas não têm valor.
+        live = [CommissionLedger.STATUS_PENDING, CommissionLedger.STATUS_APPROVED, CommissionLedger.STATUS_PAID]
+        if (CommissionLedger.objects.filter(partner=partner, status__in=live).exists()
+                or Payout.objects.filter(partner=partner).exists()):
             return Response(
-                {'detail': 'Parceiro possui comissões ou repasses. Desative-o em vez de excluir (ou remova o histórico antes).'},
+                {'detail': 'Parceiro possui comissões a repassar/pagas ou repasses. Cancele/estorne ou desative o parceiro antes de excluir.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        pid = partner.id
-        partner.delete()  # cascata: cupons e regras do parceiro
+        with transaction.atomic():
+            # Remove lançamentos sem valor (cancelados/revertidos) que protegem a exclusão.
+            CommissionLedger.objects.filter(partner=partner).delete()
+            pid = partner.id
+            partner.delete()  # cascata: cupons e regras do parceiro
         _audit(request.user, AuditLog.ACTION_DELETE, 'partner', pid)
         return Response(status=status.HTTP_204_NO_CONTENT)
     ser = PartnerSerializer(partner, data=request.data, partial=True)

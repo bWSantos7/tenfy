@@ -99,6 +99,58 @@ const Spinner: React.FC = () => (
   <div className="flex justify-center py-6"><Loader2 className="w-6 h-6 animate-spin text-text-muted" /></div>
 );
 
+// Pop-up de confirmação de exclusão (substitui window.confirm)
+const ConfirmDialog: React.FC<{
+  open: boolean; title?: string; message: string; confirmLabel?: string;
+  busy?: boolean; onConfirm: () => void; onCancel: () => void;
+}> = ({ open, title = 'Confirmar exclusão', message, confirmLabel = 'Excluir', busy, onConfirm, onCancel }) => {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 px-4" onClick={() => !busy && onCancel()}>
+      <div className="card !p-5 w-full max-w-sm space-y-4" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2">
+          <div className="w-9 h-9 rounded-full bg-red-500/15 flex items-center justify-center shrink-0">
+            <Trash2 className="w-4 h-4 text-red-400" />
+          </div>
+          <div className="text-sm font-semibold">{title}</div>
+        </div>
+        <p className="text-sm text-text-muted leading-relaxed">{message}</p>
+        <div className="flex gap-2 justify-end">
+          <button className="btn-secondary !text-sm" onClick={onCancel} disabled={busy}>Cancelar</button>
+          <button
+            className="text-sm font-semibold px-4 py-2 rounded-xl bg-red-500 text-white hover:bg-red-600 disabled:opacity-50"
+            onClick={onConfirm} disabled={busy}
+          >
+            {busy ? <Loader2 className="w-4 h-4 animate-spin inline" /> : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Hook: abre o pop-up e executa a ação ao confirmar.
+function useConfirm() {
+  const [state, setState] = useState<{ message: string; run: () => Promise<void> } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const ask = useCallback((message: string, run: () => Promise<void>) => setState({ message, run }), []);
+  const node = (
+    <ConfirmDialog
+      open={!!state}
+      message={state?.message || ''}
+      busy={busy}
+      onCancel={() => { if (!busy) setState(null); }}
+      onConfirm={async () => {
+        if (!state) return;
+        setBusy(true);
+        try { await state.run(); setState(null); }
+        finally { setBusy(false); }
+      }}
+    />
+  );
+  return { ask, node };
+}
+
 // ─── Parceiros ───────────────────────────────────────────────────────────────────
 
 const EMPTY_PARTNER: Partial<Partner> = { name: '', type: 'influencer', email: '', phone: '', status: 'active', payout_method: '', payout_details: '' };
@@ -108,6 +160,7 @@ const PartnersSection: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState<Partial<Partner> | null>(null);
   const [saving, setSaving] = useState(false);
+  const { ask, node: confirmNode } = useConfirm();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -130,14 +183,16 @@ const PartnersSection: React.FC = () => {
     finally { setSaving(false); }
   }
 
-  async function del(p: Partner) {
-    if (!window.confirm(`Excluir o parceiro "${p.name}"? Os cupons e regras dele também serão removidos.`)) return;
-    try { await deletePartner(p.id); toast.success('Parceiro excluído.'); await load(); }
-    catch (e) { toast.error(extractApiError(e)); }
+  function del(p: Partner) {
+    ask(`Excluir o parceiro "${p.name}"? Os cupons e regras dele também serão removidos.`, async () => {
+      try { await deletePartner(p.id); toast.success('Parceiro excluído.'); await load(); }
+      catch (e) { toast.error(extractApiError(e)); }
+    });
   }
 
   return (
     <div className="space-y-3">
+      {confirmNode}
       <div className="flex justify-between items-center">
         <button className="btn-secondary !text-xs" onClick={load}><RefreshCcw className="w-3 h-3 inline mr-1" />Atualizar</button>
         <button className="btn-primary !text-xs" onClick={() => setForm({ ...EMPTY_PARTNER })}><Plus className="w-3 h-3 inline mr-1" />Novo parceiro</button>
@@ -209,6 +264,7 @@ const CouponsSection: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState<Partial<Coupon> | null>(null);
   const [saving, setSaving] = useState(false);
+  const { ask, node: confirmNode } = useConfirm();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -233,14 +289,16 @@ const CouponsSection: React.FC = () => {
     finally { setSaving(false); }
   }
 
-  async function del(c: Coupon) {
-    if (!window.confirm(`Excluir o cupom "${c.code}"? As regras vinculadas a ele também serão removidas.`)) return;
-    try { await deleteCoupon(c.id); toast.success('Cupom excluído.'); await load(); }
-    catch (e) { toast.error(extractApiError(e)); }
+  function del(c: Coupon) {
+    ask(`Excluir o cupom "${c.code}"? As regras vinculadas a ele também serão removidas.`, async () => {
+      try { await deleteCoupon(c.id); toast.success('Cupom excluído.'); await load(); }
+      catch (e) { toast.error(extractApiError(e)); }
+    });
   }
 
   return (
     <div className="space-y-3">
+      {confirmNode}
       <div className="flex justify-between items-center">
         <button className="btn-secondary !text-xs" onClick={load}><RefreshCcw className="w-3 h-3 inline mr-1" />Atualizar</button>
         <button className="btn-primary !text-xs" onClick={() => setForm({ ...EMPTY_COUPON })} disabled={partners.length === 0}><Plus className="w-3 h-3 inline mr-1" />Novo cupom</button>
@@ -324,6 +382,7 @@ const RulesSection: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState<Partial<CommissionRule> | null>(null);
   const [saving, setSaving] = useState(false);
+  const { ask, node: confirmNode } = useConfirm();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -347,16 +406,18 @@ const RulesSection: React.FC = () => {
     finally { setSaving(false); }
   }
 
-  async function del(r: CommissionRule) {
-    if (!window.confirm('Excluir esta regra de comissão?')) return;
-    try { await deleteCommissionRule(r.id); toast.success('Regra excluída.'); await load(); }
-    catch (e) { toast.error(extractApiError(e)); }
+  function del(r: CommissionRule) {
+    ask('Excluir esta regra de comissão?', async () => {
+      try { await deleteCommissionRule(r.id); toast.success('Regra excluída.'); await load(); }
+      catch (e) { toast.error(extractApiError(e)); }
+    });
   }
 
   const couponsForPartner = form?.partner ? coupons.filter((c) => c.partner === form.partner) : [];
 
   return (
     <div className="space-y-3">
+      {confirmNode}
       <div className="flex justify-between items-center">
         <button className="btn-secondary !text-xs" onClick={load}><RefreshCcw className="w-3 h-3 inline mr-1" />Atualizar</button>
         <button className="btn-primary !text-xs" onClick={() => setForm({ ...EMPTY_RULE })} disabled={partners.length === 0}><Plus className="w-3 h-3 inline mr-1" />Nova regra</button>
@@ -537,6 +598,7 @@ const CommissionsSection: React.FC = () => {
 const PayoutsSection: React.FC = () => {
   const [items, setItems] = useState<Payout[]>([]);
   const [loading, setLoading] = useState(true);
+  const { ask, node: confirmNode } = useConfirm();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -546,14 +608,16 @@ const PayoutsSection: React.FC = () => {
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  async function del(p: Payout) {
-    if (!window.confirm(`Excluir o repasse de ${brl(p.amount)}? As comissões dele voltam para "a repassar".`)) return;
-    try { await deletePayout(p.id); toast.success('Repasse excluído; comissões devolvidas.'); await load(); }
-    catch (e) { toast.error(extractApiError(e)); }
+  function del(p: Payout) {
+    ask(`Excluir o repasse de ${brl(p.amount)}? As comissões dele voltam para "a repassar".`, async () => {
+      try { await deletePayout(p.id); toast.success('Repasse excluído; comissões devolvidas.'); await load(); }
+      catch (e) { toast.error(extractApiError(e)); }
+    });
   }
 
   return (
     <div className="space-y-3">
+      {confirmNode}
       <div className="flex justify-between items-center">
         <button className="btn-secondary !text-xs" onClick={load}><RefreshCcw className="w-3 h-3 inline mr-1" />Atualizar</button>
       </div>

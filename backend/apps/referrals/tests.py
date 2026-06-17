@@ -841,6 +841,17 @@ class AdminReferralsCrudTests(TestCase):
         self.assertEqual(res.status_code, 204)
         self.assertFalse(Partner.objects.filter(id=partner.id).exists())
 
+    def test_delete_partner_with_only_canceled_commission(self):
+        partner, coupon, rule, user, plan, sub = make_commission_scenario('20')
+        pay = Payment.objects.create(user=user, subscription=sub, amount=Decimal('44.91'), paid_net_amount=Decimal('44.91'))
+        led = generate_commission_for_payment(pay, sub)
+        led.status = CommissionLedger.STATUS_CANCELED
+        led.save(update_fields=['status'])
+        res = self.client.delete(f'/api/admin-panel/partners/{partner.id}/')
+        self.assertEqual(res.status_code, 204)  # só cancelada → exclui (limpa o lançamento)
+        self.assertFalse(Partner.objects.filter(id=partner.id).exists())
+        self.assertFalse(CommissionLedger.objects.filter(id=led.id).exists())
+
     def test_delete_payout_reverts_commissions(self):
         partner, coupon, rule, user, plan, sub = make_commission_scenario('20')
         pay = Payment.objects.create(user=user, subscription=sub, amount=Decimal('44.91'), paid_net_amount=Decimal('44.91'))

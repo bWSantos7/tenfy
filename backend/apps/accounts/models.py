@@ -175,6 +175,7 @@ class PendingRegistration(TimestampedModel):
     coupon_code      = models.CharField(max_length=40, blank=True)
     email_verified   = models.BooleanField(default=False)
     asaas_customer_id = models.CharField(max_length=60, blank=True)
+    asaas_checkout_id = models.CharField(max_length=60, blank=True, db_index=True)
     consumed         = models.BooleanField(default=False)
     expires_at       = models.DateTimeField(default=_reg_expires)
 

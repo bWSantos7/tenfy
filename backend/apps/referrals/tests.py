@@ -619,6 +619,22 @@ class DeferredMaterializeWebhookTests(TestCase):
         with patch.dict('django.conf.settings.__dict__', {'ASAAS_WEBHOOK_TOKEN': token}):
             return self.client.post('/api/billing/webhooks/asaas/', payload, format='json', HTTP_ASAAS_WEBHOOK_TOKEN=token)
 
+    def test_webhook_maps_by_checkout_session(self):
+        # Checkout hospedado: pagamento sem externalReference, mas com checkoutSession.
+        self.pending.asaas_checkout_id = 'chk_abc123'
+        self.pending.save(update_fields=['asaas_checkout_id'])
+        with patch('apps.billing.services.asaas_service.create_recurrence_after_first_payment',
+                   return_value={'id': 'sub_chk'}):
+            res = self._post({
+                'event': 'PAYMENT_CONFIRMED',
+                'payment': {'id': 'pay_chk', 'externalReference': None, 'checkoutSession': 'chk_abc123',
+                            'value': 44.91, 'netValue': 43.50, 'billingType': 'CREDIT_CARD'},
+            })
+        self.assertEqual(res.status_code, 200)
+        u = User.objects.get(email='defer@ex.com')
+        self.assertEqual(u.subscription.status, Subscription.STATUS_ACTIVE)
+        self.assertEqual(CommissionLedger.objects.filter(subscription=u.subscription).count(), 1)
+
     def test_webhook_materializes_account_and_commission(self):
         self.assertFalse(User.objects.filter(email='defer@ex.com').exists())
         with patch('apps.billing.services.asaas_service.create_recurrence_after_first_payment',

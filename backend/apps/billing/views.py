@@ -379,6 +379,11 @@ def checkout_session(request):
             status=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
 
+    # Guarda o id do checkout p/ o webhook mapear o pagamento (que não traz externalReference).
+    if result.get('id'):
+        sub.asaas_checkout_id = result['id']
+        sub.save(update_fields=['asaas_checkout_id', 'updated_at'])
+
     _log_action(request.user, 'billing.checkout_session', f'plan={plan.slug} coupon={coupon_code}')
     resp = {'checkout_url': result.get('link') or result.get('url') or '', 'checkout_id': result.get('id', '')}
     if coupon_validation is not None:
@@ -460,6 +465,10 @@ def checkout_pending_session(request):
     except Exception as exc:
         logger.error('Pending checkout session failed: %s', exc)
         return Response({'detail': 'Não foi possível iniciar o pagamento. Tente novamente.'}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+    # Guarda o id do checkout p/ o webhook mapear o pagamento (que não traz externalReference).
+    if result.get('id'):
+        data['pending'].asaas_checkout_id = result['id']
+        data['pending'].save(update_fields=['asaas_checkout_id', 'updated_at'])
     return Response({'checkout_url': result.get('link') or result.get('url') or '', 'checkout_id': result.get('id', '')})
 
 
@@ -700,26 +709,44 @@ def _handle_payment_confirmed(payload: dict):
     asaas_sub_id = p.get('subscription', '')
     sub = _find_subscription_by_asaas(asaas_sub_id) if asaas_sub_id else None
 
-    ref = p.get('externalReference', '')
+    ref = p.get('externalReference', '') or ''
+    # Checkout hospedado: o pagamento NÃO traz externalReference; vem com checkoutSession.
+    checkout_id = p.get('checkoutSession', '') or ''
     user = sub.user if sub else None
-    if user is None and ref:
-        if ref.startswith('reg:'):
-            # Cadastro diferido: materializa a conta só agora (pagamento confirmado).
-            from apps.accounts.models import PendingRegistration
-            from apps.accounts.registration import materialize_full
-            pending = PendingRegistration.objects.filter(token=ref[4:]).first()
-            if pending and not pending.is_expired:
-                try:
-                    user = materialize_full(pending)
-                except Exception as exc:  # noqa: BLE001
-                    logger.error('Failed to materialize pending %s: %s', ref, exc)
-        else:
-            user = _user_from_external_ref(ref)
+
+    from apps.accounts.models import PendingRegistration
+    from apps.accounts.registration import materialize_full
+
+    def _materialize(pending):
+        if pending and not pending.is_expired:
+            try:
+                return materialize_full(pending)
+            except Exception as exc:  # noqa: BLE001
+                logger.error('Failed to materialize pending %s: %s', pending.token, exc)
+        return None
+
+    if user is None and ref.startswith('reg:'):
+        # Cadastro diferido via cobrança avulsa (externalReference = reg:<token>).
+        user = _materialize(PendingRegistration.objects.filter(token=ref[4:]).first())
+
+    if user is None and checkout_id:
+        # Checkout hospedado: mapeia pelo id do checkout salvo no cadastro/assinatura.
+        pending = PendingRegistration.objects.filter(asaas_checkout_id=checkout_id).first()
+        user = _materialize(pending)
+        if user is None:
+            s2 = (Subscription.objects.select_related('user', 'plan', 'pending_plan')
+                  .filter(asaas_checkout_id=checkout_id).first())
+            if s2:
+                sub = s2
+                user = s2.user
+
+    if user is None and ref and not ref.startswith('reg:'):
+        user = _user_from_external_ref(ref)
+
     if user is None:
         logger.error(
-            'PAYMENT_CONFIRMED: user not found for asaas_payment_id=%s externalReference=%s — '
-            'payment record not created.',
-            p.get('id', ''), ref,
+            'PAYMENT_CONFIRMED: user not found for asaas_payment_id=%s externalReference=%s checkoutSession=%s',
+            p.get('id', ''), ref, checkout_id,
         )
         return
 

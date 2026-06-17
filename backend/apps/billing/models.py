@@ -129,6 +129,7 @@ class Subscription(TimestampedModel):
     # Asaas integration fields — populated when API is connected
     asaas_customer_id     = models.CharField(max_length=60, blank=True)
     asaas_subscription_id = models.CharField(max_length=60, blank=True)
+    asaas_checkout_id     = models.CharField(max_length=60, blank=True, db_index=True)
     pending_plan = models.ForeignKey(
         Plan, null=True, blank=True, on_delete=models.SET_NULL,
         related_name='pending_subscriptions',

@@ -13,6 +13,7 @@ export async function register(payload: {
   password: string;
   password_confirm: string;
   full_name?: string;
+  cpf?: string;
   role?: string;
   accept_terms: boolean;
   marketing_consent?: boolean;

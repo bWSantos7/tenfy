@@ -37,6 +37,32 @@ class RegistrationTestCase(TestCase):
         self.assertIn('access', res.data)
         self.assertTrue(User.objects.filter(email='test@example.com').exists())
 
+    @patch('apps.accounts.tasks.send_otp_email.delay')
+    @patch('apps.accounts.otp.cache')
+    def test_register_stores_valid_cpf(self, mock_cache, mock_task):
+        mock_cache.set.return_value = None
+        mock_cache.delete.return_value = None
+        mock_cache.get.return_value = 0
+        res = self.client.post('/api/auth/register/', {
+            'email': 'cpf@example.com',
+            'password': 'Str0ngPass!', 'password_confirm': 'Str0ngPass!',
+            'full_name': 'Cpf User', 'phone': '+5511999999999',
+            'cpf': '111.444.777-35', 'accept_terms': True,
+        }, format='json')
+        self.assertEqual(res.status_code, 201)
+        u = User.objects.get(email='cpf@example.com')
+        self.assertEqual(u.cpf, '11144477735')  # normalizado p/ dígitos
+
+    def test_register_invalid_cpf_returns_400(self):
+        res = self.client.post('/api/auth/register/', {
+            'email': 'badcpf@example.com',
+            'password': 'Str0ngPass!', 'password_confirm': 'Str0ngPass!',
+            'full_name': 'Bad Cpf', 'phone': '+5511999999999',
+            'cpf': '12345678900', 'accept_terms': True,
+        }, format='json')
+        self.assertEqual(res.status_code, 400)
+        self.assertIn('cpf', res.data)
+
     def test_register_duplicate_email_returns_400(self):
         User.objects.create_user(email='dup@example.com', password='pass')
         res = self.client.post('/api/auth/register/', {

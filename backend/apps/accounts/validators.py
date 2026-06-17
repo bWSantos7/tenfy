@@ -32,3 +32,22 @@ class StrongPasswordValidator:
 
     def get_help_text(self):
         return self.HELP
+
+
+def only_digits(value: str) -> str:
+    return re.sub(r'\D', '', value or '')
+
+
+def is_valid_cpf(cpf: str) -> bool:
+    """Valida CPF por tamanho e dígitos verificadores."""
+    cpf = only_digits(cpf)
+    if len(cpf) != 11 or cpf == cpf[0] * 11:
+        return False
+    for i in (9, 10):
+        s = sum(int(cpf[n]) * ((i + 1) - n) for n in range(i))
+        d = (s * 10) % 11
+        if d == 10:
+            d = 0
+        if d != int(cpf[i]):
+            return False
+    return True

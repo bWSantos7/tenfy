@@ -37,6 +37,29 @@ function passwordStrength(pwd: string): { score: number; label: string; color: s
   return { score, label: 'Forte', color: '#C6EF21' };
 }
 
+// ─── CPF ───────────────────────────────────────────────────────────────────────
+
+function isValidCPF(value: string): boolean {
+  const cpf = (value || '').replace(/\D/g, '');
+  if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return false;
+  for (const i of [9, 10]) {
+    let sum = 0;
+    for (let n = 0; n < i; n++) sum += parseInt(cpf[n], 10) * (i + 1 - n);
+    let d = (sum * 10) % 11;
+    if (d === 10) d = 0;
+    if (d !== parseInt(cpf[i], 10)) return false;
+  }
+  return true;
+}
+
+function maskCPF(value: string): string {
+  const d = (value || '').replace(/\D/g, '').slice(0, 11);
+  return d
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+}
+
 // ─── Plan metadata ─────────────────────────────────────────────────────────────
 
 const PLAN_META: Record<PlanSlug, {
@@ -64,7 +87,7 @@ export const RegisterPage: React.FC = () => {
   const nav = useNavigate();
   const { setUser, isAuthenticated } = useAuth();
 
-  const [step, setStep] = useState<Step>('plan');
+  const [step, setStep] = useState<Step>('form');
   const [registeredUser, setRegisteredUser] = useState<UserType | null>(null);
   const [duplicateEmail, setDuplicateEmail] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -92,6 +115,7 @@ export const RegisterPage: React.FC = () => {
     full_name: '',
     email: '',
     phone: '',
+    cpf: '',
     password: '',
     password_confirm: '',
     isResponsible: false,       // Sou pai/responsável — igual ao mobile
@@ -177,22 +201,31 @@ export const RegisterPage: React.FC = () => {
   const role = ((planSlug === 'familia' || planSlug === 'tester') && form.isResponsible)
     ? 'parent' : 'player';
 
-  // ─── Step: Register ────────────────────────────────────────────────────────
-  async function onRegister(e: React.FormEvent) {
+  // ─── Step: Dados (valida e avança p/ escolha do plano) ──────────────────────
+  function onSubmitForm(e: React.FormEvent) {
     e.preventDefault();
     if (!form.full_name.trim()) { toast.error('Informe seu nome completo'); return; }
     if (!form.email.trim())     { toast.error('Informe seu e-mail'); return; }
+    const cpfDigits = form.cpf.replace(/\D/g, '');
+    if (!cpfDigits)            { toast.error('Informe seu CPF'); return; }
+    if (!isValidCPF(cpfDigits)) { toast.error('CPF inválido'); return; }
+    if (!form.phone.trim())     { toast.error('Informe seu celular'); return; }
     if (!form.password)         { toast.error('Defina uma senha'); return; }
-    { const e = validatePasswordRule(form.password); if (e) { toast.error(e); return; } }
+    { const err = validatePasswordRule(form.password); if (err) { toast.error(err); return; } }
     if (form.password !== form.password_confirm) { toast.error('As senhas não conferem'); return; }
     if (!form.accept_terms) { toast.error('Aceite os termos para continuar'); return; }
+    setStep('plan');
+  }
 
+  // ─── Cria a conta (após escolher o plano) ───────────────────────────────────
+  async function doRegister() {
     setSubmitting(true);
     try {
       const data = await register({
         full_name: form.full_name.trim(),
         email: form.email.trim(),
         phone: form.phone.trim(),
+        cpf: form.cpf.replace(/\D/g, ''),
         password: form.password,
         password_confirm: form.password_confirm,
         role,
@@ -212,6 +245,7 @@ export const RegisterPage: React.FC = () => {
       const msg = extractApiError(err);
       if (msg.toLowerCase().includes('email') && msg.toLowerCase().includes('existe')) {
         setDuplicateEmail(true);
+        setStep('form');  // volta p/ corrigir o e-mail
       } else {
         toast.error(msg);
       }
@@ -348,12 +382,12 @@ export const RegisterPage: React.FC = () => {
 
   // Progress indicator
   const allSteps: Step[] = isPaidPlan(planSlug)
-    ? ['plan', 'form', 'otp', 'payment', 'profile', 'done_parent', 'dependent']
-    : ['plan', 'form', 'otp', 'profile', 'done_parent', 'dependent'];
+    ? ['form', 'plan', 'otp', 'payment', 'profile', 'done_parent', 'dependent']
+    : ['form', 'plan', 'otp', 'profile', 'done_parent', 'dependent'];
 
   const visibleSteps: Step[] = role === 'parent'
-    ? isPaidPlan(planSlug) ? ['plan', 'form', 'otp', 'payment', 'done_parent'] : ['plan', 'form', 'otp', 'done_parent']
-    : isPaidPlan(planSlug) ? ['plan', 'form', 'otp', 'payment', 'profile'] : ['plan', 'form', 'otp', 'profile'];
+    ? isPaidPlan(planSlug) ? ['form', 'plan', 'otp', 'payment', 'done_parent'] : ['form', 'plan', 'otp', 'done_parent']
+    : isPaidPlan(planSlug) ? ['form', 'plan', 'otp', 'payment', 'profile'] : ['form', 'plan', 'otp', 'profile'];
 
   const STEP_LABELS: Record<Step, string> = {
     plan: 'Plano', form: 'Dados', otp: 'E-mail', payment: 'Pagamento',
@@ -489,13 +523,20 @@ export const RegisterPage: React.FC = () => {
               </div>
             )}
 
-            <button
-              className="btn-primary w-full flex items-center justify-center gap-2"
-              onClick={() => setStep('form')}
-              disabled={loadingPlans || !canContinuePlan}
-            >
-              Continuar <ArrowRight className="w-4 h-4" />
-            </button>
+            <div className="flex gap-2 pt-1">
+              <button type="button" className="btn-secondary flex-1" onClick={() => setStep('form')} disabled={submitting}>
+                Voltar
+              </button>
+              <button
+                type="button"
+                className="btn-primary flex-1 flex items-center justify-center gap-2"
+                onClick={doRegister}
+                disabled={submitting || loadingPlans || !canContinuePlan}
+              >
+                {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                Criar conta
+              </button>
+            </div>
             {isPaidPlan(planSlug) && !couponOkForPlan && (
               <p className="text-[11px] text-text-muted text-center">Aplique um cupom válido para continuar com este plano.</p>
             )}
@@ -504,19 +545,10 @@ export const RegisterPage: React.FC = () => {
 
         {/* ─── FORM ─────────────────────────────────────────────────────── */}
         {step === 'form' && (
-          <form onSubmit={onRegister} className="card space-y-3">
+          <form onSubmit={onSubmitForm} className="card space-y-3">
             <p className="text-xs text-text-muted">
-              Campos com <span className="text-red-400 font-bold">*</span> são obrigatórios.
+              Crie sua conta. Você escolhe o plano no próximo passo. Campos com <span className="text-red-400 font-bold">*</span> são obrigatórios.
             </p>
-
-            {/* Plano badge */}
-            {(() => { const PlanIcon = PLAN_META[planSlug].icon; return (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-accent-neon/10 border border-accent-neon/30">
-              <PlanIcon className="w-3.5 h-3.5 text-accent-neon shrink-0" />
-              <span className="text-xs font-bold text-accent-neon flex-1">Plano {PLAN_META[planSlug].label} — {getPlanPrice(planSlug)}</span>
-              <button type="button" className="text-[11px] text-accent-neon underline" onClick={() => setStep('plan')}>Trocar</button>
-            </div>
-            ); })()}
 
             <div>
               <label className="text-xs text-text-secondary mb-1 block">Nome completo *</label>
@@ -540,6 +572,13 @@ export const RegisterPage: React.FC = () => {
               <label className="text-xs text-text-secondary mb-1 block">Celular *</label>
               <input type="tel" autoComplete="tel" className="input-base" placeholder="11999999999"
                 value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value.replace(/\D/g, '') })} />
+            </div>
+            <div>
+              <label className="text-xs text-text-secondary mb-1 block">CPF *</label>
+              <input type="text" inputMode="numeric" autoComplete="off" className="input-base" placeholder="000.000.000-00"
+                value={maskCPF(form.cpf)}
+                onChange={(e) => setForm({ ...form, cpf: e.target.value.replace(/\D/g, '').slice(0, 11) })} />
+              <p className="text-[11px] text-text-muted mt-1">Necessário para emissão das cobranças.</p>
             </div>
             <div>
               <label className="text-xs text-text-secondary mb-1 block">Senha *</label>
@@ -600,13 +639,12 @@ export const RegisterPage: React.FC = () => {
               </label>
             </div>
 
-            <div className="flex gap-2 pt-1">
-              <button type="button" className="btn-secondary flex-1" onClick={() => setStep('plan')}>Voltar</button>
-              <button type="submit" disabled={submitting} className="btn-primary flex-1 flex items-center justify-center gap-2">
-                {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
-                Criar conta
-              </button>
-            </div>
+            <button type="submit" className="btn-primary w-full flex items-center justify-center gap-2">
+              Continuar <ArrowRight className="w-4 h-4" />
+            </button>
+            <p className="text-center text-xs text-text-muted">
+              Já possui conta? <Link to="/login" className="text-accent-neon underline">Entrar</Link>
+            </p>
           </form>
         )}
 

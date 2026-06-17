@@ -152,6 +152,10 @@ def create_customer(user) -> dict:
         'phone': user.phone or '',
         'externalReference': str(user.id),
     }
+    # CPF é exigido pelo Asaas para gerar cobranças.
+    cpf = getattr(user, 'cpf', '') or ''
+    if cpf:
+        payload['cpfCnpj'] = cpf
     logger.info('Creating Asaas customer for user %s', user.id)
     return _request('POST', '/customers', json=payload)
 

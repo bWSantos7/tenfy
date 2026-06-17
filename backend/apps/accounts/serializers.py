@@ -8,6 +8,8 @@ from django.utils import timezone
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
+from .validators import is_valid_cpf, only_digits
+
 User = get_user_model()
 
 CURRENT_CONSENT_VERSION = '1.0.0'
@@ -55,7 +57,7 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = (
-            'id', 'email', 'full_name', 'phone', 'avatar', 'role',
+            'id', 'email', 'full_name', 'phone', 'cpf', 'avatar', 'role',
             'email_verified',
             'consent_version', 'consented_at', 'marketing_consent',
             'is_staff', 'is_superuser', 'created_at',
@@ -104,11 +106,12 @@ class RegisterSerializer(serializers.ModelSerializer):
     password_confirm = serializers.CharField(write_only=True, required=True)
     accept_terms = serializers.BooleanField(write_only=True, required=True)
     marketing_consent = serializers.BooleanField(required=False, default=False)
+    cpf = serializers.CharField(required=False, allow_blank=True)
 
     class Meta:
         model = User
         fields = (
-            'email', 'full_name', 'phone', 'role',
+            'email', 'full_name', 'phone', 'cpf', 'role',
             'password', 'password_confirm',
             'accept_terms', 'marketing_consent',
         )
@@ -131,6 +134,15 @@ class RegisterSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {'full_name': 'Já existe um cadastro com este nome completo.'}
             )
+        # CPF — opcional no backend, mas validado quando informado (necessário p/ cobrança Asaas).
+        cpf_raw = attrs.get('cpf', '')
+        if cpf_raw:
+            digits = only_digits(cpf_raw)
+            if not is_valid_cpf(digits):
+                raise serializers.ValidationError({'cpf': 'CPF inválido.'})
+            attrs['cpf'] = digits
+        else:
+            attrs['cpf'] = ''
         return attrs
 
     def create(self, validated_data):
@@ -139,6 +151,7 @@ class RegisterSerializer(serializers.ModelSerializer):
             password=validated_data['password'],
             full_name=validated_data.get('full_name', ''),
             phone=validated_data.get('phone', ''),
+            cpf=validated_data.get('cpf', ''),
             role=validated_data.get('role', User.ROLE_PLAYER),
             marketing_consent=validated_data.get('marketing_consent', False),
             consent_version=CURRENT_CONSENT_VERSION,

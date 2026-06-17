@@ -946,7 +946,7 @@ export const RegisterPage: React.FC = () => {
           </div>
         )}
 
-        {(step === 'plan' || step === 'form') && (
+        {step === 'plan' && (
           <div className="text-center mt-4 text-sm text-text-secondary">
             Já possui conta?{' '}
             <button

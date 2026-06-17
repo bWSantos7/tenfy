@@ -117,19 +117,50 @@ export const SubscriptionPage: React.FC = () => {
     setCouponApplied(false);
   }
 
-  async function handleCheckout(plan: Plan) {
+  // Tester: ativa na hora.
+  async function handleActivateTester(plan: Plan) {
     if (acting) return;
     setActing(true);
     setPix(null);
     try {
-      if (plan.slug === 'tester') {
-        // Tester ativa na hora, sem pagamento.
-        const res = await checkout({ plan_slug: plan.slug as 'individual' | 'familia', billing_period: billingPeriod, payment_method: 'pix' });
-        setSub(res);
-        toast.success('Plano ativado.');
-        return;
+      const res = await checkout({ plan_slug: plan.slug as 'individual' | 'familia', billing_period: billingPeriod, payment_method: 'pix' });
+      setSub(res);
+      toast.success('Plano ativado.');
+    } catch (err) {
+      toast.error(extractApiError(err));
+    } finally { setActing(false); }
+  }
+
+  // Plano pago via Pix: gera QR + copia-e-cola no app.
+  async function handlePixCheckout(plan: Plan) {
+    if (acting) return;
+    setActing(true);
+    setPix(null);
+    try {
+      const couponValid = couponResults[plan.slug]?.valid;
+      const res = await checkout({
+        plan_slug: plan.slug as 'individual' | 'familia',
+        billing_period: billingPeriod,
+        payment_method: 'pix',
+        coupon_code: couponValid ? couponCode.trim() : undefined,
+      });
+      setSub(res);
+      if (res.pix?.copia_e_cola) {
+        setPix(res.pix);
+        toast.success('Pix gerado — pague para ativar.');
+      } else {
+        toast.error('Não foi possível gerar o Pix. Tente novamente.');
       }
-      // Planos pagos → Checkout hospedado do Asaas (Pix + cartão).
+    } catch (err) {
+      toast.error(extractApiError(err));
+    } finally { setActing(false); }
+  }
+
+  // Plano pago via cartão: redireciona para a página segura do Asaas.
+  async function handleCardCheckout(plan: Plan) {
+    if (acting) return;
+    setActing(true);
+    try {
       const couponValid = couponResults[plan.slug]?.valid;
       const session = await createCheckoutSession({
         plan_slug: plan.slug as 'individual' | 'familia',
@@ -143,9 +174,7 @@ export const SubscriptionPage: React.FC = () => {
       }
     } catch (err) {
       toast.error(extractApiError(err));
-    } finally {
-      setActing(false);
-    }
+    } finally { setActing(false); }
   }
 
   async function handleCancel(immediate: boolean) {
@@ -438,15 +467,21 @@ export const SubscriptionPage: React.FC = () => {
                     <div className="text-center text-xs text-text-muted py-2 border border-border-subtle rounded">
                       Plano atual
                     </div>
-                  ) : (
-                    <button
-                      className="btn-primary w-full !text-sm"
-                      onClick={() => handleCheckout(plan)}
-                      disabled={acting}
-                    >
-                      {acting ? <Loader2 className="w-4 h-4 animate-spin inline mr-1" /> : <CreditCard className="w-4 h-4 inline mr-1" />}
-                      {plan.slug === 'tester' ? 'Ativar plano' : 'Pagar (Pix ou cartão)'}
+                  ) : plan.slug === 'tester' ? (
+                    <button className="btn-primary w-full !text-sm" onClick={() => handleActivateTester(plan)} disabled={acting}>
+                      {acting ? <Loader2 className="w-4 h-4 animate-spin inline mr-1" /> : <Check className="w-4 h-4 inline mr-1" />}
+                      Ativar plano
                     </button>
+                  ) : (
+                    <div className="space-y-1.5">
+                      <button className="btn-primary w-full !text-sm" onClick={() => handlePixCheckout(plan)} disabled={acting}>
+                        {acting ? <Loader2 className="w-4 h-4 animate-spin inline mr-1" /> : null}
+                        Pagar com Pix
+                      </button>
+                      <button className="btn-secondary w-full !text-sm flex items-center justify-center gap-1" onClick={() => handleCardCheckout(plan)} disabled={acting}>
+                        <CreditCard className="w-4 h-4" /> Pagar com cartão
+                      </button>
+                    </div>
                   )}
                 </div>
               );

@@ -282,7 +282,30 @@ export const RegisterPage: React.FC = () => {
   }
 
   // ─── Step: Payment ────────────────────────────────────────────────────────
-  async function startCheckout() {
+  // Pix: gera QR + copia-e-cola NO APP (sem sair).
+  async function startPixCheckout() {
+    setPaymentLoading(true);
+    setPixCode(''); setPixQR('');
+    try {
+      const res = await checkout({
+        plan_slug: planSlug as 'individual' | 'familia',
+        billing_period: 'monthly',
+        payment_method: 'pix',
+        coupon_code: couponResult?.valid ? couponCode.trim() : undefined,
+      });
+      if (res.pix?.copia_e_cola) {
+        setPixCode(res.pix.copia_e_cola);
+        setPixQR(res.pix.qr_code_image ?? '');
+      } else {
+        toast.error('Não foi possível gerar o Pix agora. Tente novamente.');
+      }
+    } catch (err) {
+      toast.error(extractApiError(err));
+    } finally { setPaymentLoading(false); }
+  }
+
+  // Cartão de crédito: redireciona para a página segura do Asaas.
+  async function startCardCheckout() {
     setPaymentLoading(true);
     try {
       const res = await createCheckoutSession({
@@ -291,7 +314,6 @@ export const RegisterPage: React.FC = () => {
         coupon_code: couponResult?.valid ? couponCode.trim() : undefined,
       });
       if (res.checkout_url) {
-        // Página segura do Asaas (Pix + cartão). Volta para /assinatura após pagar.
         window.location.href = res.checkout_url;
       } else {
         toast.error('Não foi possível iniciar o pagamento. Tente novamente.');
@@ -708,16 +730,49 @@ export const RegisterPage: React.FC = () => {
             ) : (
               <p className="text-sm text-text-secondary">Valor: {getPlanPrice(planSlug)}.</p>
             )}
-            <p className="text-sm text-text-secondary">
-              Você será levado a uma página segura do Asaas para pagar com <strong>Pix ou cartão de crédito</strong>.
-            </p>
-            <button className="btn-primary w-full flex items-center justify-center gap-2" onClick={startCheckout} disabled={paymentLoading}>
-              {paymentLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
-              Ir para o pagamento seguro
-            </button>
-            <p className="text-[11px] text-text-muted text-center">
-              O acesso ao app é liberado somente após a confirmação do pagamento.
-            </p>
+            {paymentLoading ? (
+              <div className="py-8 flex flex-col items-center gap-3">
+                <Loader2 className="w-8 h-8 text-accent-neon animate-spin" />
+                <p className="text-sm text-text-muted">Gerando cobrança…</p>
+              </div>
+            ) : pixCode ? (
+              <>
+                <p className="text-sm text-text-secondary">Escaneie o QR Code ou copie o código Pix para pagar.</p>
+                {pixQR && <div className="flex justify-center"><img src={pixQR.startsWith('data:') ? pixQR : `data:image/png;base64,${pixQR}`} alt="QR Code Pix" className="w-40 h-40 rounded border border-border-subtle" /></div>}
+                <div>
+                  <p className="text-xs text-text-muted mb-1">Pix copia e cola</p>
+                  <div className="flex gap-1">
+                    <input className="input-base text-xs flex-1" readOnly value={pixCode} />
+                    <button type="button" className="btn-secondary !text-xs whitespace-nowrap" onClick={copyPix}>
+                      {pixCopied ? 'Copiado!' : 'Copiar código'}
+                    </button>
+                  </div>
+                </div>
+                <div className="rounded-lg bg-accent-neon/8 border border-accent-neon/20 p-3">
+                  <p className="text-xs text-text-muted">Após pagar, clique em "Já paguei" para liberar o acesso.</p>
+                </div>
+                <button className="btn-primary w-full flex items-center justify-center gap-2" onClick={verifyPaymentAndContinue} disabled={verifyingPayment}>
+                  {verifyingPayment && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Já paguei — continuar
+                </button>
+                <button className="w-full text-xs text-text-muted hover:text-text-secondary" onClick={() => { setPixCode(''); setPixQR(''); }}>
+                  Escolher outra forma de pagamento
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-text-secondary">Escolha como pagar:</p>
+                <button className="btn-primary w-full flex items-center justify-center gap-2" onClick={startPixCheckout}>
+                  <Zap className="w-4 h-4" /> Pagar com Pix (no app)
+                </button>
+                <button className="btn-secondary w-full flex items-center justify-center gap-2" onClick={startCardCheckout}>
+                  <CreditCard className="w-4 h-4" /> Pagar com cartão de crédito
+                </button>
+                <p className="text-[11px] text-text-muted text-center">
+                  No cartão, você é levado à página segura do Asaas. O acesso libera após a confirmação do pagamento.
+                </p>
+              </>
+            )}
           </div>
         )}
 

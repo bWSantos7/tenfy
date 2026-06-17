@@ -3,6 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { Check, CreditCard, Loader2, Tag, Trash2, UserPlus, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { extractApiError } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
+import { fetchMe } from '../services/auth';
+
+function maskCpf(v: string): string {
+  return (v || '').replace(/\D/g, '').slice(0, 11)
+    .replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+}
 import {
   Plan,
   Subscription,
@@ -57,6 +64,10 @@ export const SubscriptionPage: React.FC = () => {
   const [couponResults, setCouponResults] = useState<Record<string, CouponValidation>>({});
   const [couponApplied, setCouponApplied] = useState(false);
   const [validatingCoupon, setValidatingCoupon] = useState(false);
+  // CPF — usuários existentes sem CPF precisam informar antes de pagar (Asaas exige).
+  const { user, setUser } = useAuth();
+  const [cpf, setCpf] = useState('');
+  const needsCpf = !user?.cpf;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -131,9 +142,17 @@ export const SubscriptionPage: React.FC = () => {
     } finally { setActing(false); }
   }
 
+  function cpfGuard(): 'invalid' | null {
+    if (!needsCpf) return null;
+    const digits = cpf.replace(/\D/g, '');
+    if (digits.length !== 11) { toast.error('Informe um CPF válido para pagar.'); return 'invalid'; }
+    return null;
+  }
+
   // Plano pago via Pix: gera QR + copia-e-cola no app.
   async function handlePixCheckout(plan: Plan) {
     if (acting) return;
+    if (cpfGuard() === 'invalid') return;
     setActing(true);
     setPix(null);
     try {
@@ -143,8 +162,10 @@ export const SubscriptionPage: React.FC = () => {
         billing_period: billingPeriod,
         payment_method: 'pix',
         coupon_code: couponValid ? couponCode.trim() : undefined,
+        cpf: needsCpf ? cpf.replace(/\D/g, '') : undefined,
       });
       setSub(res);
+      if (needsCpf) { fetchMe().then(setUser).catch(() => {}); }
       if (res.pix?.copia_e_cola) {
         setPix(res.pix);
         toast.success('Pix gerado — pague para ativar.');
@@ -159,6 +180,7 @@ export const SubscriptionPage: React.FC = () => {
   // Plano pago via cartão: redireciona para a página segura do Asaas.
   async function handleCardCheckout(plan: Plan) {
     if (acting) return;
+    if (cpfGuard() === 'invalid') return;
     setActing(true);
     try {
       const couponValid = couponResults[plan.slug]?.valid;
@@ -166,6 +188,7 @@ export const SubscriptionPage: React.FC = () => {
         plan_slug: plan.slug as 'individual' | 'familia',
         billing_period: billingPeriod,
         coupon_code: couponValid ? couponCode.trim() : undefined,
+        cpf: needsCpf ? cpf.replace(/\D/g, '') : undefined,
       });
       if (session.checkout_url) {
         window.location.href = session.checkout_url;
@@ -379,6 +402,23 @@ export const SubscriptionPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* CPF — necessário para pagar quando o usuário ainda não tem CPF cadastrado */}
+      {needsCpf && (
+        <div className="card !p-4 space-y-2">
+          <div className="text-sm font-semibold">CPF para pagamento</div>
+          <div className="text-xs text-text-muted">
+            Para emitir a cobrança, informe seu CPF. Ele fica salvo na sua conta.
+          </div>
+          <input
+            className="input-base w-full text-sm"
+            inputMode="numeric"
+            placeholder="000.000.000-00"
+            value={maskCpf(cpf)}
+            onChange={(e) => setCpf(e.target.value.replace(/\D/g, '').slice(0, 11))}
+          />
+        </div>
+      )}
 
       {/* Plans list — checkout / upgrade */}
       <div>

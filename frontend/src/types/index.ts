@@ -66,6 +66,7 @@ export interface User {
   email: string;
   full_name: string;
   phone: string;
+  cpf?: string;
   avatar: string | null;
   role: Role;
   email_verified: boolean;

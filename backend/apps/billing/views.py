@@ -84,6 +84,25 @@ def subscription_detail(request):
         return Response({'has_subscription': False}, status=status.HTTP_404_NOT_FOUND)
 
 
+def _ensure_user_cpf(user, provided_cpf):
+    """Garante CPF no usuário existente (Asaas exige p/ cobrança). Salva se informado.
+    Retorna um Response de erro (com cpf_required=True) ou None se ok."""
+    if getattr(user, 'cpf', ''):
+        return None
+    from apps.accounts.validators import is_valid_cpf, only_digits
+    from django.contrib.auth import get_user_model
+    digits = only_digits(provided_cpf or '')
+    if not digits:
+        return Response({'detail': 'CPF é obrigatório para o pagamento.', 'cpf_required': True}, status=status.HTTP_400_BAD_REQUEST)
+    if not is_valid_cpf(digits):
+        return Response({'detail': 'CPF inválido.', 'cpf_required': True}, status=status.HTTP_400_BAD_REQUEST)
+    if get_user_model().objects.filter(cpf=digits).exclude(pk=user.pk).exists():
+        return Response({'detail': 'Já existe uma conta com este CPF.', 'cpf_required': True}, status=status.HTTP_400_BAD_REQUEST)
+    user.cpf = digits
+    user.save(update_fields=['cpf', 'updated_at'])
+    return None
+
+
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def subscription_checkout(request):
@@ -118,6 +137,13 @@ def subscription_checkout(request):
             {'detail': 'Este plano está disponível apenas com um cupom válido no momento.'},
             status=status.HTTP_403_FORBIDDEN,
         )
+
+    # Pix no app cria o cliente Asaas no backend → exige CPF (captura se faltar).
+    # Só quando o Asaas está configurado (sem key, cai em pending local, sem cobrança).
+    if plan.slug in _PAID_PLANS and getattr(settings, 'ASAAS_API_KEY', ''):
+        cpf_err = _ensure_user_cpf(request.user, d.get('cpf', ''))
+        if cpf_err:
+            return cpf_err
 
     with transaction.atomic():
         is_tester = plan.slug == Plan.SLUG_TESTER
@@ -306,6 +332,12 @@ def checkout_session(request):
             {'detail': 'Este plano está disponível apenas com um cupom válido no momento.'},
             status=status.HTTP_403_FORBIDDEN,
         )
+
+    # Garante CPF no usuário (salva se informado; o Asaas exige p/ cobrança).
+    if getattr(settings, 'ASAAS_API_KEY', ''):
+        cpf_err = _ensure_user_cpf(request.user, request.data.get('cpf', ''))
+        if cpf_err:
+            return cpf_err
 
     discount_amount = coupon_validation.discount if has_valid_coupon else Decimal('0')
 

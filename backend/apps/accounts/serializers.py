@@ -229,9 +229,24 @@ class PasswordChangeSerializer(serializers.Serializer):
 
 
 class UserUpdateSerializer(serializers.ModelSerializer):
+    cpf = serializers.CharField(required=False, allow_blank=True)
+
     class Meta:
         model = User
-        fields = ('full_name', 'phone', 'role', 'marketing_consent')
+        fields = ('full_name', 'phone', 'cpf', 'role', 'marketing_consent')
+
+    def validate_cpf(self, value):
+        if not value:
+            return ''
+        digits = only_digits(value)
+        if not is_valid_cpf(digits):
+            raise serializers.ValidationError('CPF inválido.')
+        qs = User.objects.filter(cpf=digits)
+        if self.instance is not None:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError('Já existe uma conta com este CPF.')
+        return digits
 
 
 class AthleteUserSerializer(serializers.ModelSerializer):

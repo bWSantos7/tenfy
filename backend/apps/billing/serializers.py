@@ -81,6 +81,8 @@ class CheckoutSerializer(serializers.Serializer):
     card_token = serializers.CharField(required=False, allow_blank=True, default='')
     # Programa de parceiros — cupom opcional aplicado no checkout (Fluxo B).
     coupon_code = serializers.CharField(required=False, allow_blank=True, default='')
+    # CPF do usuário existente sem CPF (Asaas exige p/ cobrança). Salvo antes do checkout.
+    cpf = serializers.CharField(required=False, allow_blank=True, default='')
 
     def validate(self, attrs):
         if attrs.get('payment_method') == 'credit_card' and not attrs.get('card_token', '').strip():

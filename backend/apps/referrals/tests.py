@@ -322,6 +322,30 @@ class CheckoutWithCouponTests(TestCase):
         self.assertIn(res.status_code, [200, 201])
         self.assertTrue(res.data['coupon']['applied'])
 
+    @override_settings(ASAAS_API_KEY='x')
+    def test_checkout_requires_cpf_when_asaas_configured(self):
+        make_coupon(self.partner, code='PROMO10', discount_value=Decimal('10'))
+        # usuário sem CPF + Asaas configurado → exige CPF (não chega a chamar o Asaas)
+        res = self.client.post('/api/billing/subscription/checkout/', {
+            'plan_slug': 'individual', 'billing_period': 'monthly',
+            'payment_method': 'pix', 'coupon_code': 'PROMO10',
+        }, format='json')
+        self.assertEqual(res.status_code, 400)
+        self.assertTrue(res.data.get('cpf_required'))
+
+    @override_settings(ASAAS_API_KEY='x')
+    def test_checkout_saves_provided_cpf(self):
+        make_coupon(self.partner, code='PROMO10', discount_value=Decimal('10'))
+        with patch('apps.billing.services.asaas_service.create_subscription_with_first_discount',
+                   return_value={'subscription': {'id': 'sub_x'}, 'first_payment': {}}):
+            res = self.client.post('/api/billing/subscription/checkout/', {
+                'plan_slug': 'individual', 'billing_period': 'monthly',
+                'payment_method': 'pix', 'coupon_code': 'PROMO10', 'cpf': '529.982.247-25',
+            }, format='json')
+        self.assertIn(res.status_code, [200, 201])
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.cpf, '52998224725')
+
     def test_checkout_session_returns_url_and_links_coupon(self):
         make_coupon(self.partner, code='PROMO10', discount_value=Decimal('10'))
         with patch('apps.billing.services.asaas_service.create_checkout_session',
@@ -570,6 +594,49 @@ class CommissionWebhookTests(TestCase):
         self._post(payload)
         self._post(payload)  # webhook reprocessado
         self.assertEqual(CommissionLedger.objects.filter(subscription=self.sub).count(), 1)
+
+
+class DeferredMaterializeWebhookTests(TestCase):
+    """Cadastro pendente: a conta só nasce quando o pagamento confirma (webhook)."""
+    def setUp(self):
+        from django.contrib.auth.hashers import make_password
+        from apps.accounts.models import PendingRegistration
+        self.client = APIClient()
+        self.partner = make_partner()
+        self.coupon = make_coupon(self.partner, code='PROMO10', discount_value=Decimal('10'))
+        self.rule = CommissionRule.objects.create(
+            partner=self.partner, coupon=self.coupon,
+            commission_type=CommissionRule.COMMISSION_PERCENT, commission_value=Decimal('20'),
+        )
+        self.plan = make_paid_plan('individual', '49.90')
+        self.pending = PendingRegistration.objects.create(
+            email='defer@ex.com', full_name='Defer User', cpf='11144477735',
+            password=make_password('Str0ngPass!'), plan_slug='individual',
+            billing_period='monthly', coupon_code='PROMO10', email_verified=True,
+        )
+
+    def _post(self, payload, token='test_token'):
+        with patch.dict('django.conf.settings.__dict__', {'ASAAS_WEBHOOK_TOKEN': token}):
+            return self.client.post('/api/billing/webhooks/asaas/', payload, format='json', HTTP_ASAAS_WEBHOOK_TOKEN=token)
+
+    def test_webhook_materializes_account_and_commission(self):
+        self.assertFalse(User.objects.filter(email='defer@ex.com').exists())
+        with patch('apps.billing.services.asaas_service.create_recurrence_after_first_payment',
+                   return_value={'id': 'sub_def'}):
+            res = self._post({
+                'event': 'PAYMENT_CONFIRMED',
+                'payment': {'id': 'pay_def', 'externalReference': f'reg:{self.pending.token}',
+                            'value': 44.91, 'netValue': 43.50, 'billingType': 'PIX'},
+            })
+        self.assertEqual(res.status_code, 200)
+        u = User.objects.get(email='defer@ex.com')          # conta criada só agora
+        self.assertEqual(u.cpf, '11144477735')
+        self.assertEqual(u.subscription.status, Subscription.STATUS_ACTIVE)
+        led = CommissionLedger.objects.filter(subscription=u.subscription).first()
+        self.assertIsNotNone(led)
+        self.assertEqual(led.commission_amount, Decimal('8.70'))
+        self.pending.refresh_from_db()
+        self.assertTrue(self.pending.consumed)
 
 
 class RecurrenceWebhookTests(TestCase):

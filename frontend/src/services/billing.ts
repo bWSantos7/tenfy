@@ -96,6 +96,7 @@ export async function checkout(payload: {
   payment_method?: 'pix' | 'credit_card' | 'debit_card';
   card_token?: string;
   coupon_code?: string;
+  cpf?: string;
 }): Promise<CheckoutResponse> {
   const res = await api.post('/api/billing/subscription/checkout/', payload);
   return res.data;
@@ -121,6 +122,7 @@ export async function createCheckoutSession(payload: {
   plan_slug: 'individual' | 'familia';
   billing_period?: 'monthly' | 'yearly';
   coupon_code?: string;
+  cpf?: string;
 }): Promise<CheckoutSession> {
   const res = await api.post('/api/billing/checkout/session/', payload);
   return res.data;

@@ -322,6 +322,28 @@ class CheckoutWithCouponTests(TestCase):
         self.assertIn(res.status_code, [200, 201])
         self.assertTrue(res.data['coupon']['applied'])
 
+    def test_checkout_session_returns_url_and_links_coupon(self):
+        make_coupon(self.partner, code='PROMO10', discount_value=Decimal('10'))
+        with patch('apps.billing.services.asaas_service.create_checkout_session',
+                   return_value={'id': 'chk_1', 'link': 'https://sandbox.asaas.com/checkoutSession/show/chk_1'}) as m:
+            res = self.client.post('/api/billing/checkout/session/', {
+                'plan_slug': 'individual', 'billing_period': 'monthly', 'coupon_code': 'PROMO10',
+            }, format='json')
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.data['checkout_url'].startswith('https://'))
+        self.assertTrue(res.data['coupon']['applied'])
+        m.assert_called_once()
+        sub = Subscription.objects.get(user=self.user)
+        self.assertEqual(sub.coupon.code, 'PROMO10')
+        self.assertEqual(sub.partner, self.partner)
+
+    @override_settings(TESTING=False)
+    def test_checkout_session_blocked_without_coupon(self):
+        res = self.client.post('/api/billing/checkout/session/', {
+            'plan_slug': 'individual', 'billing_period': 'monthly',
+        }, format='json')
+        self.assertEqual(res.status_code, 403)
+
 
 class AsaasFirstDiscountTests(TestCase):
     def setUp(self):

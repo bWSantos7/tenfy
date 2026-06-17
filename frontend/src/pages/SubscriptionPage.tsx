@@ -12,6 +12,7 @@ import {
   fetchPlans,
   fetchSubscription,
   checkout,
+  createCheckoutSession,
   validateCoupon,
   cancelSubscription,
   reactivateSubscription,
@@ -121,16 +122,25 @@ export const SubscriptionPage: React.FC = () => {
     setActing(true);
     setPix(null);
     try {
+      if (plan.slug === 'tester') {
+        // Tester ativa na hora, sem pagamento.
+        const res = await checkout({ plan_slug: plan.slug as 'individual' | 'familia', billing_period: billingPeriod, payment_method: 'pix' });
+        setSub(res);
+        toast.success('Plano ativado.');
+        return;
+      }
+      // Planos pagos → Checkout hospedado do Asaas (Pix + cartão).
       const couponValid = couponResults[plan.slug]?.valid;
-      const res = await checkout({
+      const session = await createCheckoutSession({
         plan_slug: plan.slug as 'individual' | 'familia',
         billing_period: billingPeriod,
-        payment_method: 'pix',
         coupon_code: couponValid ? couponCode.trim() : undefined,
       });
-      setSub(res);
-      if (res.pix?.copia_e_cola) setPix(res.pix);
-      toast.success('Checkout iniciado — efetue o pagamento para ativar.');
+      if (session.checkout_url) {
+        window.location.href = session.checkout_url;
+      } else {
+        toast.error('Não foi possível iniciar o pagamento.');
+      }
     } catch (err) {
       toast.error(extractApiError(err));
     } finally {
@@ -435,7 +445,7 @@ export const SubscriptionPage: React.FC = () => {
                       disabled={acting}
                     >
                       {acting ? <Loader2 className="w-4 h-4 animate-spin inline mr-1" /> : <CreditCard className="w-4 h-4 inline mr-1" />}
-                      Assinar via Pix
+                      {plan.slug === 'tester' ? 'Ativar plano' : 'Pagar (Pix ou cartão)'}
                     </button>
                   )}
                 </div>

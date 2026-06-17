@@ -276,6 +276,90 @@ def checkout_validate_coupon(request):
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
+def checkout_session(request):
+    """
+    Cria uma sessão de Checkout HOSPEDADO do Asaas (Pix + Cartão) para um plano
+    pago, com desconto do cupom embutido. Retorna {checkout_url}. PCI-safe: o
+    cartão é digitado na página do Asaas, nunca no nosso app.
+    POST /api/billing/checkout/session/
+    Body: {plan_slug, billing_period, coupon_code}
+    """
+    plan_slug = request.data.get('plan_slug')
+    billing_period = request.data.get('billing_period', 'monthly')
+    coupon_code = (request.data.get('coupon_code') or '').strip()
+
+    try:
+        plan = Plan.objects.get(slug=plan_slug, is_active=True)
+    except Plan.DoesNotExist:
+        return Response({'detail': 'Plano não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+    if plan.slug not in ('individual', 'familia'):
+        return Response({'detail': 'Checkout hospedado é apenas para planos pagos.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    coupon_validation = None
+    if coupon_code:
+        from apps.referrals.services.coupons import validate_coupon
+        coupon_validation = validate_coupon(coupon_code, plan, billing_period, request.user)
+    has_valid_coupon = bool(coupon_validation and coupon_validation.valid)
+
+    if not getattr(settings, 'TESTING', False) and not has_valid_coupon:
+        return Response(
+            {'detail': 'Este plano está disponível apenas com um cupom válido no momento.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    discount_amount = coupon_validation.discount if has_valid_coupon else Decimal('0')
+
+    with transaction.atomic():
+        sub, _created = Subscription.objects.get_or_create(
+            user=request.user,
+            defaults={
+                'plan': plan, 'billing_period': billing_period,
+                'status': Subscription.STATUS_PENDING, 'start_date': date.today(),
+            },
+        )
+        sub.pending_plan = plan
+        sub.pending_billing_period = billing_period
+        sub.cancel_at_period_end = False
+        if has_valid_coupon:
+            sub.partner = coupon_validation.partner
+            sub.coupon = coupon_validation.coupon
+        sub.save(update_fields=[
+            'pending_plan', 'pending_billing_period', 'cancel_at_period_end',
+            'partner', 'coupon', 'updated_at',
+        ])
+
+    # URLs fixas (FRONTEND_URL) — evita open redirect a partir de input do cliente.
+    frontend = getattr(settings, 'FRONTEND_URL', '').rstrip('/')
+    success_url = f'{frontend}/assinatura'
+    cancel_url = f'{frontend}/assinatura'
+
+    try:
+        from .services.asaas_service import create_checkout_session
+        result = create_checkout_session(
+            user=request.user, plan=plan, billing_period=billing_period,
+            discount_amount=discount_amount, success_url=success_url, cancel_url=cancel_url,
+        )
+    except Exception as exc:
+        logger.error('Checkout session creation failed for user %s: %s', request.user.id, exc)
+        return Response(
+            {'detail': 'Não foi possível iniciar o pagamento. Tente novamente em instantes.'},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+
+    _log_action(request.user, 'billing.checkout_session', f'plan={plan.slug} coupon={coupon_code}')
+    resp = {'checkout_url': result.get('link') or result.get('url') or '', 'checkout_id': result.get('id', '')}
+    if coupon_validation is not None:
+        resp['coupon'] = {
+            'applied': has_valid_coupon, 'code': coupon_code.upper(),
+            'original': str(coupon_validation.original),
+            'discount': str(coupon_validation.discount),
+            'final': str(coupon_validation.final),
+        }
+    return Response(resp)
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
 def subscription_cancel(request):
     """Cancel the user's subscription."""
     ser = CancelSubscriptionSerializer(data=request.data)

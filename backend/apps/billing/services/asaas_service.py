@@ -307,6 +307,47 @@ def create_subscription_with_first_discount(
     return {'subscription': subscription, 'first_payment': first_payment}
 
 
+def create_checkout_session(
+    user,
+    plan,
+    billing_period: str,
+    discount_amount,
+    success_url: str,
+    cancel_url: str,
+) -> dict:
+    """
+    Cria uma sessão de Checkout HOSPEDADO do Asaas (Pix + Cartão) para o 1º
+    pagamento (com desconto do cupom embutido no valor). PCI-safe: o cartão é
+    coletado na página do Asaas, nunca no nosso backend/front.
+
+    externalReference = user.id permite o webhook mapear o pagamento → usuário →
+    assinatura (ativação + comissão). Retorna o dict do checkout (inclui 'link').
+    """
+    from decimal import Decimal
+
+    full_price = Decimal(plan.price_for_period(billing_period))
+    discount = Decimal(discount_amount or 0)
+    value = full_price - discount
+    if value < 0:
+        value = Decimal('0')
+
+    payload = {
+        'billingTypes': ['CREDIT_CARD', 'PIX'],
+        'chargeTypes': ['DETACHED'],
+        'minutesToExpire': 60,
+        'callback': {'successUrl': success_url, 'cancelUrl': cancel_url},
+        'items': [{
+            'name': f'Plano {plan.name}'[:30],
+            'description': f'Tenfy — Plano {plan.name} (1ª mensalidade)'[:255],
+            'quantity': 1,
+            'value': float(value.quantize(Decimal('0.01'))),
+        }],
+        'externalReference': str(user.id),
+    }
+    logger.info('Creating Asaas checkout session for user %s plan %s', user.id, plan.slug)
+    return _request('POST', '/checkouts', json=payload)
+
+
 def get_subscription_first_pix_qr(asaas_subscription_id: str, max_attempts: int = 3) -> dict:
     """
     Fetch the Pix QR code for the first pending payment of a subscription.

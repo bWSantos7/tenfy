@@ -110,6 +110,22 @@ export async function validateCoupon(payload: {
   return res.data;
 }
 
+export interface CheckoutSession {
+  checkout_url: string;
+  checkout_id: string;
+  coupon?: CouponInfo;
+}
+
+/** Cria uma sessão de Checkout hospedado do Asaas (Pix + Cartão). Redirecione para checkout_url. */
+export async function createCheckoutSession(payload: {
+  plan_slug: 'individual' | 'familia';
+  billing_period?: 'monthly' | 'yearly';
+  coupon_code?: string;
+}): Promise<CheckoutSession> {
+  const res = await api.post('/api/billing/checkout/session/', payload);
+  return res.data;
+}
+
 export async function cancelSubscription(immediate = false): Promise<Subscription> {
   const res = await api.post('/api/billing/subscription/cancel/', { immediate });
   return res.data;

@@ -5,6 +5,7 @@
     "nixpacksConfigPath": "nixpacks.toml"
   },
   "deploy": {
+    "preDeployCommand": "/opt/venv/bin/python manage.py setup_periodic_tasks",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 5,
     "healthcheckPath": "/health/",

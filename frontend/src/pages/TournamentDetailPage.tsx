@@ -681,7 +681,10 @@ function TimelineItem({
 
 // ── Category grouping ────────────────────────────────────────────────────────
 
-const VARIANT_RE = /\s*\((GA|G1\+?|G2\+?|G3\+?|[A-Z]\d*\+?)\)\s*$/i;
+// Grade de ranking entre parênteses no fim do nome: GA, GA+, GB, G1, G1+, G2+…
+// (1-2 letras + dígitos opcionais + "+" opcional). Inclui o "+" do GA+ — sem ele
+// "(GA+)" não casava e ficava como categoria separada em vez de variante de grade.
+const VARIANT_RE = /\s*\(([A-Z]{1,2}\d*\+?)\)\s*$/i;
 
 function groupCategories(categories: RegistrantCategory[]) {
   const groups = new Map<string, RegistrantCategory[]>();

@@ -785,7 +785,9 @@ def _handle_payment_confirmed(payload: dict):
             'status': Payment.STATUS_PAID,
             'transaction_id': p.get('id', ''),
             'paid_at': timezone.now(),
-            'description': p.get('description', ''),
+            # Pagamentos de checkout hospedado chegam com description=null (chave
+            # presente, valor None) — `or ''` evita violar o NOT NULL da coluna.
+            'description': p.get('description') or '',
             'raw_response': _safe_raw_response(p),  # PCI: strip card data
         },
     )

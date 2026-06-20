@@ -45,6 +45,7 @@ const PrivacyPolicyPage   = lazyPage(() => import('./pages/PrivacyPolicyPage').t
 const AccountDeletionPage = lazyPage(() => import('./pages/AccountDeletionPage').then(m => ({ default: m.AccountDeletionPage })));
 const InscricoesPage      = lazyPage(() => import('./pages/InscricoesPage').then(m => ({ default: m.InscricoesPage })));
 const TournamentComparePage = lazyPage(() => import('./pages/TournamentComparePage').then(m => ({ default: m.TournamentComparePage })));
+const HelpPage            = lazyPage(() => import('./pages/HelpPage').then(m => ({ default: m.HelpPage })));
 
 const PageLoader: React.FC = () => (
   <div className="min-h-screen bg-bg-base flex items-center justify-center">
@@ -113,6 +114,7 @@ const App: React.FC = () => {
           <Route path="configuracoes" element={<ProfilePage />} />
           <Route path="assinatura" element={<SubscriptionPage />} />
           <Route path="inscricoes" element={<InscricoesPage />} />
+          <Route path="ajuda" element={<HelpPage />} />
           <Route path="treinador" element={<CoachPage />} />
           <Route
             path="admin-panel"

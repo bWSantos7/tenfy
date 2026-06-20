@@ -50,7 +50,10 @@ export const ResultsPage: React.FC = () => {
       listChildren()
         .then((data) => {
           setChildren(data);
-          setSelectedChildId((prev) => prev ?? (data[0]?.child ?? null));
+          const first = data[0]?.child ?? null;
+          setSelectedChildId((prev) => prev ?? first);
+          // Sem dependentes: encerra o loading (senão os próximos efeitos não rodam).
+          if (!first) setTiLoading(false);
         })
         .catch(() => setTiLoading(false));
     } else {
@@ -172,13 +175,26 @@ export const ResultsPage: React.FC = () => {
           <Loader2 className="w-7 h-7 text-accent-neon animate-spin" />
         </div>
 
+      ) : isParent && children.length === 0 ? (
+        <div className="card flex items-start gap-3 py-6">
+          <User className="w-5 h-5 text-text-muted shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium">Nenhum dependente cadastrado</p>
+            <p className="text-xs text-text-muted mt-0.5">
+              Cadastre um dependente em{' '}
+              <Link to="/configuracoes" className="text-accent-blue hover:underline">Configurações</Link>{' '}
+              para acompanhar os resultados dele aqui.
+            </p>
+          </div>
+        </div>
+
       ) : !tiData?.has_ti_id ? (
         <div className="card flex items-start gap-3 py-6">
           <LinkIcon className="w-5 h-5 text-text-muted shrink-0 mt-0.5" />
           <div>
             <p className="text-sm font-medium">ID do Tênis Integrado não vinculado</p>
             <p className="text-xs text-text-muted mt-0.5">
-              Para importar jogos automaticamente, vincule seu ID no{' '}
+              Para importar jogos automaticamente, vincule {isParent ? 'o ID do dependente' : 'seu ID'} no{' '}
               <Link to="/perfil" className="text-accent-blue hover:underline">Perfil</Link>.
             </p>
           </div>

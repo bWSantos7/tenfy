@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { Home, Calendar, Star, User, ShieldCheck, Sun, Moon, Award, Users, Bell, LogOut, UserCheck, Loader2, CreditCard } from 'lucide-react';
+import { Home, Calendar, Star, User, ShieldCheck, Sun, Moon, Award, Users, Bell, LogOut, UserCheck, Loader2, CreditCard, HelpCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { BetaModal } from './BetaModal';
+import { InteractiveTutorial } from './InteractiveTutorial';
 import { unreadAlerts, listReceivedInvites, respondDependentInvite } from '../services/data';
 import { fetchSubscription } from '../services/billing';
 import { DependentInvite } from '../types';
@@ -82,6 +83,7 @@ export const AppLayout: React.FC = () => {
   return (
     <div className="min-h-screen bg-bg-base flex flex-col">
       <BetaModal user={user} />
+      <InteractiveTutorial user={user} />
 
       {/* ── Modal de convite de vínculo pendente ──────────────────────────── */}
       {pendingInvites.length > 0 && (
@@ -194,6 +196,10 @@ export const AppLayout: React.FC = () => {
             <button onClick={toggleTheme} className="btn-ghost !px-2" title={theme === 'dark' ? 'Modo claro' : 'Modo escuro'}>
               {theme === 'dark' ? <Sun className="w-4 h-4 text-accent-neon" /> : <Moon className="w-4 h-4" />}
             </button>
+
+            <NavLink to="/ajuda" className="btn-ghost !px-2" title="Ajuda">
+              <HelpCircle className="w-5 h-5" />
+            </NavLink>
 
             <button
               onClick={() => logout()}

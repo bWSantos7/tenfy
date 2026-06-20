@@ -18,6 +18,8 @@ export const BetaModal: React.FC<{ user: User | null }> = ({ user }) => {
   const dismiss = () => {
     if (user) localStorage.setItem(betaAckKey(user.id), '1');
     setVisible(false);
+    // Encadeia o tutorial de primeiro acesso (InteractiveTutorial escuta este evento).
+    window.dispatchEvent(new Event('tenfy-beta-ack'));
   };
 
   if (!visible) return null;

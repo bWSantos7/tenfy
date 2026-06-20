@@ -7,6 +7,11 @@ import { useAuth } from '../contexts/AuthContext';
 
 type Status = 'checking' | 'active' | 'pending';
 
+// O webhook do Asaas (sobretudo Pix) pode levar mais que alguns segundos.
+// Consulta a cada 5s por ~2 minutos antes de oferecer o retry manual.
+const POLL_INTERVAL_MS = 5000;
+const MAX_ATTEMPTS = 24;
+
 export const PaymentReturnPage: React.FC = () => {
   const nav = useNavigate();
   const { setUser } = useAuth();
@@ -41,10 +46,17 @@ export const PaymentReturnPage: React.FC = () => {
 
   useEffect(() => { check(); }, [check]);
   useEffect(() => {
-    if (status !== 'pending' || attempts >= 5) return;
-    const t = setTimeout(() => { setAttempts((a) => a + 1); check(); }, 4000);
+    if (status !== 'pending' || canceled || attempts >= MAX_ATTEMPTS) return;
+    const t = setTimeout(() => { setAttempts((a) => a + 1); check(); }, POLL_INTERVAL_MS);
     return () => clearTimeout(t);
-  }, [status, attempts, check]);
+  }, [status, attempts, canceled, check]);
+
+  // Confirmou: leva o usuário para o app automaticamente (não fica preso na tela).
+  useEffect(() => {
+    if (status !== 'active') return;
+    const t = setTimeout(() => nav('/inicio', { replace: true }), 1800);
+    return () => clearTimeout(t);
+  }, [status, nav]);
 
   return (
     <div className="min-h-screen bg-bg-base flex flex-col items-center justify-center px-4 py-8">

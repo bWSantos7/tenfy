@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { User } from '../types';
 import { getTutorialSteps } from '../data/helpContent';
@@ -13,10 +14,9 @@ export const BETA_ACK_EVENT = 'tenfy-beta-ack';
 const betaAckKey = (userId: number) => `tenfy_beta_ack_${userId}`;
 
 export const InteractiveTutorial: React.FC<{ user: User | null }> = ({ user }) => {
+  const navigate = useNavigate();
   const [visible, setVisible] = useState(false);
   const [step, setStep] = useState(0);
-  // Imagens que falharam ao carregar — caem para o ícone como fallback.
-  const [brokenImages, setBrokenImages] = useState<Record<string, boolean>>({});
 
   const steps = getTutorialSteps(user?.role);
 
@@ -45,6 +45,14 @@ export const InteractiveTutorial: React.FC<{ user: User | null }> = ({ user }) =
     };
   }, [user, open]);
 
+  // A cada passo, abre a tela correspondente para ilustrar o que está sendo explicado.
+  useEffect(() => {
+    if (!visible) return;
+    const route = steps[step]?.route;
+    if (route) navigate(route);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, step]);
+
   // Fechar ou concluir marca como visto: não reaparece nos próximos acessos.
   const finish = () => {
     if (user) {
@@ -58,78 +66,73 @@ export const InteractiveTutorial: React.FC<{ user: User | null }> = ({ user }) =
   const isLast = step >= steps.length - 1;
   const current = steps[step];
   const Icon = current.icon;
-  const showImage = !!current.image && !brokenImages[current.image];
 
   return (
-    <div className="fixed inset-0 z-[9998] bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6">
-      <div className="bg-bg-card border border-border-subtle rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-        {/* Cabeçalho */}
-        <div className="flex items-center justify-between px-5 pt-3 shrink-0">
-          <span className="text-[11px] font-semibold text-text-muted">
-            Passo {step + 1} de {steps.length}
-          </span>
-          <button onClick={finish} className="btn-ghost !px-2 text-text-muted" title="Fechar tutorial" aria-label="Fechar tutorial">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+    <>
+      {/* Escurecimento leve — a página fica visível e muda conforme o passo. */}
+      <div className="fixed inset-0 z-[9997] bg-black/30" />
 
-        {/* Imagem da tela (ou ícone como fallback) + conteúdo — rolável */}
-        <div className="overflow-y-auto px-5 pt-2 pb-1">
-          {showImage ? (
-            <img
-              src={current.image}
-              alt={current.title}
-              onError={() => setBrokenImages((m) => ({ ...m, [current.image as string]: true }))}
-              className="w-full rounded-xl border border-border-subtle bg-bg-elevated object-contain max-h-[52vh]"
-            />
-          ) : (
-            <div className="flex justify-center py-4">
-              <div className="w-16 h-16 rounded-full bg-accent-neon/10 border-2 border-accent-neon/30 flex items-center justify-center">
-                <Icon className="w-8 h-8 text-accent-neon" />
-              </div>
+      {/* Card no rodapé (acima da bottom nav no mobile) para não cobrir a tela. */}
+      <div className="fixed inset-x-0 bottom-20 md:bottom-6 z-[9998] flex justify-center px-3 pointer-events-none">
+        <div className="pointer-events-auto bg-bg-card border border-border-subtle rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+          {/* Cabeçalho */}
+          <div className="flex items-center justify-between px-5 pt-3">
+            <span className="text-[11px] font-semibold text-text-muted">
+              Passo {step + 1} de {steps.length}
+            </span>
+            <button onClick={finish} className="btn-ghost !px-2 text-text-muted" title="Fechar tutorial" aria-label="Fechar tutorial">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Conteúdo do passo */}
+          <div className="px-5 pb-1 pt-1 flex items-start gap-3 text-left">
+            <div className="w-11 h-11 rounded-full bg-accent-neon/10 border-2 border-accent-neon/30 flex items-center justify-center shrink-0 mt-0.5">
+              <Icon className="w-5 h-5 text-accent-neon" />
             </div>
-          )}
+            <div className="min-w-0">
+              <h2 className="text-base font-bold text-text-primary mb-1">{current.title}</h2>
+              <p className="text-sm text-text-secondary leading-relaxed">{current.body}</p>
+              {current.hint && (
+                <p className="text-xs text-accent-blue mt-2 bg-accent-blue/10 rounded-lg px-3 py-2">
+                  {current.hint}
+                </p>
+              )}
+            </div>
+          </div>
 
-          <h2 className="text-lg font-bold text-text-primary mt-3 mb-1">{current.title}</h2>
-          <p className="text-sm text-text-secondary leading-relaxed">{current.body}</p>
-          {current.hint && (
-            <p className="text-xs text-accent-blue mt-2 bg-accent-blue/10 rounded-lg px-3 py-2">
-              {current.hint}
-            </p>
-          )}
-        </div>
+          {/* Indicadores de progresso */}
+          <div className="flex justify-center gap-1.5 py-3">
+            {steps.map((_, i) => (
+              <span
+                key={i}
+                className={`h-1.5 rounded-full transition-all ${i === step ? 'w-5 bg-accent-neon' : 'w-1.5 bg-border-subtle'}`}
+              />
+            ))}
+          </div>
 
-        {/* Indicadores de progresso */}
-        <div className="flex justify-center flex-wrap gap-1.5 py-3 shrink-0">
-          {steps.map((_, i) => (
-            <span
-              key={i}
-              className={`h-1.5 rounded-full transition-all ${i === step ? 'w-5 bg-accent-neon' : 'w-1.5 bg-border-subtle'}`}
-            />
-          ))}
-        </div>
-
-        {/* Navegação */}
-        <div className="flex items-center gap-2 px-5 pb-4 shrink-0">
-          {step > 0 ? (
-            <button onClick={() => setStep((s) => s - 1)} className="btn-secondary !text-sm flex items-center gap-1">
-              <ChevronLeft className="w-4 h-4" /> Voltar
-            </button>
-          ) : (
-            <button onClick={finish} className="btn-ghost !text-sm text-text-muted">
-              Pular
-            </button>
-          )}
-          <div className="flex-1" />
-          {isLast ? (
-            <button onClick={finish} className="btn-primary !text-sm">Concluir</button>
-          ) : (
-            <button onClick={() => setStep((s) => s + 1)} className="btn-primary !text-sm flex items-center gap-1">
-              Próximo <ChevronRight className="w-4 h-4" />
-            </button>
-          )}
+          {/* Navegação */}
+          <div className="flex items-center gap-2 px-5 pb-4">
+            {step > 0 ? (
+              <button onClick={() => setStep((s) => s - 1)} className="btn-secondary !text-sm flex items-center gap-1">
+                <ChevronLeft className="w-4 h-4" /> Voltar
+              </button>
+            ) : (
+              <button onClick={finish} className="btn-ghost !text-sm text-text-muted">
+                Pular
+              </button>
+            )}
+            <div className="flex-1" />
+            {isLast ? (
+              <button onClick={finish} className="btn-primary !text-sm">Concluir</button>
+            ) : (
+              <button onClick={() => setStep((s) => s + 1)} className="btn-primary !text-sm flex items-center gap-1">
+                Próximo <ChevronRight className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 };

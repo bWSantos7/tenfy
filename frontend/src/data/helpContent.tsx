@@ -12,10 +12,8 @@ export interface TutorialStep {
   body: string;
   /** Onde encontrar na interface (dica curta de localização). */
   hint?: string;
-  /** Rota relacionada (referência; o tutorial em modo imagem não navega). */
+  /** Rota para a qual o tutorial navega ao chegar neste passo (ilustra a tela). */
   route?: string;
-  /** Print da tela exibido no card (em /public). Sem imagem, mostra o ícone. */
-  image?: string;
 }
 
 export interface HelpTopic {
@@ -44,10 +42,9 @@ export function getTutorialSteps(role?: Role): TutorialStep[] {
     icon: Sparkles,
     title: 'Bem-vindo(a) ao Tenfy!',
     body: parent
-      ? 'Aqui você acompanha a vida esportiva dos seus dependentes: torneios compatíveis, agenda, inscrições, rankings e resultados. Vamos te mostrar o básico em poucos passos.'
-      : 'Aqui você acompanha torneios compatíveis com seu perfil, sua agenda, inscrições, rankings e resultados. Vamos te mostrar o básico em poucos passos.',
+      ? 'Aqui você acompanha a vida esportiva dos seus dependentes: torneios compatíveis, agenda, inscrições, rankings e resultados. Vamos te mostrar o básico em poucos passos — a cada passo abrimos a tela correspondente.'
+      : 'Aqui você acompanha torneios compatíveis com seu perfil, sua agenda, inscrições, rankings e resultados. Vamos te mostrar o básico em poucos passos — a cada passo abrimos a tela correspondente.',
     route: '/inicio',
-    image: '/tutorial/bem-vindo.png',
   };
 
   const parentOnly: TutorialStep[] = [
@@ -57,15 +54,13 @@ export function getTutorialSteps(role?: Role): TutorialStep[] {
       body: 'Esta é a aba Perfil. Como responsável, é aqui que você cadastra um dependente: toque em "Novo dependente" para criar o perfil esportivo do seu atleta, ou em "Vincular existente" para vincular alguém que já tem conta no Tenfy.',
       hint: 'Aba Perfil → "Novo dependente" ou "Vincular existente".',
       route: '/perfil',
-      image: '/tutorial/cadastrar-dependente.png',
     },
     {
       icon: Repeat,
       title: 'Alterne entre dependentes',
-      body: 'Depois de cadastrar, um seletor de perfil aparece no topo da aba Perfil (e na tela Início) para você escolher qual dependente está acompanhando. Torneios, agenda e resultados se ajustam ao perfil ativo.',
+      body: 'Depois de cadastrar, um seletor de perfil aparece aqui no topo da aba Perfil (e na tela Início) para você escolher qual dependente está acompanhando. Torneios, agenda e resultados se ajustam ao perfil ativo. Com nenhum dependente ainda, esse seletor não aparece.',
       hint: 'Aba Perfil / Início → seletor no topo (aparece após cadastrar um dependente).',
       route: '/perfil',
-      image: '/tutorial/alternar-dependente.png',
     },
   ];
 
@@ -78,51 +73,45 @@ export function getTutorialSteps(role?: Role): TutorialStep[] {
         : 'Esta é a aba Torneios. Aqui você vê os campeonatos e filtra pelos compatíveis com sua categoria, idade e região.',
       hint: 'Barra de navegação → Torneios.',
       route: '/torneios',
-      image: '/tutorial/torneios.png',
     },
     {
       icon: Star,
       title: 'Acompanhe torneios',
-      body: 'Encontrou um torneio interessante? Toque na estrela para favoritá-lo. Ele entra na sua Agenda e você passa a receber alertas de prazos e mudanças.',
+      body: 'Ainda em Torneios: encontrou um interessante? Toque na estrela para favoritá-lo. Ele entra na sua Agenda e você passa a receber alertas de prazos e mudanças.',
       hint: 'Em qualquer torneio → ícone de estrela.',
       route: '/torneios',
-      image: '/tutorial/acompanhar-torneio.png',
     },
     {
       icon: Star,
       title: 'Sua Agenda',
-      body: 'A Agenda reúne os torneios que você acompanha, com datas e status. É o seu calendário pessoal dentro do Tenfy.',
+      body: 'Esta é a Agenda: reúne os torneios que você acompanha, com datas e status. É o seu calendário pessoal dentro do Tenfy.',
       hint: 'Barra de navegação → Agenda.',
       route: '/watchlist',
-      image: '/tutorial/agenda.png',
     },
     {
       icon: ClipboardList,
       title: 'Inscrições',
       body: parent
-        ? 'Veja em quais torneios o dependente aparece inscrito, com status de pagamento e posição na chave quando a federação publica a lista.'
-        : 'Veja em quais torneios você aparece inscrito, com status de pagamento e posição na chave quando a federação publica a lista.',
+        ? 'Esta é a tela de Inscrições: veja em quais torneios o dependente aparece inscrito, com status de pagamento e posição na chave quando a federação publica a lista.'
+        : 'Esta é a tela de Inscrições: veja em quais torneios você aparece inscrito, com status de pagamento e posição na chave quando a federação publica a lista.',
       hint: 'Tela Início → "Inscrições", ou abra um torneio para ver os inscritos.',
       route: '/inscricoes',
-      image: '/tutorial/inscricoes.png',
     },
     {
       icon: Trophy,
       title: 'Rankings e resultados',
-      body: 'Na aba Resultados você acompanha rankings, classificações e resultados de partidas, quando a fonte oficial disponibiliza.',
+      body: 'Esta é a aba Resultados: acompanhe rankings, classificações e resultados de partidas, quando a fonte oficial disponibiliza.',
       hint: 'Barra de navegação → Resultados.',
       route: '/resultados',
-      image: '/tutorial/resultados.png',
     },
     {
       icon: User,
       title: 'Perfil esportivo',
       body: parent
-        ? 'Na aba Perfil você consulta e atualiza os dados esportivos do dependente — categoria, federação, modalidade e mão dominante. Eles definem a compatibilidade com os torneios.'
-        : 'Na aba Perfil você consulta e atualiza seus dados esportivos — categoria, federação, modalidade e mão dominante. Eles definem a compatibilidade com os torneios.',
+        ? 'Esta é a aba Perfil: consulte e atualize os dados esportivos do dependente — categoria, federação, modalidade e mão dominante. Eles definem a compatibilidade com os torneios.'
+        : 'Esta é a aba Perfil: consulte e atualize seus dados esportivos — categoria, federação, modalidade e mão dominante. Eles definem a compatibilidade com os torneios.',
       hint: 'Barra de navegação → Perfil.',
       route: '/perfil',
-      image: '/tutorial/perfil-esportivo.png',
     },
     {
       icon: Settings,
@@ -132,7 +121,6 @@ export function getTutorialSteps(role?: Role): TutorialStep[] {
         : 'Em Configurações você ajusta seus dados, preferências de alertas e sua assinatura.',
       hint: 'Perfil → Configurações da conta.',
       route: '/configuracoes',
-      image: '/tutorial/configuracoes.png',
     },
     {
       icon: HelpCircle,
@@ -140,7 +128,6 @@ export function getTutorialSteps(role?: Role): TutorialStep[] {
       body: 'Pronto! A qualquer momento, toque no ícone de interrogação (?) no canto superior direito para abrir a Ajuda, com explicações de cada funcionalidade e uma busca por palavra-chave.',
       hint: 'Canto superior direito → ícone "?".',
       route: '/inicio',
-      image: '/tutorial/ajuda.png',
     },
   ];
 

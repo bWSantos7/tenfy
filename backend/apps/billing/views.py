@@ -834,10 +834,18 @@ def _handle_payment_confirmed(payload: dict):
                     card_token = (get_payment(p.get('id', '')).get('creditCard') or {}).get('creditCardToken', '')
                 except Exception:
                     card_token = ''
+            # O cartão foi tokenizado no checkout hospedado e o token pertence ao
+            # cliente que o Asaas vinculou ao pagamento — NÃO a um cliente novo.
+            # Reusar esse customer evita o 400 "CreditCardToken não encontrado".
+            asaas_customer = p.get('customer', '') or ''
+            if asaas_customer and not sub.asaas_customer_id:
+                sub.asaas_customer_id = asaas_customer
+                sub.save(update_fields=['asaas_customer_id', 'updated_at'])
             from .services.asaas_service import create_recurrence_after_first_payment
             rec = create_recurrence_after_first_payment(
                 user=user, plan=sub.plan, billing_period=sub.billing_period,
                 billing_type=billing_type, card_token=card_token,
+                customer_id=asaas_customer or sub.asaas_customer_id,
             )
             rec_id = rec.get('id', '')
             if rec_id:

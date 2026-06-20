@@ -422,6 +422,7 @@ def create_recurrence_after_first_payment(
     billing_period: str,
     billing_type: str,
     card_token: str = '',
+    customer_id: str = '',
 ) -> dict:
     """
     Cria a assinatura RECORRENTE a preço cheio começando no próximo ciclo, após o
@@ -431,6 +432,10 @@ def create_recurrence_after_first_payment(
     - CREDIT_CARD: usa o creditCardToken retornado no 1º pagamento p/ débito
       automático recorrente.
 
+    O ``creditCardToken`` é vinculado ao cliente Asaas do pagamento, então
+    ``customer_id`` DEVE ser o mesmo cliente que pagou (vem do webhook). Criar um
+    cliente novo aqui resulta em 400 "CreditCardToken não encontrado".
+
     Chamada de dentro do webhook — quem chama deve proteger com try/except para
     não derrubar a ativação/comissão se o Asaas falhar.
     """
@@ -438,7 +443,7 @@ def create_recurrence_after_first_payment(
     from decimal import Decimal
     from dateutil.relativedelta import relativedelta
 
-    customer_id = get_or_create_customer(user)
+    customer_id = customer_id or get_or_create_customer(user)
     full_price = float(Decimal(plan.price_for_period(billing_period)).quantize(Decimal('0.01')))
     cycle = 'MONTHLY' if billing_period == 'monthly' else 'YEARLY'
     delta = relativedelta(months=1) if billing_period == 'monthly' else relativedelta(years=1)

@@ -88,6 +88,27 @@ export const SubscriptionPage: React.FC = () => {
 
   useEffect(() => { load(); }, [load]);
 
+  // Pix gerado: enquanto aguarda a confirmação do pagamento, consulta o status
+  // periodicamente. O webhook do Asaas ativa a assinatura no backend; aqui só
+  // refletimos isso na tela sem o usuário precisar recarregar.
+  useEffect(() => {
+    if (!pix) return;
+    if (sub && (sub.status === 'active' || sub.status === 'trial')) return;
+    const id = setInterval(async () => {
+      try {
+        const s = await fetchSubscription();
+        setSub(s);
+        if (s.status === 'active' || s.status === 'trial') {
+          setPix(null);
+          toast.success('Pagamento confirmado! Assinatura ativa.');
+        }
+      } catch {
+        // mantém aguardando — assinatura ainda não confirmada
+      }
+    }, 5000);
+    return () => clearInterval(id);
+  }, [pix, sub?.status]);
+
   const applyCoupon = useCallback(async (code: string, period: 'monthly' | 'yearly') => {
     const trimmed = code.trim();
     if (!trimmed) return;
@@ -335,6 +356,10 @@ export const SubscriptionPage: React.FC = () => {
       {pix && (
         <div className="card !p-4 space-y-2">
           <div className="text-sm font-semibold">Pix — pagamento gerado</div>
+          <div className="flex items-center gap-2 text-xs text-amber-300">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            Aguardando confirmação — a tela libera sozinha assim que o pagamento cair.
+          </div>
           {pix.qr_code_image && (
             <img
               src={pix.qr_code_image.startsWith('data:') ? pix.qr_code_image : `data:image/png;base64,${pix.qr_code_image}`}

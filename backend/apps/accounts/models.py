@@ -44,11 +44,13 @@ class User(AbstractBaseUser, PermissionsMixin, TimestampedModel):
     ROLE_COACH = 'coach'
     ROLE_PARENT = 'parent'
     ROLE_ADMIN = 'admin'
+    ROLE_PARTNER = 'partner'
     ROLE_CHOICES = [
         (ROLE_PLAYER, 'Jogador'),
         (ROLE_COACH, 'Treinador'),
         (ROLE_PARENT, 'Pai/Responsável'),
         (ROLE_ADMIN, 'Administrador'),
+        (ROLE_PARTNER, 'Parceiro'),
     ]
 
     email = models.EmailField(_('email address'), unique=True, db_index=True)

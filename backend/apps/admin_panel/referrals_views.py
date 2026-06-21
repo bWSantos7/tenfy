@@ -97,6 +97,79 @@ def partner_detail(request, pk):
     return Response(PartnerSerializer(partner).data)
 
 
+@api_view(['POST', 'DELETE'])
+@permission_classes([IsSuperUser])
+def partner_set_login(request, pk):
+    """
+    Define/reseta (POST) ou desativa (DELETE) o acesso do parceiro à área /parceiro.
+
+    POST {email, password} → cria ou atualiza a conta User (role=partner, sem staff)
+    vinculada ao parceiro. Reenviar o POST reseta a senha/e-mail.
+    DELETE → desativa o login sem apagar histórico.
+    """
+    from django.contrib.auth import get_user_model
+    from django.contrib.auth.password_validation import validate_password
+    from django.core.exceptions import ValidationError
+    from django.core.validators import validate_email
+
+    partner = Partner.objects.select_related('user').filter(pk=pk).first()
+    if partner is None:
+        return Response({'detail': 'Parceiro não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+
+    User = get_user_model()
+
+    if request.method == 'DELETE':
+        if partner.user_id:
+            partner.user.is_active = False
+            partner.user.save(update_fields=['is_active', 'updated_at'])
+            _audit(request.user, AuditLog.ACTION_UPDATE, 'partner', partner.id, diff={'login': 'disabled'})
+        return Response({'has_login': False})
+
+    email = (request.data.get('email') or '').strip().lower()
+    password = request.data.get('password') or ''
+    if not email:
+        return Response({'detail': 'Informe o e-mail de acesso.'}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        validate_email(email)
+    except ValidationError:
+        return Response({'detail': 'E-mail inválido.'}, status=status.HTTP_400_BAD_REQUEST)
+    if not password:
+        return Response({'detail': 'Informe a senha de acesso.'}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        validate_password(password)
+    except ValidationError as exc:
+        return Response({'detail': ' '.join(exc.messages)}, status=status.HTTP_400_BAD_REQUEST)
+
+    # E-mail não pode colidir com outra conta (que não seja a deste parceiro).
+    clash = User.objects.filter(email__iexact=email).exclude(pk=partner.user_id or 0).first()
+    if clash is not None:
+        return Response({'detail': 'Já existe uma conta com este e-mail.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    with transaction.atomic():
+        user = partner.user if partner.user_id else None
+        if user is None:
+            user = User(email=email, role=User.ROLE_PARTNER, is_staff=False,
+                        is_active=True, email_verified=True,
+                        full_name=partner.name)
+            user.set_password(password)
+            user.save()
+            partner.user = user
+            partner.save(update_fields=['user', 'updated_at'])
+            created = True
+        else:
+            user.email = email
+            user.role = User.ROLE_PARTNER
+            user.is_active = True
+            user.is_staff = False
+            user.set_password(password)
+            user.save(update_fields=['email', 'role', 'is_active', 'is_staff', 'password', 'updated_at'])
+            created = False
+
+    _audit(request.user, AuditLog.ACTION_UPDATE, 'partner', partner.id,
+           diff={'login': 'created' if created else 'reset', 'email': email})
+    return Response(PartnerSerializer(partner).data, status=status.HTTP_200_OK)
+
+
 # ── Cupons ─────────────────────────────────────────────────────────────────────
 
 @api_view(['GET', 'POST'])

@@ -33,3 +33,17 @@ class IsSuperUser(BasePermission):
     """Acesso restrito ao master (superusuário). Admins comuns (staff) são barrados."""
     def has_permission(self, request, view):
         return request.user.is_authenticated and request.user.is_superuser
+
+
+class IsPartnerUser(BasePermission):
+    """Acesso restrito à conta de parceiro (role=partner) com Partner vinculado e ativo.
+
+    Garante o isolamento da área /parceiro: só atende quem tem login de parceiro,
+    e as views devem sempre filtrar os dados por request.user.partner_account.
+    """
+    def has_permission(self, request, view):
+        u = request.user
+        if not (u.is_authenticated and getattr(u, 'role', '') == 'partner'):
+            return False
+        partner = getattr(u, 'partner_account', None)
+        return partner is not None and partner.is_active

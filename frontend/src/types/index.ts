@@ -1,4 +1,4 @@
-export type Role = 'player' | 'coach' | 'parent' | 'admin';
+export type Role = 'player' | 'coach' | 'parent' | 'admin' | 'partner';
 
 // ── Tênis Integrado ──────────────────────────────────────────────────────────
 export interface TiResultEntry {

@@ -24,6 +24,8 @@ export interface Partner {
   payout_details: string;
   notes: string;
   coupons_count: number;
+  login_email: string | null;
+  has_login: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -125,6 +127,15 @@ export async function updatePartner(id: number, payload: Partial<Partner>): Prom
 }
 export async function deletePartner(id: number): Promise<void> {
   await api.delete(`${BASE}/partners/${id}/`);
+}
+/** Cria ou reseta o acesso (login) do parceiro à área /parceiro. */
+export async function setPartnerLogin(id: number, payload: { email: string; password: string }): Promise<Partner> {
+  const res = await api.post(`${BASE}/partners/${id}/login/`, payload);
+  return res.data;
+}
+/** Desativa o acesso do parceiro (mantém o histórico). */
+export async function disablePartnerLogin(id: number): Promise<void> {
+  await api.delete(`${BASE}/partners/${id}/login/`);
 }
 
 // ─── Cupons ────────────────────────────────────────────────────────────────────

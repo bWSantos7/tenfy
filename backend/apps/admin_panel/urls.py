@@ -10,7 +10,7 @@ from .views import (
     waitlist_leads,
 )
 from .referrals_views import (
-    partners, partner_detail, coupons, coupon_detail,
+    partners, partner_detail, partner_set_login, coupons, coupon_detail,
     commission_rules, commission_rule_detail,
     commissions, commission_detail, commissions_summary,
     payouts, payout_detail,
@@ -43,6 +43,7 @@ urlpatterns = [
     # Programa de parceiros (cupons/comissões/repasses) — master apenas
     path('partners/', partners, name='admin-partners'),
     path('partners/<int:pk>/', partner_detail, name='admin-partner-detail'),
+    path('partners/<int:pk>/login/', partner_set_login, name='admin-partner-set-login'),
     path('coupons/', coupons, name='admin-coupons'),
     path('coupons/<int:pk>/', coupon_detail, name='admin-coupon-detail'),
     path('commission-rules/', commission_rules, name='admin-commission-rules'),

@@ -1,7 +1,7 @@
 import React, { Suspense } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import { AppLayout } from './components/AppLayout';
-import { ProtectedRoute, PublicOnlyRoute } from './components/ProtectedRoute';
+import { ProtectedRoute, PublicOnlyRoute, PartnerRoute } from './components/ProtectedRoute';
 
 // After a deploy, a tab still running the previous bundle may lazy-load a
 // chunk that no longer exists on the server (the host answers with index.html,
@@ -46,6 +46,8 @@ const AccountDeletionPage = lazyPage(() => import('./pages/AccountDeletionPage')
 const InscricoesPage      = lazyPage(() => import('./pages/InscricoesPage').then(m => ({ default: m.InscricoesPage })));
 const TournamentComparePage = lazyPage(() => import('./pages/TournamentComparePage').then(m => ({ default: m.TournamentComparePage })));
 const HelpPage            = lazyPage(() => import('./pages/HelpPage').then(m => ({ default: m.HelpPage })));
+const PartnerLoginPage    = lazyPage(() => import('./pages/PartnerLoginPage').then(m => ({ default: m.PartnerLoginPage })));
+const PartnerDashboardPage = lazyPage(() => import('./pages/PartnerDashboardPage').then(m => ({ default: m.PartnerDashboardPage })));
 
 const PageLoader: React.FC = () => (
   <div className="min-h-screen bg-bg-base flex items-center justify-center">
@@ -125,6 +127,24 @@ const App: React.FC = () => {
             }
           />
         </Route>
+
+        {/* Área exclusiva do parceiro — fora do shell do app do jogador. */}
+        <Route
+          path="/parceiro/login"
+          element={
+            <PublicOnlyRoute>
+              <PartnerLoginPage />
+            </PublicOnlyRoute>
+          }
+        />
+        <Route
+          path="/parceiro"
+          element={
+            <PartnerRoute>
+              <PartnerDashboardPage />
+            </PartnerRoute>
+          }
+        />
 
         {/* Retorno do pagamento (Asaas) — público: no cadastro diferido a conta
             ainda não existe ao voltar; a página faz login quando o pagamento confirma. */}

@@ -49,6 +49,7 @@ urlpatterns = [
     path('api/marketplace/', include('apps.marketplace.urls')),
     path('api/registrations/', include('apps.registrations.urls')),
     path('api/billing/', include('apps.billing.urls')),
+    path('api/partner/', include('apps.referrals.urls')),
     path('api/integrations/', include('apps.registrations.integration_urls')),
 
     # API schema

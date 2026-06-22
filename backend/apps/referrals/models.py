@@ -55,6 +55,12 @@ class Partner(TimestampedModel):
         (PAYOUT_MANUAL, 'Manual / a combinar'),
     ]
 
+    # Conta de login do parceiro (role=partner). Criada/gerida pelo admin.
+    # SET_NULL: remover a conta não apaga o histórico do parceiro.
+    user          = models.OneToOneField(
+        'accounts.User', null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='partner_account',
+    )
     name          = models.CharField(max_length=120)
     type          = models.CharField(max_length=20, choices=TYPE_CHOICES, default=TYPE_OTHER)
     email         = models.EmailField(blank=True)

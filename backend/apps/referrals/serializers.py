@@ -6,15 +6,24 @@ from .models import CommissionLedger, CommissionRule, Coupon, Partner, Payout
 
 class PartnerSerializer(serializers.ModelSerializer):
     coupons_count = serializers.IntegerField(source='coupons.count', read_only=True)
+    login_email = serializers.SerializerMethodField()
+    has_login = serializers.SerializerMethodField()
 
     class Meta:
         model = Partner
         fields = (
             'id', 'name', 'type', 'email', 'phone', 'status',
             'payout_method', 'payout_details', 'notes',
-            'coupons_count', 'created_at', 'updated_at',
+            'coupons_count', 'login_email', 'has_login',
+            'created_at', 'updated_at',
         )
-        read_only_fields = ('id', 'coupons_count', 'created_at', 'updated_at')
+        read_only_fields = ('id', 'coupons_count', 'login_email', 'has_login', 'created_at', 'updated_at')
+
+    def get_login_email(self, obj):
+        return obj.user.email if obj.user_id else None
+
+    def get_has_login(self, obj):
+        return bool(obj.user_id and obj.user.is_active)
 
 
 class CouponSerializer(serializers.ModelSerializer):

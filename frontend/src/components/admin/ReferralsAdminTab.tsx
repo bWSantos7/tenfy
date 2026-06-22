@@ -5,7 +5,7 @@ import { extractApiError } from '../../services/api';
 import {
   Partner, Coupon, CommissionRule, Commission, Payout, CommissionSummaryRow,
   PartnerType, DiscountType, PlanScope, CouponStatus, BaseAmountType, CommissionStatus,
-  listPartners, createPartner, updatePartner, deletePartner,
+  listPartners, createPartner, updatePartner, deletePartner, setPartnerLogin, disablePartnerLogin,
   listCoupons, createCoupon, updateCoupon, deleteCoupon,
   listCommissionRules, createCommissionRule, updateCommissionRule, deleteCommissionRule,
   listCommissions, updateCommissionStatus, commissionsSummary,
@@ -190,6 +190,42 @@ const PartnersSection: React.FC = () => {
     });
   }
 
+  // Acesso (login) do parceiro à área /parceiro.
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [savingLogin, setSavingLogin] = useState(false);
+
+  useEffect(() => {
+    setLoginEmail(form?.login_email || form?.email || '');
+    setLoginPassword('');
+  }, [form?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function saveLogin() {
+    if (!form?.id) return;
+    if (!loginEmail.trim() || !loginPassword) { toast.error('Informe e-mail e senha de acesso.'); return; }
+    setSavingLogin(true);
+    try {
+      await setPartnerLogin(form.id, { email: loginEmail.trim(), password: loginPassword });
+      toast.success('Acesso do parceiro definido.');
+      setLoginPassword('');
+      await load();
+      setForm((f) => (f ? { ...f, login_email: loginEmail.trim(), has_login: true } : f));
+    } catch (e) { toast.error(extractApiError(e)); }
+    finally { setSavingLogin(false); }
+  }
+
+  function disableLogin() {
+    if (!form?.id) return;
+    ask(`Desativar o acesso do parceiro "${form.name}"? Ele não conseguirá mais entrar até você definir um novo acesso.`, async () => {
+      try {
+        await disablePartnerLogin(form.id!);
+        toast.success('Acesso desativado.');
+        await load();
+        setForm((f) => (f ? { ...f, has_login: false } : f));
+      } catch (e) { toast.error(extractApiError(e)); }
+    });
+  }
+
   return (
     <div className="space-y-3">
       {confirmNode}
@@ -228,6 +264,35 @@ const PartnersSection: React.FC = () => {
           <button className="btn-primary !text-sm w-full" onClick={save} disabled={saving}>
             {saving ? <Loader2 className="w-4 h-4 animate-spin inline" /> : 'Salvar'}
           </button>
+
+          {/* Acesso do parceiro à área /parceiro — só após o parceiro existir. */}
+          {form.id ? (
+            <div className="border-t border-border-subtle pt-3 mt-1 space-y-2">
+              <div className="text-sm font-semibold flex items-center gap-2">
+                Acesso do parceiro
+                <span className={`text-[11px] ${form.has_login ? 'text-green-400' : 'text-text-muted'}`}>
+                  {form.has_login ? `ativo (${form.login_email})` : 'sem acesso'}
+                </span>
+              </div>
+              <p className="text-[11px] text-text-muted">
+                Defina e-mail e senha para o parceiro entrar em <span className="font-mono">/parceiro</span>. Reenviar redefine a senha.
+              </p>
+              <div className="grid sm:grid-cols-2 gap-2">
+                <Field label="E-mail de acesso"><input className="input-base w-full text-sm" type="email" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} /></Field>
+                <Field label="Senha"><input className="input-base w-full text-sm" type="password" placeholder="••••••••" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} /></Field>
+              </div>
+              <div className="flex gap-2">
+                <button className="btn-primary !text-xs" onClick={saveLogin} disabled={savingLogin}>
+                  {savingLogin ? <Loader2 className="w-3 h-3 animate-spin inline" /> : (form.has_login ? 'Resetar acesso' : 'Definir acesso')}
+                </button>
+                {form.has_login && (
+                  <button className="text-red-400 border border-red-400/40 rounded px-2 py-1 text-xs" onClick={disableLogin}>Desativar acesso</button>
+                )}
+              </div>
+            </div>
+          ) : (
+            <p className="text-[11px] text-text-muted">Salve o parceiro para depois definir o acesso (login) dele.</p>
+          )}
         </div>
       )}
 
@@ -237,7 +302,7 @@ const PartnersSection: React.FC = () => {
             <div key={p.id} className="card !p-3 flex justify-between items-center">
               <div>
                 <div className="text-sm font-medium">{p.name} <span className="text-[11px] text-text-muted">({PARTNER_TYPE_LABELS[p.type]})</span></div>
-                <div className="text-[11px] text-text-muted">{p.email || 'sem e-mail'} · {p.coupons_count} cupom(ns) · <span className={p.status === 'active' ? 'text-green-400' : 'text-gray-400'}>{p.status === 'active' ? 'Ativo' : 'Inativo'}</span></div>
+                <div className="text-[11px] text-text-muted">{p.email || 'sem e-mail'} · {p.coupons_count} cupom(ns) · <span className={p.status === 'active' ? 'text-green-400' : 'text-gray-400'}>{p.status === 'active' ? 'Ativo' : 'Inativo'}</span> · <span className={p.has_login ? 'text-accent-neon' : 'text-text-muted'}>{p.has_login ? 'com acesso' : 'sem acesso'}</span></div>
               </div>
               <div className="flex gap-1 shrink-0">
                 <button className="btn-secondary !text-xs" onClick={() => setForm(p)}>Editar</button>

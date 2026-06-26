@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { login } from '../services/auth';
 import { useAuth } from '../contexts/AuthContext';
+import { isIosApp } from '../utils/appContext';
 // HTML original da tela de login (src/login/index.html), importado como texto cru.
 // Renderizado isolado num iframe (srcDoc) para ficar idêntico ao design original.
 import rawHtml from '../login/index.html?raw';
@@ -56,8 +57,14 @@ export const LoginPage: React.FC = () => {
     };
     doc.querySelector('.back')?.addEventListener('click', go('/'));
     doc.querySelector('.forgot')?.addEventListener('click', go('/recuperar-senha'));
-    doc.querySelector('.signup-link')?.addEventListener('click', go('/register'));
     doc.querySelector('.partner-link')?.addEventListener('click', go('/parceiro/login'));
+    // No app iOS o cadastro vive fora do app (modelo "conta externa", conformidade
+    // Apple 3.1.1): esconde o convite "Criar conta grátis" em vez de ligá-lo a /register.
+    if (isIosApp()) {
+      doc.querySelector('.signup-link')?.closest('.foot')?.setAttribute('style', 'display:none');
+    } else {
+      doc.querySelector('.signup-link')?.addEventListener('click', go('/register'));
+    }
   }, [nav]);
 
   return (

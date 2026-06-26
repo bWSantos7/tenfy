@@ -9,6 +9,8 @@ import { InteractiveTutorial } from './InteractiveTutorial';
 import { unreadAlerts, listReceivedInvites, respondDependentInvite } from '../services/data';
 import { fetchSubscription } from '../services/billing';
 import { DependentInvite } from '../types';
+import { isIosApp } from '../utils/appContext';
+import { useNativePushRegistration } from '../hooks/useNativePushRegistration';
 
 // Rotas liberadas mesmo com assinatura paga pendente (para o usuário conseguir pagar/gerenciar).
 const ALLOWED_WHEN_UNPAID = ['/assinatura', '/configuracoes'];
@@ -31,6 +33,8 @@ export const AppLayout: React.FC = () => {
   const [respondingInvite, setRespondingInvite] = useState<number | null>(null);
   // Paywall — bloqueia o app quando há plano pago pendente/inadimplente até confirmar o pagamento.
   const [paywall, setPaywall] = useState<{ checked: boolean; blocked: boolean }>({ checked: false, blocked: false });
+  // Push nativo: registra o token do dispositivo (injetado pela casca mobile) no backend.
+  useNativePushRegistration();
 
   useEffect(() => {
     let active = true;
@@ -44,7 +48,11 @@ export const AppLayout: React.FC = () => {
     return () => { active = false; };
   }, [user?.id, location.pathname]);
 
-  const paywallBlocking = paywall.blocked && !ALLOWED_WHEN_UNPAID.includes(location.pathname);
+  // No app iOS não há checkout (assinatura é contratada fora do app, conformidade Apple
+  // 3.1.1). Bloquear por pagamento pendente criaria um beco sem saída e um CTA de compra
+  // proibido, então o paywall não se aplica ao app iOS.
+  const paywallBlocking =
+    paywall.blocked && !isIosApp() && !ALLOWED_WHEN_UNPAID.includes(location.pathname);
 
   const refreshUnread = () =>
     unreadAlerts().then((a) => setUnreadCount(Array.isArray(a) ? a.length : 0)).catch(() => {});

@@ -101,6 +101,33 @@ class Alert(TimestampedModel):
         return f'[{self.kind}] {self.title} -> {self.user.email}'
 
 
+class DevicePushToken(TimestampedModel):
+    """Expo push token de um dispositivo (push nativo iOS/Android).
+
+    Diferente de PushSubscription (Web Push, que não funciona na WebView do iOS), este é
+    o canal nativo: o app obtém um ExponentPushToken e o registra aqui; o envio vai pela
+    API de push do Expo. É o valor nativo que sustenta o app além de uma casca web."""
+    PLATFORM_IOS = 'ios'
+    PLATFORM_ANDROID = 'android'
+    PLATFORM_CHOICES = [
+        (PLATFORM_IOS, 'iOS'),
+        (PLATFORM_ANDROID, 'Android'),
+    ]
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='device_push_tokens'
+    )
+    token = models.CharField(max_length=255, unique=True)
+    platform = models.CharField(max_length=10, choices=PLATFORM_CHOICES, blank=True)
+    user_agent = models.CharField(max_length=300, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [models.Index(fields=['user'])]
+
+    def __str__(self):
+        return f'DeviceToken<{self.user.email} {self.platform}>'
+
+
 class PushSubscription(TimestampedModel):
     """Stores a Web Push subscription for a user device."""
     user = models.ForeignKey(

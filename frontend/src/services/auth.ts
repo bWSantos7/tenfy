@@ -59,6 +59,24 @@ export async function registerStatus(token: string): Promise<{ ready: boolean } 
   return res.data;
 }
 
+// ── Handoff de sessão app <-> web ───────────────────────────────────────────
+// Retorno automático logado: o site (no Safari) gera um token de uso único e monta um
+// universal link; ao abrir o app, a WebView troca o token por uma sessão JWT. Assim o
+// usuário que assinou no site entra no app sem digitar a senha de novo.
+
+/** Gera um token de handoff para o usuário autenticado (chamado no site). */
+export async function startAppHandoff(): Promise<{ token: string; expires_in: number }> {
+  const res = await api.post('/api/auth/app-handoff/', {});
+  return res.data;
+}
+
+/** Troca o token de handoff por uma sessão JWT (chamado dentro da WebView do app). */
+export async function exchangeAppHandoff(token: string): Promise<LoginResponse> {
+  const res = await api.post<LoginResponse>('/api/auth/app-handoff/exchange/', { token });
+  persistAuth(res.data);
+  return res.data;
+}
+
 export async function fetchMe(): Promise<User> {
   const res = await api.get<User>('/api/auth/me/');
   localStorage.setItem(USER_KEY, JSON.stringify(res.data));

@@ -470,6 +470,12 @@ export const ProfilePage: React.FC = () => {
         <p className="text-xs text-text-secondary">
           Conforme a LGPD, você pode exportar ou excluir todos os seus dados a qualquer momento.
         </p>
+        <Link
+          to="/politica-privacidade"
+          className="block text-xs text-accent-neon hover:underline"
+        >
+          Ler nossa Política de Privacidade
+        </Link>
         <button
           className="btn-secondary w-full flex items-center justify-center gap-2 !text-sm"
           onClick={handleExport}

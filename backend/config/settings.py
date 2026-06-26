@@ -239,6 +239,9 @@ REST_FRAMEWORK = {
         'heavy_anon': '10/minute',
         'token_refresh': '20/hour',
         'webhook': '120/minute',
+        # Handoff de sessão app <-> web (retorno automático ao app após assinar no site).
+        'app_handoff': '30/hour',             # geração (usuário autenticado)
+        'app_handoff_exchange': '20/minute',  # troca do token de uso único
     },
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }

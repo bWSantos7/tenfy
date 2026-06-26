@@ -2,8 +2,9 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Loader2, CheckCircle, Clock, CreditCard } from 'lucide-react';
 import { fetchSubscription } from '../services/billing';
-import { registerStatus } from '../services/auth';
+import { registerStatus, startAppHandoff } from '../services/auth';
 import { useAuth } from '../contexts/AuthContext';
+import { isMobileApp } from '../utils/appContext';
 
 type Status = 'checking' | 'active' | 'pending';
 
@@ -21,6 +22,10 @@ export const PaymentReturnPage: React.FC = () => {
 
   const [status, setStatus] = useState<Status>('checking');
   const [attempts, setAttempts] = useState(0);
+  // Universal link para "Abrir no app" — gerado só fora do app (no Safari), onde o
+  // usuário acabou de assinar e queremos trazê-lo de volta ao app já logado.
+  const [appLink, setAppLink] = useState<string | null>(null);
+  const inApp = isMobileApp();
 
   const check = useCallback(async () => {
     setStatus('checking');
@@ -51,12 +56,25 @@ export const PaymentReturnPage: React.FC = () => {
     return () => clearTimeout(t);
   }, [status, attempts, canceled, check]);
 
-  // Confirmou: leva o usuário para o app automaticamente (não fica preso na tela).
+  // Confirmou dentro do app: segue para o início automaticamente (não fica preso na tela).
+  // No Safari não redireciona: deixamos o usuário escolher "Abrir no app" ou seguir na web.
   useEffect(() => {
-    if (status !== 'active') return;
+    if (status !== 'active' || !inApp) return;
     const t = setTimeout(() => nav('/inicio', { replace: true }), 1800);
     return () => clearTimeout(t);
-  }, [status, nav]);
+  }, [status, inApp, nav]);
+
+  // Confirmou no Safari: gera o token de handoff e monta o universal link de retorno ao app.
+  useEffect(() => {
+    if (status !== 'active' || inApp) return;
+    let active = true;
+    startAppHandoff()
+      .then(({ token }) => {
+        if (active) setAppLink(`${window.location.origin}/app/continuar?ht=${encodeURIComponent(token)}`);
+      })
+      .catch(() => { /* sem sessão para handoff — segue só com o botão da web */ });
+    return () => { active = false; };
+  }, [status, inApp]);
 
   return (
     <div className="min-h-screen bg-bg-base flex flex-col items-center justify-center px-4 py-8">
@@ -81,8 +99,18 @@ export const PaymentReturnPage: React.FC = () => {
               <p className="font-semibold text-lg">Pagamento confirmado!</p>
               <p className="text-sm text-text-muted mt-1">Sua conta está ativa.</p>
             </div>
-            <button className="btn-primary w-full" onClick={() => nav('/inicio', { replace: true })}>
-              Entrar no app
+            {/* No Safari, oferece abrir o app já logado (universal link). Se o app não
+                estiver instalado, o link cai na web e o usuário continua por aqui. */}
+            {!inApp && appLink && (
+              <a href={appLink} className="btn-primary w-full inline-block">
+                Abrir no app Tenfy
+              </a>
+            )}
+            <button
+              className={`${!inApp && appLink ? 'btn-secondary' : 'btn-primary'} w-full`}
+              onClick={() => nav('/inicio', { replace: true })}
+            >
+              {!inApp && appLink ? 'Continuar no navegador' : 'Entrar no app'}
             </button>
           </div>
         )}

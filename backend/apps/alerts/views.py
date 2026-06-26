@@ -2,7 +2,7 @@ from django.utils import timezone
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
-from .models import Alert, PushSubscription, UserAlertPreference
+from .models import Alert, DevicePushToken, PushSubscription, UserAlertPreference
 from .serializers import AlertSerializer, UserAlertPreferenceSerializer
 
 
@@ -92,3 +92,38 @@ def push_subscribe(request):
         prefs.save(update_fields=['push_enabled', 'updated_at'])
 
     return Response({'detail': 'Inscrição registrada.', 'created': created}, status=status.HTTP_200_OK)
+
+
+@api_view(['POST', 'DELETE'])
+@permission_classes([permissions.IsAuthenticated])
+def register_device(request):
+    """Registra/remove um Expo push token (push nativo do app iOS/Android)."""
+    token = (request.data.get('token') or '').strip()
+    if not token:
+        return Response({'detail': 'token obrigatório.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if request.method == 'DELETE':
+        DevicePushToken.objects.filter(user=request.user, token=token).delete()
+        return Response({'detail': 'Token removido.'}, status=status.HTTP_204_NO_CONTENT)
+
+    platform = (request.data.get('platform') or '').strip().lower()
+    if platform not in (DevicePushToken.PLATFORM_IOS, DevicePushToken.PLATFORM_ANDROID):
+        platform = ''
+
+    # update_or_create por token (unique): se o mesmo aparelho troca de conta, o token
+    # passa a apontar para o usuário atual em vez de duplicar.
+    _, created = DevicePushToken.objects.update_or_create(
+        token=token,
+        defaults={
+            'user': request.user,
+            'platform': platform,
+            'user_agent': request.META.get('HTTP_USER_AGENT', '')[:300],
+        },
+    )
+
+    prefs = UserAlertPreference.get_or_create_defaults(request.user)
+    if not prefs.push_enabled:
+        prefs.push_enabled = True
+        prefs.save(update_fields=['push_enabled', 'updated_at'])
+
+    return Response({'detail': 'Dispositivo registrado.', 'created': created}, status=status.HTTP_200_OK)

@@ -24,6 +24,7 @@ from .views import (
     ParentChildViewSet,
     DependentInviteViewSet,
 )
+from .app_handoff import app_handoff_start, app_handoff_exchange
 
 class ThrottledTokenRefreshView(TokenRefreshView):
     """Wraps simplejwt's TokenRefreshView with a scoped rate limit (20/hour)."""
@@ -60,4 +61,7 @@ urlpatterns = [
     path('password-reset/confirm/', password_reset_confirm, name='password_reset_confirm'),
     # LGPD data export
     path('data-export/', data_export, name='data_export'),
+    # Handoff de sessão app <-> web (retorno automático ao app após assinar no site)
+    path('app-handoff/', app_handoff_start, name='app_handoff_start'),
+    path('app-handoff/exchange/', app_handoff_exchange, name='app_handoff_exchange'),
 ]

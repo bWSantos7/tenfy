@@ -112,6 +112,11 @@ form{display:flex;flex-direction:column;gap:18px}
 .foot{text-align:center;margin-top:30px;font-size:14px;color:var(--muted)}
 .foot a{color:var(--lime);font-weight:600}
 .foot a:hover{text-decoration:underline}
+.partner-foot{text-align:center;margin-top:16px;padding-top:16px;border-top:1px solid var(--faint);
+  font-size:13px;color:var(--muted)}
+.partner-foot a{display:inline-flex;align-items:center;gap:6px;color:var(--text);opacity:.9;font-weight:600;transition:.2s}
+.partner-foot a:hover{color:var(--lime);opacity:1}
+.partner-foot a svg{width:14px;height:14px}
 
 .toast{position:fixed;top:24px;left:50%;background:var(--field);
   border:1px solid rgba(198,239,33,.4);border-radius:13px;padding:14px 20px;display:flex;align-items:center;gap:12px;
@@ -198,6 +203,9 @@ form{display:flex;flex-direction:column;gap:18px}
       </form>
 
       <p class="foot an d7">Ainda não tem uma conta? <a href="#" class="signup-link">Criar conta grátis</a></p>
+      <p class="partner-foot an d7">Você é parceiro da Tenfy? <a href="#" class="partner-link">Acessar área do parceiro
+        <svg viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </a></p>
     </div>
   </div>
 </div>

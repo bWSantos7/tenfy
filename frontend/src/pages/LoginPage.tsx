@@ -57,6 +57,7 @@ export const LoginPage: React.FC = () => {
     doc.querySelector('.back')?.addEventListener('click', go('/'));
     doc.querySelector('.forgot')?.addEventListener('click', go('/recuperar-senha'));
     doc.querySelector('.signup-link')?.addEventListener('click', go('/register'));
+    doc.querySelector('.partner-link')?.addEventListener('click', go('/parceiro/login'));
   }, [nav]);
 
   return (

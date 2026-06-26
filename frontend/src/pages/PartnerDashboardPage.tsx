@@ -202,7 +202,6 @@ export const PartnerDashboardPage: React.FC = () => {
                     <th className="text-left font-medium px-3 py-2">Data</th>
                     <th className="text-left font-medium px-3 py-2">Cupom</th>
                     <th className="text-left font-medium px-3 py-2">Quem usou</th>
-                    <th className="text-right font-medium px-3 py-2">Valor</th>
                     <th className="text-right font-medium px-3 py-2">Comissão</th>
                     <th className="text-right font-medium px-3 py-2">Status</th>
                   </tr>
@@ -215,7 +214,6 @@ export const PartnerDashboardPage: React.FC = () => {
                         <td className="px-3 py-2 whitespace-nowrap">{formatDate(u.created_at)}</td>
                         <td className="px-3 py-2 font-mono">{u.coupon_code || '—'}</td>
                         <td className="px-3 py-2 truncate max-w-[180px]">{u.customer_email || '—'}</td>
-                        <td className="px-3 py-2 text-right whitespace-nowrap">{brl(u.base_amount)}</td>
                         <td className="px-3 py-2 text-right whitespace-nowrap">{brl(u.commission_amount)}</td>
                         <td className={`px-3 py-2 text-right whitespace-nowrap font-semibold ${st.color}`}>{st.label}</td>
                       </tr>

@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Loader2, LogOut, Ticket, TrendingUp, Users, Wallet } from 'lucide-react';
+import { Loader2, LogOut, Moon, Sun, Ticket, Users, Wallet } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { extractApiError } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 import {
   PartnerMe, PartnerDashboard, PartnerCoupon, PartnerUsage,
   fetchPartnerMe, fetchPartnerDashboard, fetchPartnerCoupons, fetchPartnerUsages,
@@ -60,6 +61,7 @@ const Kpi: React.FC<{ icon: React.ReactNode; label: string; value: string; hint?
 export const PartnerDashboardPage: React.FC = () => {
   const nav = useNavigate();
   const { logout } = useAuth();
+  const { theme, toggle: toggleTheme } = useTheme();
   const [me, setMe] = useState<PartnerMe | null>(null);
   const [dash, setDash] = useState<PartnerDashboard | null>(null);
   const [coupons, setCoupons] = useState<PartnerCoupon[]>([]);
@@ -110,9 +112,18 @@ export const PartnerDashboardPage: React.FC = () => {
               <div className="text-[11px] text-text-muted truncate">{me?.login_email}</div>
             </div>
           </div>
-          <button className="btn-secondary !text-xs flex items-center gap-1" onClick={handleLogout}>
-            <LogOut className="w-3.5 h-3.5" /> Sair
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={toggleTheme}
+              className="btn-secondary !text-xs !px-2"
+              title={theme === 'dark' ? 'Modo claro' : 'Modo escuro'}
+            >
+              {theme === 'dark' ? <Sun className="w-4 h-4 text-accent-neon" /> : <Moon className="w-4 h-4" />}
+            </button>
+            <button className="btn-secondary !text-xs flex items-center gap-1" onClick={handleLogout}>
+              <LogOut className="w-3.5 h-3.5" /> Sair
+            </button>
+          </div>
         </div>
       </header>
 
@@ -123,8 +134,7 @@ export const PartnerDashboardPage: React.FC = () => {
         </div>
 
         {/* KPIs */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <Kpi icon={<TrendingUp className="w-4 h-4" />} label="Receita gerada" value={brl(dash?.revenue_generated || 0)} />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <Kpi icon={<Wallet className="w-4 h-4" />} label="Comissão a receber" value={brl(dash?.commission_payable || 0)}
                hint={`${brl(dash?.commission_paid || 0)} já paga`} />
           <Kpi icon={<Users className="w-4 h-4" />} label="Conversões" value={String(dash?.total_conversions ?? 0)}

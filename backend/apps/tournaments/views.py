@@ -64,11 +64,12 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
         uses the live calculated status instead of the stored status field.
         Fixes cases where status='open' but dynamic_status='announced' or 'finished'.
 
-        Priority scale (lower = shown first):
-          0 = closing_soon / open (actionable now)
-          1 = in_progress
-          2 = registrations closed
-          3 = announced / unknown
+        Priority scale (lower = shown first). Ordem pedida pelo produto:
+        Abertas, Encerrando, Anunciados, Em Andamento.
+          0 = closing_soon / open (inscrições abertas)
+          1 = announced / unknown (divulgados, próximos)
+          2 = in_progress (em andamento)
+          3 = registrations closed
           4 = finished
           5 = canceled
         """
@@ -81,13 +82,13 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
             When(status='canceled',            then=Value(5)),
             When(status='finished',            then=Value(4)),
             When(end_date__lt=today,           then=Value(4)),  # past end_date → finished
-            When(start_date__lte=today,        then=Value(1)),  # started → in_progress
-            When(entry_close_at__lt=now,       then=Value(2)),  # registrations closed
+            When(start_date__lte=today,        then=Value(2)),  # started → in_progress
+            When(entry_close_at__lt=now,       then=Value(3)),  # registrations closed
             When(entry_close_at__lte=soon,     then=Value(0)),  # closing in ≤3 days
             When(entry_close_at__isnull=False, then=Value(0)),  # open with known deadline
             When(entry_open_at__lte=now,       then=Value(0)),  # registration period opened
-            When(open_no_dates,                then=Value(3)),  # open status, no dates → announced
-            default=Value(3),                                    # announced / unknown
+            When(open_no_dates,                then=Value(1)),  # open status, no dates → announced
+            default=Value(1),                                    # announced / unknown
             output_field=IntegerField(),
         )
 

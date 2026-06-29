@@ -45,16 +45,18 @@ const MONTHS_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho'
 const WEEKDAYS_PT = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
 const TODAY = new Date().toISOString().slice(0, 10);
 
+// Mesma ordem do backend (_build_dynamic_priority): Abertas, Encerrando, Anunciados,
+// Em Andamento. Mantém a página recebida coerente com a paginação do servidor.
 const STATUS_SORT_PRIORITY: Record<string, number> = {
   open: 0,
   closing_soon: 0,
   announced: 1,
-  in_progress: 1,
-  draws_published: 1,
-  closed: 2,
-  finished: 3,
-  canceled: 4,
-  unknown: 5,
+  unknown: 1,
+  in_progress: 2,
+  draws_published: 2,
+  closed: 3,
+  finished: 4,
+  canceled: 5,
 };
 
 function groupByMonth(items: TournamentEditionList[]) {

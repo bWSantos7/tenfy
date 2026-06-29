@@ -76,9 +76,10 @@ def app_handoff_exchange(request):
 
     key = _cache_key(token)
     user_id = cache.get(key)
-    # Uso único: remove imediatamente para evitar reaproveitamento do link.
-    cache.delete(key)
-    if not user_id:
+    # Uso único atômico: o delete é a "reivindicação" do token. Em duas requisições
+    # concorrentes com o mesmo token, só uma recebe delete=True (DEL é atômico no Redis);
+    # as demais são rejeitadas. Evita que um link gere duas sessões.
+    if not user_id or not cache.delete(key):
         return Response(
             {'detail': 'Link expirado ou já utilizado. Faça login novamente.'},
             status=status.HTTP_400_BAD_REQUEST,

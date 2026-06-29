@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Search, Filter, Loader2, X, MapPin, List, Calendar, ChevronLeft, ChevronRight, GitCompareArrows, CheckSquare, Square, Sparkles } from 'lucide-react';
+import { Search, Filter, Loader2, X, MapPin, List, Calendar, ChevronLeft, ChevronRight, ChevronDown, Check, GitCompareArrows, CheckSquare, Square, Sparkles } from 'lucide-react';
 import { TournamentEditionList } from '../types';
 import {
   listEditions,
@@ -36,12 +36,14 @@ const STATUS_OPTS = [
   { v: 'canceled', l: 'Cancelados' },
 ];
 
-// Status ocultos por padrão na agenda — só aparecem quando explicitamente filtrados.
-const HIDDEN_BY_DEFAULT = ['closed', 'finished', 'canceled'];
-// Conjunto exibido por padrão (todos menos os ocultos), enviado quando não há seleção.
-const DEFAULT_AGENDA_STATUSES = STATUS_OPTS
-  .map((o) => o.v)
-  .filter((v) => v && !HIDDEN_BY_DEFAULT.includes(v));
+// Status ocultos por padrão (quando o usuário não seleciona nenhum). Usamos exclusão para
+// que QUALQUER torneio não-terminal apareça, sem depender de casar com a definição estrita
+// de cada status ativo.
+// - Lista: oculta encerrados, finalizados e cancelados.
+// - Calendário: oculta só finalizados e cancelados — um calendário mostra os eventos
+//   futuros, então torneios anunciados/próximos (mesmo com inscrição encerrada) aparecem.
+const DEFAULT_HIDDEN_LIST = 'closed,finished,canceled';
+const DEFAULT_HIDDEN_CALENDAR = 'finished,canceled';
 
 const MONTHS_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 const WEEKDAYS_PT = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
@@ -106,6 +108,75 @@ function sortTournaments(list: TournamentEditionList[]): TournamentEditionList[]
 }
 
 type ViewMode = 'list' | 'calendar';
+
+// Filtro de status em "caixa" (como os demais filtros), porém com multi-seleção via
+// checkboxes num dropdown. Sem seleção = "Todos" (a visão aplica seu padrão de ocultação).
+const StatusFilterSelect: React.FC<{
+  options: { v: string; l: string }[];
+  selected: Set<string>;
+  onToggle: (v: string) => void;
+  onClear: () => void;
+}> = ({ options, selected, onToggle, onClear }) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open]);
+
+  const summary = selected.size === 0
+    ? 'Todos'
+    : options.filter((o) => selected.has(o.v)).map((o) => o.l).join(', ');
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="input-base w-full flex items-center justify-between gap-2 text-left"
+        data-testid="filter-status"
+      >
+        <span className={`truncate ${selected.size === 0 ? 'text-text-muted' : ''}`}>{summary}</span>
+        <ChevronDown className={`w-4 h-4 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="absolute z-20 mt-1 w-full rounded-xl border border-border-subtle bg-bg-card shadow-lg p-1 max-h-64 overflow-auto">
+          {options.map((o) => {
+            const checked = selected.has(o.v);
+            return (
+              <button
+                key={o.v}
+                type="button"
+                onClick={() => onToggle(o.v)}
+                aria-pressed={checked}
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm text-left hover:bg-bg-base"
+              >
+                <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${checked ? 'bg-accent-neon border-accent-neon' : 'border-border-subtle'}`}>
+                  {checked && <Check className="w-3 h-3 text-bg-base" />}
+                </span>
+                <span className="flex-1">{o.l}</span>
+              </button>
+            );
+          })}
+          {selected.size > 0 && (
+            <button
+              type="button"
+              onClick={onClear}
+              className="w-full text-xs text-accent-blue hover:underline px-2 py-1.5 text-left"
+            >
+              Limpar status
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const FILTER_SESSION_KEY = 'tenfy_tournament_filters';
 
@@ -292,7 +363,7 @@ export const TournamentsPage: React.FC = () => {
 
     // Compatible mode: full compatibility-filtered list for the active profile.
     if (compatMode && primaryProfileId) {
-      compatibleForProfile(primaryProfileId, { ...filters, status: filters.status || DEFAULT_AGENDA_STATUSES.join(','), page, page_size: 20 } as TournamentFilters)
+      compatibleForProfile(primaryProfileId, { ...filters, ...statusParams('list'), page, page_size: 20 } as TournamentFilters)
         .then((data) => {
           if (cancel) return;
           setItems(sortTournaments(data.results));
@@ -305,7 +376,7 @@ export const TournamentsPage: React.FC = () => {
 
     const nearFilter = nearMe && primaryProfileId ? { near_profile: primaryProfileId } : {};
     const scopeFilter = primaryProfileId ? { profile_id: primaryProfileId } : {};
-    listEditions({ ...filters, status: filters.status || DEFAULT_AGENDA_STATUSES.join(','), ...nearFilter, ...scopeFilter, page, page_size: 20, ordering: 'status_priority,start_date' })
+    listEditions({ ...filters, ...statusParams('list'), ...nearFilter, ...scopeFilter, page, page_size: 20, ordering: 'status_priority,start_date' })
       .then((data) => {
         if (cancel) return;
         setItems(sortTournaments(data.results));
@@ -323,7 +394,7 @@ export const TournamentsPage: React.FC = () => {
     setLoading(true);
     const nearFilter = nearMe && primaryProfileId ? { near_profile: primaryProfileId } : {};
     const scopeFilter = primaryProfileId ? { profile_id: primaryProfileId } : {};
-    calendarApi({ ...filters, status: filters.status || DEFAULT_AGENDA_STATUSES.join(','), ...nearFilter, ...scopeFilter })
+    calendarApi({ ...filters, ...statusParams('calendar'), ...nearFilter, ...scopeFilter })
       .then((months) => {
         if (cancel) return;
         const map: Record<string, TournamentEditionList[]> = {};
@@ -375,6 +446,13 @@ export const TournamentsPage: React.FC = () => {
       if (cur.has(v)) cur.delete(v); else cur.add(v);
       return { ...f, status: Array.from(cur).join(',') };
     });
+  }
+
+  // Parâmetros de status enviados à API: seleção explícita do usuário (include) ou, sem
+  // seleção, exclusão dos status terminais conforme a visão (calendário mantém os próximos).
+  function statusParams(view: ViewMode): { status?: string; status_exclude?: string } {
+    if (filters.status) return { status: filters.status };
+    return { status_exclude: view === 'calendar' ? DEFAULT_HIDDEN_CALENDAR : DEFAULT_HIDDEN_LIST };
   }
 
   // Calendar helpers
@@ -499,34 +577,6 @@ export const TournamentsPage: React.FC = () => {
       {showFilters && (
         <div className="card space-y-3">
           <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2">
-              <label className="text-xs text-text-secondary mb-1 block">Status</label>
-              <div className="flex flex-wrap gap-1.5">
-                {STATUS_OPTS.filter((o) => o.v).map((o) => {
-                  const selected = selectedStatuses.has(o.v);
-                  return (
-                    <button
-                      key={o.v}
-                      type="button"
-                      onClick={() => toggleStatus(o.v)}
-                      aria-pressed={selected}
-                      className={`px-2.5 py-1 rounded-lg border text-xs font-medium transition-colors ${
-                        selected
-                          ? 'bg-accent-neon text-bg-base border-accent-neon'
-                          : 'bg-bg-card border-border-subtle text-text-secondary hover:text-text-primary'
-                      }`}
-                    >
-                      {o.l}
-                    </button>
-                  );
-                })}
-              </div>
-              {selectedStatuses.size === 0 && (
-                <p className="text-[11px] text-text-muted mt-1.5">
-                  Mostrando torneios ativos — encerrados, finalizados e cancelados ficam ocultos até você selecioná-los.
-                </p>
-              )}
-            </div>
             <SearchableSelect
               label="UF"
               value={filters.state || ''}
@@ -536,6 +586,15 @@ export const TournamentsPage: React.FC = () => {
               allowClear
               data-testid="filter-state"
             />
+            <div>
+              <label className="text-xs text-text-secondary mb-1 block">Status</label>
+              <StatusFilterSelect
+                options={STATUS_OPTS.filter((o) => o.v)}
+                selected={selectedStatuses}
+                onToggle={toggleStatus}
+                onClear={() => { setPage(1); setFilters((f) => ({ ...f, status: '' })); }}
+              />
+            </div>
             <div>
               <label className="text-xs text-text-secondary mb-1 block">Data inicial (a partir de)</label>
               <input

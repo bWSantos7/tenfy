@@ -14,6 +14,9 @@ export interface TournamentFilters {
   from_date?: string;
   to_date?: string;
   status?: string;
+  /** Status dinâmicos a excluir (lista separada por vírgula). Usado pela agenda para
+   *  ocultar status terminais sem precisar enumerar os ativos. */
+  status_exclude?: string;
   modality?: string;
   circuit?: string;
   surface?: string;

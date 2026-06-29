@@ -113,7 +113,7 @@ class SendPushAlertTests(TestCase):
         self.assertEqual(alert.status, Alert.STATUS_FAILED)
         self.assertFalse(DevicePushToken.objects.filter(token='ExponentPushToken[dead]').exists())
 
-    @patch('apps.alerts.expo_push.send_expo_push_messages', return_value=(1, []))
+    @patch('apps.alerts.expo_push.send_expo_push_messages', return_value=(1, [], []))
     def test_native_success_when_web_push_unconfigured(self, _mock):
         # Com token nativo entregue, ausência de VAPID não deve falhar o alerta.
         DevicePushToken.objects.create(token='ExponentPushToken[n]', user=self.user, platform='ios')
@@ -126,3 +126,35 @@ class SendPushAlertTests(TestCase):
             send_push_alert(alert.id)
         alert.refresh_from_db()
         self.assertEqual(alert.status, Alert.STATUS_SENT)
+
+    @patch('apps.alerts.expo_push.requests.post')
+    def test_transient_expo_error_triggers_retry(self, mock_post):
+        # Erro transitório (rate limit) com 0 enviados deve reagendar (retry → levanta).
+        mock_post.return_value.status_code = 200
+        mock_post.return_value.raise_for_status.return_value = None
+        mock_post.return_value.json.return_value = {
+            'data': [{'status': 'error', 'details': {'error': 'MessageRateExceeded'}}]
+        }
+        DevicePushToken.objects.create(token='ExponentPushToken[rl]', user=self.user, platform='ios')
+        from .tasks import send_push_alert
+        alert = self._alert()
+        # self.retry propaga uma exceção (Retry em runtime; a própria exc em chamada direta).
+        with self.assertRaises(Exception):
+            send_push_alert(alert.id)
+        alert.refresh_from_db()
+        self.assertEqual(alert.status, Alert.STATUS_FAILED)
+        self.assertIn('MessageRateExceeded', alert.error)
+        # token transitório NÃO é removido (não é DeviceNotRegistered)
+        self.assertTrue(DevicePushToken.objects.filter(token='ExponentPushToken[rl]').exists())
+
+    def test_web_only_no_vapid_does_not_retry(self):
+        # Erro permanente de configuração (sem VAPID) não deve gastar retries.
+        PushSubscription.objects.create(
+            user=self.user, endpoint='https://example/endpoint', p256dh='k', auth='a',
+        )
+        from .tasks import send_push_alert
+        alert = self._alert()
+        with self.settings(VAPID_PRIVATE_KEY=''):
+            send_push_alert(alert.id)  # não deve levantar Retry
+        alert.refresh_from_db()
+        self.assertEqual(alert.status, Alert.STATUS_FAILED)

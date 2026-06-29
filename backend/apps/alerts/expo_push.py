@@ -23,9 +23,11 @@ def send_expo_push_messages(tokens, title, body, data=None):
     """
     Envia uma notificação para a lista de tokens.
 
-    Retorna (enviados, tokens_invalidos): contagem de envios aceitos e a lista de tokens
-    que devem ser removidos do banco. Falhas de rede não derrubam o chamador — apenas
-    retornam 0 enviados (a task de alerta decide sobre retry com base no total geral).
+    Retorna (enviados, tokens_invalidos, erros_transitorios):
+    - enviados: contagem de envios aceitos;
+    - tokens_invalidos: tokens mortos (DeviceNotRegistered) a remover do banco;
+    - erros_transitorios: falhas que podem ter sucesso depois (rede, rate limit) — a task
+      usa essa lista para decidir reagendar (retry). Lista vazia = sem falha transitória.
     """
     tokens = [t for t in (tokens or []) if t]
     if not tokens:
@@ -52,12 +54,14 @@ def send_expo_push_messages(tokens, title, body, data=None):
         )
         resp.raise_for_status()
         receipts = resp.json().get('data', [])
-    except Exception as exc:  # noqa: BLE001 — rede/Expo instável não deve quebrar o dispatch
+    except Exception as exc:  # noqa: BLE001 — rede/Expo instável não quebra o chamador,
+        # mas é reportado como erro transitório para que a task possa reagendar (retry).
         logger.warning('Expo push request failed: %s', exc)
-        return 0, []
+        return 0, [], [f'expo_request_failed: {str(exc)[:80]}']
 
     sent = 0
     invalid = []
+    errors = []
     # A ordem dos receipts espelha a ordem das mensagens enviadas.
     for token, receipt in zip(tokens, receipts):
         if not isinstance(receipt, dict):
@@ -67,7 +71,9 @@ def send_expo_push_messages(tokens, title, body, data=None):
         else:
             err = (receipt.get('details') or {}).get('error', '')
             if err in _DEAD_TOKEN_ERRORS:
-                invalid.append(token)
+                invalid.append(token)  # token morto: remover, não retentar
+            else:
+                errors.append(err or 'expo_unknown_error')  # transitório (ex.: rate limit)
             logger.warning('Expo push rejected for a token: %s', err or receipt)
 
-    return sent, invalid
+    return sent, invalid, errors

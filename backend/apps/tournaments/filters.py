@@ -30,6 +30,10 @@ class TournamentEditionFilter(filters.FilterSet):
     # matches the badge shown on the card — not the stored `status` field, which
     # is often stale (e.g. stored 'open' but already finished by end_date).
     status = filters.CharFilter(method='filter_status')
+    # Exclusão por status dinâmico (vírgula). A agenda usa para ocultar status terminais
+    # (lista: closed,finished,canceled; calendário: finished,canceled) sem enumerar os
+    # ativos — assim qualquer torneio não-terminal/futuro continua aparecendo.
+    status_exclude = filters.CharFilter(method='filter_status_exclude')
     q = filters.CharFilter(method='filter_search')
     near_profile = filters.NumberFilter(method='filter_near_profile')
     # Country filter (RF Task 7) — value is an ISO alpha-3 code (BRA, ARG, CHL...).
@@ -53,7 +57,7 @@ class TournamentEditionFilter(filters.FilterSet):
         fields = [
             'from_date', 'to_date', 'state', 'venue_state', 'city', 'organization',
             'organization_slug', 'modality', 'circuit', 'surface',
-            'status', 'q', 'near_profile', 'country',
+            'status', 'status_exclude', 'q', 'near_profile', 'country',
             'category', 'category_id', 'category_code',
             'player_level',
         ]
@@ -116,6 +120,23 @@ class TournamentEditionFilter(filters.FilterSet):
             # Nenhum status reconhecido → sem correspondência (evita devolver tudo).
             return queryset.none()
         return queryset.filter(combined)
+
+    def filter_status_exclude(self, queryset, name, value):
+        """Exclui editions cujo status DINÂMICO esteja na lista (vírgula). Ao contrário de
+        um include-list, mostra qualquer status que NÃO seja terminal — então anunciados e
+        próximos não somem por casarem mal com a definição estrita de cada status."""
+        raw = (value or '').strip().lower()
+        if not raw:
+            return queryset
+        combined = None
+        for status in [s.strip() for s in raw.split(',') if s.strip()]:
+            q = TournamentEdition.dynamic_status_q(status)
+            if q is None:
+                continue
+            combined = q if combined is None else (combined | q)
+        if combined is None:
+            return queryset
+        return queryset.exclude(combined)
 
     def filter_search(self, queryset, name, value):
         if not value:

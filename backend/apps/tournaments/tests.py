@@ -1281,6 +1281,26 @@ class DynamicStatusFilterTestCase(TestCase):
         self.assertEqual(self._ids('?status=open,banana'),
                          {self.open_deadline.id, self.open_openat.id})
 
+    def test_status_exclude_hides_terminal_statuses(self):
+        # Padrão da LISTA: exclui encerrados, finalizados e cancelados.
+        got = self._ids('?status_exclude=closed,finished,canceled')
+        self.assertEqual(
+            got,
+            {self.open_deadline.id, self.open_openat.id, self.closing.id,
+             self.announced.id, self.in_progress.id},
+        )
+        for terminal in (self.closed, self.finished_stored, self.finished_date, self.canceled):
+            self.assertNotIn(terminal.id, got)
+
+    def test_status_exclude_calendar_keeps_closed(self):
+        # Padrão do CALENDÁRIO: oculta só finalizados/cancelados — anunciados e os com
+        # inscrição encerrada (mas evento futuro) continuam aparecendo.
+        got = self._ids('?status_exclude=finished,canceled')
+        self.assertIn(self.closed.id, got)
+        self.assertIn(self.announced.id, got)
+        for terminal in (self.finished_stored, self.finished_date, self.canceled):
+            self.assertNotIn(terminal.id, got)
+
 
 class DedupeTournamentEditionsTestCase(TestCase):
     """Card 3 (tasks2): merge de edições duplicadas por external_id e id TI."""

@@ -97,11 +97,15 @@ const GROUP_LABELS: Record<string, string> = {
 };
 
 function sortTournaments(list: TournamentEditionList[]): TournamentEditionList[] {
+  // Cronológico por data de início: cada torneio no seu mês, em ordem. Sem data vai
+  // para o fim. Empate de data desempata pela prioridade de status.
   return [...list].sort((a, b) => {
+    const da = a.start_date || '9999-12-31';
+    const db = b.start_date || '9999-12-31';
+    if (da !== db) return da.localeCompare(db);
     const pa = STATUS_SORT_PRIORITY[(a.dynamic_status ?? a.status) ?? 'unknown'] ?? 5;
     const pb = STATUS_SORT_PRIORITY[(b.dynamic_status ?? b.status) ?? 'unknown'] ?? 5;
-    if (pa !== pb) return pa - pb;
-    return (a.start_date || '').localeCompare(b.start_date || '');
+    return pa - pb;
   });
 }
 
@@ -374,7 +378,7 @@ export const TournamentsPage: React.FC = () => {
 
     const nearFilter = nearMe && primaryProfileId ? { near_profile: primaryProfileId } : {};
     const scopeFilter = primaryProfileId ? { profile_id: primaryProfileId } : {};
-    listEditions({ ...filters, ...statusParams(), ...nearFilter, ...scopeFilter, page, page_size: 20, ordering: 'status_priority,start_date' })
+    listEditions({ ...filters, ...statusParams(), ...nearFilter, ...scopeFilter, page, page_size: 20, ordering: 'start_date' })
       .then((data) => {
         if (cancel) return;
         setItems(sortTournaments(data.results));

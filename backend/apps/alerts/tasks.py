@@ -4,7 +4,7 @@ from datetime import timedelta
 from celery import shared_task
 from django.utils import timezone
 
-from .models import Alert, PushSubscription, UserAlertPreference
+from .models import Alert, DevicePushToken, PushSubscription, UserAlertPreference
 from apps.watchlist.models import WatchlistItem
 from apps.tournaments.models import TournamentEdition, TournamentChangeEvent
 
@@ -132,45 +132,29 @@ def _build_change_body(field_changes: dict) -> str:
     return '\n'.join(lines) if lines else 'Mudanças detectadas na fonte oficial.'
 
 
-@shared_task(bind=True, max_retries=3, default_retry_delay=60)
-def send_push_alert(self, alert_id: int):
-    """Send a Web Push notification for an Alert using pywebpush."""
-    try:
-        alert = Alert.objects.select_related('user').get(pk=alert_id)
-    except Alert.DoesNotExist:
-        logger.warning('Alert %s not found', alert_id)
-        return
+def _alert_path(alert) -> str:
+    """Caminho no app web aberto ao tocar na notificação."""
+    if alert.edition_id:
+        return f'/torneios/{alert.edition_id}'
+    return '/alertas'
 
-    subscriptions = PushSubscription.objects.filter(user=alert.user)
-    if not subscriptions.exists():
-        alert.status = Alert.STATUS_FAILED
-        alert.error = 'no_push_subscription'
-        alert.save(update_fields=['status', 'error', 'updated_at'])
-        return
 
+def _send_web_push(subscriptions, alert, data):
+    """Envia Web Push (pywebpush/VAPID). Retorna (enviados, erros). Ausência de VAPID/
+    pywebpush não derruba o alerta — apenas pula este canal."""
     from django.conf import settings
     vapid_private_key = getattr(settings, 'VAPID_PRIVATE_KEY', '')
     vapid_claims_email = getattr(settings, 'VAPID_CLAIMS_EMAIL', settings.DEFAULT_FROM_EMAIL)
     if not vapid_private_key:
-        alert.status = Alert.STATUS_FAILED
-        alert.error = 'no_vapid_key'
-        alert.save(update_fields=['status', 'error', 'updated_at'])
-        logger.warning('VAPID_PRIVATE_KEY not configured — push notifications disabled')
-        return
+        logger.warning('VAPID_PRIVATE_KEY not configured — web push skipped')
+        return 0, ['no_vapid_key']
 
     try:
-        from pywebpush import webpush, WebPushException
+        from pywebpush import webpush
         import json as _json
-        notification_payload = _json.dumps({
-            'title': alert.title,
-            'body': alert.body,
-            'data': {'alert_id': alert.id, 'kind': alert.kind},
-        })
+        payload = _json.dumps({'title': alert.title, 'body': alert.body, 'data': data})
     except ImportError:
-        alert.status = Alert.STATUS_FAILED
-        alert.error = 'pywebpush_not_installed'
-        alert.save(update_fields=['status', 'error', 'updated_at'])
-        return
+        return 0, ['pywebpush_not_installed']
 
     sent = 0
     errors = []
@@ -181,16 +165,60 @@ def send_push_alert(self, alert_id: int):
                     'endpoint': sub.endpoint,
                     'keys': {'p256dh': sub.p256dh, 'auth': sub.auth},
                 },
-                data=notification_payload,
+                data=payload,
                 vapid_private_key=vapid_private_key,
                 vapid_claims={'sub': f'mailto:{vapid_claims_email}'},
             )
             sent += 1
         except Exception as exc:
             errors.append(str(exc)[:100])
-            logger.warning('Push send failed for sub %s: %s', sub.id, exc)
+            logger.warning('Web push failed for sub %s: %s', sub.id, exc)
             if '410' in str(exc):
                 sub.delete()
+    return sent, errors
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=60)
+def send_push_alert(self, alert_id: int):
+    """Envia a notificação push de um Alert por dois canais: push nativo (Expo, app
+    iOS/Android) e Web Push (navegador). Sucesso se ao menos um canal entregar."""
+    try:
+        alert = Alert.objects.select_related('user').get(pk=alert_id)
+    except Alert.DoesNotExist:
+        logger.warning('Alert %s not found', alert_id)
+        return
+
+    web_subs = list(PushSubscription.objects.filter(user=alert.user))
+    device_tokens = list(DevicePushToken.objects.filter(user=alert.user))
+    if not web_subs and not device_tokens:
+        alert.status = Alert.STATUS_FAILED
+        alert.error = 'no_push_target'
+        alert.save(update_fields=['status', 'error', 'updated_at'])
+        return
+
+    sent = 0
+    errors = []
+    data = {'alert_id': alert.id, 'kind': alert.kind, 'path': _alert_path(alert)}
+
+    # Canal nativo (Expo) — app iOS/Android
+    if device_tokens:
+        try:
+            from .expo_push import send_expo_push_messages
+            n, invalid = send_expo_push_messages(
+                [t.token for t in device_tokens], alert.title, alert.body, data,
+            )
+            sent += n
+            if invalid:
+                DevicePushToken.objects.filter(token__in=invalid).delete()
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f'expo:{str(exc)[:80]}')
+            logger.warning('Expo push failed for alert %s: %s', alert_id, exc)
+
+    # Canal web (navegador)
+    if web_subs:
+        sent_web, web_errors = _send_web_push(web_subs, alert, data)
+        sent += sent_web
+        errors.extend(web_errors)
 
     if sent > 0:
         alert.status = Alert.STATUS_SENT
@@ -198,7 +226,7 @@ def send_push_alert(self, alert_id: int):
         alert.save(update_fields=['status', 'dispatched_at', 'updated_at'])
     else:
         alert.status = Alert.STATUS_FAILED
-        alert.error = '; '.join(errors)[:300]
+        alert.error = '; '.join(errors)[:300] or 'push_failed'
         alert.save(update_fields=['status', 'error', 'updated_at'])
         if errors:
             raise self.retry(exc=Exception(alert.error))

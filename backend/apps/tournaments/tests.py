@@ -1260,6 +1260,27 @@ class DynamicStatusFilterTestCase(TestCase):
         got = self._ids(f'?organization={cosat.id}&status=in_progress')
         self.assertEqual(got, {cosat_prog.id})
 
+    def test_multiple_statuses_combined_with_or(self):
+        # Multi-seleção: vários status separados por vírgula são combinados por OR.
+        got = self._ids('?status=open,closing_soon')
+        self.assertEqual(got, {self.open_deadline.id, self.open_openat.id, self.closing.id})
+
+    def test_default_agenda_statuses_exclude_terminal(self):
+        # Conjunto padrão da agenda: ativos, sem encerrados/finalizados/cancelados.
+        got = self._ids('?status=open,closing_soon,announced,in_progress,draws_published')
+        self.assertEqual(
+            got,
+            {self.open_deadline.id, self.open_openat.id, self.closing.id,
+             self.announced.id, self.in_progress.id},
+        )
+        for terminal in (self.closed, self.finished_stored, self.finished_date, self.canceled):
+            self.assertNotIn(terminal.id, got)
+
+    def test_unknown_term_in_list_is_ignored(self):
+        # Termo inválido no meio não zera os demais.
+        self.assertEqual(self._ids('?status=open,banana'),
+                         {self.open_deadline.id, self.open_openat.id})
+
 
 class DedupeTournamentEditionsTestCase(TestCase):
     """Card 3 (tasks2): merge de edições duplicadas por external_id e id TI."""

@@ -1,0 +1,15 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["REPLACE_WITH_APPLE_TEAM_ID.com.tenfy.mobile"],
+        "components": [
+          {
+            "/": "/app/*",
+            "comment": "Retorno automatico ao app (handoff de sessao apos assinar no site)"
+          }
+        ]
+      }
+    ]
+  }
+}

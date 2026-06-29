@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { extractApiError } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { fetchMe } from '../services/auth';
+import { isIosApp } from '../utils/appContext';
 
 function maskCpf(v: string): string {
   return (v || '').replace(/\D/g, '').slice(0, 11)
@@ -264,12 +265,17 @@ export const SubscriptionPage: React.FC = () => {
 
   const statusInfo = sub ? (STATUS_LABELS[sub.status] ?? { label: 'Status desconhecido', color: 'text-text-muted' }) : null;
   const currentPlan = plans.find((p) => p.id === sub?.plan);
+  // App iOS: assinatura é gerenciada fora do app (conformidade Apple 3.1.1). Mostra apenas
+  // o status da assinatura (read-only) e o cancelamento; oculta planos, preços e checkout.
+  const iosApp = isIosApp();
 
   return (
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-bold">Assinatura</h1>
-        <p className="text-sm text-text-muted">Planos Individual e Família — pagamento via Asaas</p>
+        {!iosApp && (
+          <p className="text-sm text-text-muted">Planos Individual e Família — pagamento via Asaas</p>
+        )}
       </div>
 
       {/* Estado vazio — sem assinatura ativa */}
@@ -280,7 +286,9 @@ export const SubscriptionPage: React.FC = () => {
             <p className="font-semibold">Sem assinatura ativa</p>
             <p className="text-sm text-text-muted mt-1">Você ainda não possui uma assinatura ativa.</p>
           </div>
-          <p className="text-xs text-text-muted">Escolha um plano abaixo para começar.</p>
+          {!iosApp && (
+            <p className="text-xs text-text-muted">Escolha um plano abaixo para começar.</p>
+          )}
         </div>
       )}
 
@@ -390,6 +398,10 @@ export const SubscriptionPage: React.FC = () => {
         <FamilySection />
       )}
 
+      {/* Cupom, CPF e planos — toda a área de compra. Oculta no app iOS, onde a
+          assinatura é contratada fora do app (conformidade Apple 3.1.1). */}
+      {!iosApp && (
+      <>
       {/* Cupom — destrava os planos pagos */}
       <div className="card !p-4 space-y-2">
         <div className="flex items-center gap-1.5 text-sm font-semibold">
@@ -558,6 +570,8 @@ export const SubscriptionPage: React.FC = () => {
           Para pagamento por cartão, use o app mobile (tokenização segura).
         </p>
       </div>
+      </>
+      )}
     </div>
   );
 };

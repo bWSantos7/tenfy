@@ -1,7 +1,8 @@
 import React, { Suspense } from 'react';
-import { Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppLayout } from './components/AppLayout';
 import { ProtectedRoute, PublicOnlyRoute, PartnerRoute } from './components/ProtectedRoute';
+import { isIosApp } from './utils/appContext';
 
 // After a deploy, a tab still running the previous bundle may lazy-load a
 // chunk that no longer exists on the server (the host answers with index.html,
@@ -41,6 +42,7 @@ const ResultsPage         = lazyPage(() => import('./pages/ResultsPage').then(m 
 const CoachPage           = lazyPage(() => import('./pages/CoachPage').then(m => ({ default: m.CoachPage })));
 const SubscriptionPage    = lazyPage(() => import('./pages/SubscriptionPage').then(m => ({ default: m.SubscriptionPage })));
 const PaymentReturnPage   = lazyPage(() => import('./pages/PaymentReturnPage').then(m => ({ default: m.PaymentReturnPage })));
+const AppHandoffPage      = lazyPage(() => import('./pages/AppHandoffPage').then(m => ({ default: m.AppHandoffPage })));
 const PrivacyPolicyPage   = lazyPage(() => import('./pages/PrivacyPolicyPage').then(m => ({ default: m.PrivacyPolicyPage })));
 const AccountDeletionPage = lazyPage(() => import('./pages/AccountDeletionPage').then(m => ({ default: m.AccountDeletionPage })));
 const InscricoesPage      = lazyPage(() => import('./pages/InscricoesPage').then(m => ({ default: m.InscricoesPage })));
@@ -69,8 +71,10 @@ const App: React.FC = () => {
         />
         {/* /register is NOT wrapped in PublicOnlyRoute: after step-1 (account creation)
             the user is authenticated but needs to stay on this page to complete OTP steps.
-            setUser() is only called after all OTP verification is done. */}
-        <Route path="/register" element={<RegisterPage />} />
+            setUser() is only called after all OTP verification is done.
+            No app iOS o cadastro vive fora do app (conformidade Apple 3.1.1): redireciona
+            para o login em vez de exibir o fluxo de criação de conta. */}
+        <Route path="/register" element={isIosApp() ? <Navigate to="/login" replace /> : <RegisterPage />} />
         <Route
           path="/recuperar-senha"
           element={
@@ -149,6 +153,10 @@ const App: React.FC = () => {
         {/* Retorno do pagamento (Asaas) — público: no cadastro diferido a conta
             ainda não existe ao voltar; a página faz login quando o pagamento confirma. */}
         <Route path="/pagamento" element={<PaymentReturnPage />} />
+
+        {/* Retorno automático ao app: troca o token de handoff (?ht=) por uma sessão
+            e entra logado. Pública — é ela que estabelece a autenticação. */}
+        <Route path="/app/continuar" element={<AppHandoffPage />} />
 
         <Route path="/politica-privacidade" element={<PrivacyPolicyPage />} />
 

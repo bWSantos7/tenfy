@@ -20,7 +20,10 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.tenfy.mobile",
       "buildNumber": "1",
+      "icon": "./assets/icon-ios.png",
+      "associatedDomains": ["applinks:tenfy.com.br"],
       "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "Usado para foto de perfil.",
         "NSPhotoLibraryUsageDescription": "Usado para selecionar foto de perfil.",
         "NSPhotoLibraryAddUsageDescription": "Usado para salvar imagens."
@@ -38,6 +41,14 @@
         "android.permission.RECEIVE_BOOT_COMPLETED",
         "android.permission.VIBRATE",
         "android.permission.POST_NOTIFICATIONS"
+      ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [{ "scheme": "https", "host": "tenfy.com.br", "pathPrefix": "/app" }],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
       ]
     },
     "web": {
@@ -55,6 +66,13 @@
           "ios": {
             "deploymentTarget": "15.1"
           }
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/logo3.png",
+          "color": "#0A1330"
         }
       ]
     ],

@@ -20,6 +20,8 @@
   "dependencies": {
     "expo": "~54.0.34",
     "expo-build-properties": "~1.0.10",
+    "expo-constants": "~18.0.13",
+    "expo-notifications": "~0.32.17",
     "expo-status-bar": "~3.0.9",
     "react": "19.1.0",
     "react-dom": "19.1.0",

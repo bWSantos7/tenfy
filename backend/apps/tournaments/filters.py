@@ -98,17 +98,24 @@ class TournamentEditionFilter(filters.FilterSet):
         return queryset.filter(q)
 
     def filter_status(self, queryset, name, value):
-        """Filter by dynamic status (the value shown on the card). Maps the
-        requested status to the same date-based conditions as
-        TournamentEdition.compute_dynamic_status(). Unknown values are ignored."""
-        value = (value or '').strip().lower()
-        if not value:
+        """Filter by dynamic status (the value shown on the card). Aceita um ou mais
+        status separados por vírgula (ex.: ``open,closing_soon``) — combinados por OR.
+        Mapeia cada status para as mesmas condições por data de
+        TournamentEdition.compute_dynamic_status(). Valores desconhecidos são ignorados."""
+        raw = (value or '').strip().lower()
+        if not raw:
             return queryset
-        q = TournamentEdition.dynamic_status_q(value)
-        if q is None:
-            # Unrecognised status keyword → no match (avoid silently returning all).
+        statuses = [s.strip() for s in raw.split(',') if s.strip()]
+        combined = None
+        for status in statuses:
+            q = TournamentEdition.dynamic_status_q(status)
+            if q is None:
+                continue  # ignora termos desconhecidos sem zerar os demais
+            combined = q if combined is None else (combined | q)
+        if combined is None:
+            # Nenhum status reconhecido → sem correspondência (evita devolver tudo).
             return queryset.none()
-        return queryset.filter(q)
+        return queryset.filter(combined)
 
     def filter_search(self, queryset, name, value):
         if not value:

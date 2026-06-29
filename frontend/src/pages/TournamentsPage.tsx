@@ -36,6 +36,13 @@ const STATUS_OPTS = [
   { v: 'canceled', l: 'Cancelados' },
 ];
 
+// Status ocultos por padrão na agenda — só aparecem quando explicitamente filtrados.
+const HIDDEN_BY_DEFAULT = ['closed', 'finished', 'canceled'];
+// Conjunto exibido por padrão (todos menos os ocultos), enviado quando não há seleção.
+const DEFAULT_AGENDA_STATUSES = STATUS_OPTS
+  .map((o) => o.v)
+  .filter((v) => v && !HIDDEN_BY_DEFAULT.includes(v));
+
 const MONTHS_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 const WEEKDAYS_PT = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
 const TODAY = new Date().toISOString().slice(0, 10);
@@ -254,6 +261,13 @@ export const TournamentsPage: React.FC = () => {
     return () => { if (searchDebounce.current) clearTimeout(searchDebounce.current); };
   }, [q]);
 
+  // Status selecionados (multi-seleção). filters.status é uma lista separada por vírgula;
+  // vazio = padrão da agenda (ativos, sem encerrados/finalizados/cancelados).
+  const selectedStatuses = useMemo(
+    () => new Set((filters.status || '').split(',').filter(Boolean)),
+    [filters.status],
+  );
+
   const hasAnyFilter = useMemo(
     () => !!(
       filters.status || filters.state || filters.q
@@ -278,7 +292,7 @@ export const TournamentsPage: React.FC = () => {
 
     // Compatible mode: full compatibility-filtered list for the active profile.
     if (compatMode && primaryProfileId) {
-      compatibleForProfile(primaryProfileId, { ...filters, page, page_size: 20 } as TournamentFilters)
+      compatibleForProfile(primaryProfileId, { ...filters, status: filters.status || DEFAULT_AGENDA_STATUSES.join(','), page, page_size: 20 } as TournamentFilters)
         .then((data) => {
           if (cancel) return;
           setItems(sortTournaments(data.results));
@@ -291,7 +305,7 @@ export const TournamentsPage: React.FC = () => {
 
     const nearFilter = nearMe && primaryProfileId ? { near_profile: primaryProfileId } : {};
     const scopeFilter = primaryProfileId ? { profile_id: primaryProfileId } : {};
-    listEditions({ ...filters, ...nearFilter, ...scopeFilter, page, page_size: 20, ordering: 'status_priority,start_date' })
+    listEditions({ ...filters, status: filters.status || DEFAULT_AGENDA_STATUSES.join(','), ...nearFilter, ...scopeFilter, page, page_size: 20, ordering: 'status_priority,start_date' })
       .then((data) => {
         if (cancel) return;
         setItems(sortTournaments(data.results));
@@ -309,7 +323,7 @@ export const TournamentsPage: React.FC = () => {
     setLoading(true);
     const nearFilter = nearMe && primaryProfileId ? { near_profile: primaryProfileId } : {};
     const scopeFilter = primaryProfileId ? { profile_id: primaryProfileId } : {};
-    calendarApi({ ...filters, ...nearFilter, ...scopeFilter })
+    calendarApi({ ...filters, status: filters.status || DEFAULT_AGENDA_STATUSES.join(','), ...nearFilter, ...scopeFilter })
       .then((months) => {
         if (cancel) return;
         const map: Record<string, TournamentEditionList[]> = {};
@@ -351,6 +365,16 @@ export const TournamentsPage: React.FC = () => {
     setViewMode(mode);
     setSelectedDate(null);
     setPage(1);
+  }
+
+  // Alterna um status na multi-seleção (atualiza a lista separada por vírgula).
+  function toggleStatus(v: string) {
+    setPage(1);
+    setFilters((f) => {
+      const cur = new Set((f.status || '').split(',').filter(Boolean));
+      if (cur.has(v)) cur.delete(v); else cur.add(v);
+      return { ...f, status: Array.from(cur).join(',') };
+    });
   }
 
   // Calendar helpers
@@ -475,6 +499,34 @@ export const TournamentsPage: React.FC = () => {
       {showFilters && (
         <div className="card space-y-3">
           <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <label className="text-xs text-text-secondary mb-1 block">Status</label>
+              <div className="flex flex-wrap gap-1.5">
+                {STATUS_OPTS.filter((o) => o.v).map((o) => {
+                  const selected = selectedStatuses.has(o.v);
+                  return (
+                    <button
+                      key={o.v}
+                      type="button"
+                      onClick={() => toggleStatus(o.v)}
+                      aria-pressed={selected}
+                      className={`px-2.5 py-1 rounded-lg border text-xs font-medium transition-colors ${
+                        selected
+                          ? 'bg-accent-neon text-bg-base border-accent-neon'
+                          : 'bg-bg-card border-border-subtle text-text-secondary hover:text-text-primary'
+                      }`}
+                    >
+                      {o.l}
+                    </button>
+                  );
+                })}
+              </div>
+              {selectedStatuses.size === 0 && (
+                <p className="text-[11px] text-text-muted mt-1.5">
+                  Mostrando torneios ativos — encerrados, finalizados e cancelados ficam ocultos até você selecioná-los.
+                </p>
+              )}
+            </div>
             <SearchableSelect
               label="UF"
               value={filters.state || ''}
@@ -484,18 +536,6 @@ export const TournamentsPage: React.FC = () => {
               allowClear
               data-testid="filter-state"
             />
-            <div>
-              <label className="text-xs text-text-secondary mb-1 block">Status</label>
-              <select
-                className="input-base"
-                value={filters.status || ''}
-                onChange={(e) => { setPage(1); setFilters((f) => ({ ...f, status: e.target.value })); }}
-              >
-                {STATUS_OPTS.map((o) => (
-                  <option key={o.v} value={o.v}>{o.l}</option>
-                ))}
-              </select>
-            </div>
             <div>
               <label className="text-xs text-text-secondary mb-1 block">Data inicial (a partir de)</label>
               <input

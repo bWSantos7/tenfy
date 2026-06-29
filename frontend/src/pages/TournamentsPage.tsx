@@ -36,14 +36,10 @@ const STATUS_OPTS = [
   { v: 'canceled', l: 'Cancelados' },
 ];
 
-// Status ocultos por padrão (quando o usuário não seleciona nenhum). Usamos exclusão para
-// que QUALQUER torneio não-terminal apareça, sem depender de casar com a definição estrita
-// de cada status ativo.
-// - Lista: oculta encerrados, finalizados e cancelados.
-// - Calendário: oculta só finalizados e cancelados — um calendário mostra os eventos
-//   futuros, então torneios anunciados/próximos (mesmo com inscrição encerrada) aparecem.
-const DEFAULT_HIDDEN_LIST = 'closed,finished,canceled';
-const DEFAULT_HIDDEN_CALENDAR = 'finished,canceled';
+// Status visíveis por padrão na página Torneios (quando o usuário não filtra):
+// somente Anunciados, Abertas, Encerrando e Em Andamento. Inscrições encerradas,
+// Finalizados, Cancelados, Chaves publicadas e quaisquer outros ficam ocultos.
+const DEFAULT_VISIBLE_STATUSES = 'announced,open,closing_soon,in_progress';
 
 const MONTHS_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 const WEEKDAYS_PT = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
@@ -363,7 +359,7 @@ export const TournamentsPage: React.FC = () => {
 
     // Compatible mode: full compatibility-filtered list for the active profile.
     if (compatMode && primaryProfileId) {
-      compatibleForProfile(primaryProfileId, { ...filters, ...statusParams('list'), page, page_size: 20 } as TournamentFilters)
+      compatibleForProfile(primaryProfileId, { ...filters, ...statusParams(), page, page_size: 20 } as TournamentFilters)
         .then((data) => {
           if (cancel) return;
           setItems(sortTournaments(data.results));
@@ -376,7 +372,7 @@ export const TournamentsPage: React.FC = () => {
 
     const nearFilter = nearMe && primaryProfileId ? { near_profile: primaryProfileId } : {};
     const scopeFilter = primaryProfileId ? { profile_id: primaryProfileId } : {};
-    listEditions({ ...filters, ...statusParams('list'), ...nearFilter, ...scopeFilter, page, page_size: 20, ordering: 'status_priority,start_date' })
+    listEditions({ ...filters, ...statusParams(), ...nearFilter, ...scopeFilter, page, page_size: 20, ordering: 'status_priority,start_date' })
       .then((data) => {
         if (cancel) return;
         setItems(sortTournaments(data.results));
@@ -394,7 +390,7 @@ export const TournamentsPage: React.FC = () => {
     setLoading(true);
     const nearFilter = nearMe && primaryProfileId ? { near_profile: primaryProfileId } : {};
     const scopeFilter = primaryProfileId ? { profile_id: primaryProfileId } : {};
-    calendarApi({ ...filters, ...statusParams('calendar'), ...nearFilter, ...scopeFilter })
+    calendarApi({ ...filters, ...statusParams(), ...nearFilter, ...scopeFilter })
       .then((months) => {
         if (cancel) return;
         const map: Record<string, TournamentEditionList[]> = {};
@@ -448,11 +444,10 @@ export const TournamentsPage: React.FC = () => {
     });
   }
 
-  // Parâmetros de status enviados à API: seleção explícita do usuário (include) ou, sem
-  // seleção, exclusão dos status terminais conforme a visão (calendário mantém os próximos).
-  function statusParams(view: ViewMode): { status?: string; status_exclude?: string } {
-    if (filters.status) return { status: filters.status };
-    return { status_exclude: view === 'calendar' ? DEFAULT_HIDDEN_CALENDAR : DEFAULT_HIDDEN_LIST };
+  // Status enviado à API: seleção explícita do usuário ou, sem seleção, os 4 status
+  // visíveis por padrão (Anunciados, Abertas, Encerrando, Em Andamento).
+  function statusParams(): { status: string } {
+    return { status: filters.status || DEFAULT_VISIBLE_STATUSES };
   }
 
   // Calendar helpers

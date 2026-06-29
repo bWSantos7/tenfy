@@ -1281,6 +1281,17 @@ class DynamicStatusFilterTestCase(TestCase):
         self.assertEqual(self._ids('?status=open,banana'),
                          {self.open_deadline.id, self.open_openat.id})
 
+    def test_default_visible_statuses_only_four(self):
+        # Padrão da página Torneios: só Anunciados, Abertas, Encerrando e Em Andamento.
+        got = self._ids('?status=announced,open,closing_soon,in_progress')
+        self.assertEqual(
+            got,
+            {self.announced.id, self.open_deadline.id, self.open_openat.id,
+             self.closing.id, self.in_progress.id},
+        )
+        for hidden in (self.closed, self.finished_stored, self.finished_date, self.canceled):
+            self.assertNotIn(hidden.id, got)
+
     def test_status_exclude_hides_terminal_statuses(self):
         # Padrão da LISTA: exclui encerrados, finalizados e cancelados.
         got = self._ids('?status_exclude=closed,finished,canceled')

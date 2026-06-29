@@ -68,17 +68,25 @@ export function WebAppShell() {
       pushTokenRef.current = t;
       webRef.current?.injectJavaScript(pushTokenJS(t));
     });
-    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
-      const path = response.notification.request.content.data?.path;
-      if (typeof path === 'string' && path.startsWith('/')) {
-        hasLoadedOnce.current = false;
-        setError(false);
-        setLoading(true);
-        setCurrentUri(`${WEB_URL.replace(/\/+$/, '')}${path}`);
-      }
-    });
-    return () => { mounted = false; sub.remove(); };
+    return () => { mounted = false; };
   }, []);
+
+  // Tap na notificação → abre a tela certa. O hook entrega tanto o tap com o app aberto
+  // (foreground/background) quanto o que abriu o app do zero (cold start). Dedupe por id.
+  const lastNotifResponse = Notifications.useLastNotificationResponse();
+  const handledNotifId = useRef<string | null>(null);
+  useEffect(() => {
+    if (!lastNotifResponse) return;
+    const req = lastNotifResponse.notification.request;
+    if (handledNotifId.current === req.identifier) return;
+    handledNotifId.current = req.identifier;
+    const path = req.content.data?.path;
+    if (typeof path !== 'string' || !path.startsWith('/')) return;
+    hasLoadedOnce.current = false;
+    setError(false);
+    setLoading(true);
+    setCurrentUri(`${WEB_URL.replace(/\/+$/, '')}${path}`);
+  }, [lastNotifResponse]);
 
   // Botão físico de voltar (Android): volta no histórico da WebView quando possível.
   useEffect(() => {

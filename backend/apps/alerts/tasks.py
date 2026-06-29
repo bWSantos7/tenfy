@@ -10,6 +10,9 @@ from apps.tournaments.models import TournamentEdition, TournamentChangeEvent
 
 logger = logging.getLogger('apps.alerts')
 
+# Erros de push permanentes (configuração) — não adianta reagendar a task.
+_PERMANENT_PUSH_ERRORS = {'no_vapid_key', 'pywebpush_not_installed'}
+
 
 def _get_parents_of(user):
     """Return dicts with parent and child info for active ParentChild links."""
@@ -204,10 +207,11 @@ def send_push_alert(self, alert_id: int):
     if device_tokens:
         try:
             from .expo_push import send_expo_push_messages
-            n, invalid = send_expo_push_messages(
+            n, invalid, expo_errors = send_expo_push_messages(
                 [t.token for t in device_tokens], alert.title, alert.body, data,
             )
             sent += n
+            errors.extend(expo_errors)
             if invalid:
                 DevicePushToken.objects.filter(token__in=invalid).delete()
         except Exception as exc:  # noqa: BLE001
@@ -227,8 +231,11 @@ def send_push_alert(self, alert_id: int):
     else:
         alert.status = Alert.STATUS_FAILED
         alert.error = '; '.join(errors)[:300] or 'push_failed'
+        # Só reagenda em falha transitória. Erros de configuração permanentes
+        # (sem VAPID, lib ausente) nunca terão sucesso — não vale gastar retries.
+        transient = [e for e in errors if e not in _PERMANENT_PUSH_ERRORS]
         alert.save(update_fields=['status', 'error', 'updated_at'])
-        if errors:
+        if transient:
             raise self.retry(exc=Exception(alert.error))
 
 

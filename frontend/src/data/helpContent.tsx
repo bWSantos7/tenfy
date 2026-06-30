@@ -35,8 +35,20 @@ const isParent = (role?: Role) => role === 'parent';
 
 // ─── Tutorial de primeiro acesso (passo a passo, adaptado por perfil) ──────────
 
-export function getTutorialSteps(role?: Role): TutorialStep[] {
+export function getTutorialSteps(role?: Role, isStaff?: boolean): TutorialStep[] {
   const parent = isParent(role);
+  // Jogador "puro": vê o passo extra do UTR (seu próprio rating). Exclui responsável,
+  // admin, treinador e parceiro — e contas staff.
+  const isPlayer = (!role || role === 'player') && !isStaff;
+
+  // Passo extra só para jogador: como buscar/vincular o próprio UTR rating.
+  const utrStep: TutorialStep = {
+    icon: Award,
+    title: 'Encontre seu UTR',
+    body: 'Ainda no Perfil: o UTR é o seu rating universal de tênis. Na seção UTR, toque no botão "Vincular" para buscar e conectar o seu perfil — assim seu rating aparece aqui e ajuda na compatibilidade com os torneios.',
+    hint: 'Aba Perfil → seção UTR → botão "Vincular".',
+    route: '/perfil',
+  };
 
   const intro: TutorialStep = {
     icon: Sparkles,
@@ -113,6 +125,7 @@ export function getTutorialSteps(role?: Role): TutorialStep[] {
       hint: 'Barra de navegação → Perfil.',
       route: '/perfil',
     },
+    ...(isPlayer ? [utrStep] : []),
     {
       icon: Settings,
       title: 'Configurações da conta',

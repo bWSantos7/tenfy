@@ -18,7 +18,7 @@ export const InteractiveTutorial: React.FC<{ user: User | null }> = ({ user }) =
   const [visible, setVisible] = useState(false);
   const [step, setStep] = useState(0);
 
-  const steps = getTutorialSteps(user?.role);
+  const steps = getTutorialSteps(user?.role, user?.is_staff);
 
   const open = useCallback(() => { setStep(0); setVisible(true); }, []);
 

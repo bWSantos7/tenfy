@@ -25,6 +25,12 @@
         "simulator": false
       }
     },
+    "simulator": {
+      "extends": "preview",
+      "ios": {
+        "simulator": true
+      }
+    },
     "production": {
       "env": {
         "EXPO_PUBLIC_API_BASE_URL": "https://api.tenfy.com.br",

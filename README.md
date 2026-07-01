@@ -57,6 +57,7 @@ A proposta do app é ser uma camada de inteligência e organização, sem substi
 - Importação de inscrições por fonte.
 - Pipeline de qualidade com `dry_run`, `quality_gate`, warnings e errors.
 - App mobile como casca WebView (Expo) que carrega o app web.
+- Projeto iOS nativo pronto para build via EAS (sem Mac) ou Xcode; publicação depende apenas da conta Apple Developer.
 - Backend Django REST API em produção.
 - Deploy no Railway.
 
@@ -189,11 +190,13 @@ tenfy/
 │   └── ...
 │
 ├── mobile/
-│   ├── src/
+│   ├── src/              # casca WebView, deep-link, push
+│   ├── ios/              # projeto Xcode nativo (gerado via expo prebuild)
 │   ├── app.json
 │   └── eas.json
 │
 ├── docs/
+│   └── mobile/           # build/entrega iOS e metadados App Store
 ├── CLAUDE.md
 └── README.md
 ```
@@ -322,7 +325,7 @@ Execução: Manual Trigger
 ### Pré-requisitos
 
 - Python 3.11+
-- Node.js 18+
+- Node.js 20+ (Expo SDK 54 exige 20.19+)
 - PostgreSQL 14+
 - Redis 7+
 - Git
@@ -524,18 +527,41 @@ curl https://api.tenfy.com.br/health/
 
 ## Build mobile
 
+O app mobile builda pela nuvem via **EAS Build** — **não precisa de Mac, nem para iOS**. Os comandos são disparados do Windows/Linux.
+
+### Scripts (em `mobile/`)
+
 ```bash
-cd mobile
+# Android
+npm run build:android:preview   # APK interno para teste
+npm run build:android:prod      # AAB de produção
 
-# Android APK para teste
-eas build --profile preview --platform android
-
-# Android produção
-eas build --profile production --platform android
-
-# iOS produção
-eas build --profile production --platform ios
+# iOS
+npm run build:ios:sim           # build de Simulador (NÃO exige conta Apple)
+npm run build:ios:preview       # build interno (device)
+npm run build:ios:prod          # build de produção
+npm run submit:ios              # envia para App Store Connect / TestFlight
 ```
+
+### Projeto nativo iOS (Xcode)
+
+A pasta `mobile/ios/` (projeto Xcode nativo) é versionada, gerada via `expo prebuild`. Serve tanto para o build no EAS quanto para entrega a quem compila localmente no Xcode.
+
+> ⚠️ `mobile/ios/` é código gerado a partir de `mobile/app.json`. Rodar `npx expo prebuild -p ios --clean` regenera a pasta e sobrescreve edições manuais no nativo.
+
+### Documentação iOS
+
+| Doc | Para quê |
+|---|---|
+| `docs/mobile/ios-eas-build.md` | Buildar/publicar iOS via EAS, sem Mac (recomendado) |
+| `docs/mobile/ios-xcode-handoff.md` | Entregar o `ios/` para compilar no Xcode (Mac) |
+| `docs/mobile/app-store-metadata.md` | Textos prontos para o App Store Connect |
+
+### Custo
+
+- **EAS Build:** plano Free (15 builds iOS/mês) = **US$ 0**.
+- **Apple Developer Program:** **US$ 99/ano** — obrigatório para build em device, TestFlight e App Store.
+- **Push (Expo):** grátis.
 
 ---
 

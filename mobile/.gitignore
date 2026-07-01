@@ -10,7 +10,13 @@ web-build/
 *.mobileprovision
 *.orig.*
 google-service-account.json
-ios/
+# Projeto nativo iOS versionado (entregue para build no Xcode). Ignoramos só os
+# artefatos gerados no Mac (CocoaPods, build e arquivos de usuario do Xcode).
+ios/Pods/
+ios/build/
+ios/*.xcworkspace/xcuserdata/
+ios/**/xcuserdata/
+ios/**/*.xcuserstate
 android/
 *.env
 *.env.backup.local

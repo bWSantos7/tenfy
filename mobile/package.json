@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "build:android:preview": "eas build --platform android --profile preview",
     "build:android:prod": "eas build --platform android --profile production",
+    "build:ios:sim": "eas build --platform ios --profile simulator",
     "build:ios:preview": "eas build --platform ios --profile preview",
     "build:ios:prod": "eas build --platform ios --profile production",
     "build:all": "eas build --platform all --profile production",

@@ -92,6 +92,15 @@ Apps Django instalados:
 
 ## 4. Scraping externo e MongoDB
 
+> ESTADO ATUAL DA INGESTAO (2026): a ingestao de torneios/inscritos vem 100% do
+> tournament-extractor (schema `extractor` no mesmo Postgres) via
+> `sync_from_extractor` / `sync_from_extractor_task`. Os caminhos antigos abaixo
+> (Mongo COSAT/ITF, conectores in-backend `run_all_active_sources`, entries n8n
+> CBT/FPT) estao DESLIGADOS: nao sao agendados (ver `OBSOLETE_TASKS` em
+> `setup_periodic_tasks.py`) e ficam no repo apenas como FALLBACK MANUAL. Os
+> flags `COSAT_MONGO_ENABLED` / `ITF_MONGO_ENABLED` sao `False` por padrao.
+> Trate os fluxos Mongo/n8n descritos adiante como fallback, nao como caminho ativo.
+
 Regra central: scraping COSAT/ITF e de outro repositorio/servico. Nao implementar crawler pesado dentro do backend principal.
 
 Fluxo COSAT oficial:
@@ -124,6 +133,10 @@ O diretario `scraping/` pode aparecer no workspace, mas neste repo ele deve ser 
 Nunca logar `COSAT_MONGO_URL`, `ITF_MONGO_URL` ou credenciais.
 
 ## 5. n8n e arquivos Sync
+
+> ESTADO ATUAL: os workflows n8n de inscritos abaixo estao DESLIGADOS como fonte
+> ativa — a ingestao vem do tournament-extractor (ver estado atual na secao 4).
+> Mantidos como referencia/fallback; nao reativar sem decisao explicita.
 
 Os arquivos abaixo rodam no n8n:
 

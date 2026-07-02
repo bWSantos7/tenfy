@@ -9,11 +9,16 @@ app.config_from_object('django.conf:settings', namespace='CELERY')
 app.autodiscover_tasks()
 
 # Fallback beat schedule (used when DatabaseScheduler is NOT active / for reference).
-# The authoritative schedule lives in the DB — run `setup_periodic_tasks` after each deploy.
+# A fonte autoritativa é o DB — rode `setup_periodic_tasks` após cada deploy.
+# Este bloco espelha os TASKS ativos de setup_periodic_tasks. Os agendamentos
+# antigos (run_all_active_sources, sync_cosat/itf_from_mongo, entries n8n
+# CBT/FPT) foram retirados: a ingestão de torneios/inscritos vem 100% do
+# tournament-extractor (sync_from_extractor_task). O código das tasks/commands
+# antigos segue no repo como fallback manual, mas não é mais agendado.
 app.conf.beat_schedule = {
-    'ingest-all-active-sources-hourly': {
-        'task': 'apps.ingestion.tasks.run_all_active_sources',
-        'schedule': crontab(minute=0),
+    'sync-from-extractor-hourly': {
+        'task': 'apps.ingestion.tasks.sync_from_extractor_task',
+        'schedule': crontab(minute=5),  # X:05 — torneios + inscritos do schema extractor
     },
     'dispatch-deadline-alerts-hourly': {
         'task': 'apps.alerts.tasks.dispatch_deadline_alerts',
@@ -31,10 +36,6 @@ app.conf.beat_schedule = {
         'task': 'apps.accounts.tasks.expire_stale_invites',
         'schedule': crontab(hour=1, minute=30),  # 01:30 UTC daily
     },
-    'sync-cosat-every-6h': {
-        'task': 'apps.ingestion.tasks.sync_cosat_from_mongo_task',
-        'schedule': crontab(minute=30, hour='*/6'),  # 00:30, 06:30, 12:30, 18:30 UTC
-    },
     'sync-all-ti-profiles-hourly': {
         'task': 'apps.players.tasks.sync_all_ti_profiles_task',
         'schedule': crontab(minute=50),  # every hour at :50 (ratings, partidas, ranking, inscrições)
@@ -46,16 +47,6 @@ app.conf.beat_schedule = {
     'sync-ti-rankings-daily': {
         'task': 'apps.players.tasks.sync_ti_rankings_task',
         'schedule': crontab(hour=2, minute=0),  # 02:00 UTC daily (import ranking catalogue + backfill links)
-    },
-    'sync-fpt-sp-entries-hourly': {
-        'task': 'apps.registrations.tasks.sync_fpt_sp_entries_task',
-        'schedule': crontab(minute=10),  # X:10 every hour
-        'kwargs': {'limit': 60},
-    },
-    'sync-cbt-fct-entries-hourly': {
-        'task': 'apps.registrations.tasks.sync_cbt_fct_entries_task',
-        'schedule': crontab(minute=20),  # X:20 every hour (after FPT)
-        'kwargs': {'sources': ['cbt', 'fct'], 'limit': 60},
     },
 }
 

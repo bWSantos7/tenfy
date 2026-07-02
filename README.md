@@ -63,6 +63,10 @@ A proposta do app é ser uma camada de inteligência e organização, sem substi
 
 ### Fontes de inscrições
 
+> Hoje todas as fontes são normalizadas pelo **`tournament-extractor`** (caminho único).
+> A tabela abaixo descreve a origem/maturidade por fonte; os fluxos n8n/Mongo citados
+> são fallback desligado (ver [Integrações de dados](#integrações-de-dados)).
+
 | Fonte | Status |
 |---|---|
 | CBT / Tênis Integrado | Automação validada. Coleta inscritos, categorias, ranking/posição quando disponível e status financeiro. |
@@ -204,6 +208,14 @@ tenfy/
 ---
 
 ## Integrações de dados
+
+> **Estado atual (2026):** a ingestão de torneios/inscritos vem **100% do
+> `tournament-extractor`** (serviço externo que grava no schema `extractor` do
+> mesmo Postgres; o backend sincroniza via `sync_from_extractor`). Os caminhos
+> descritos abaixo — **Mongo COSAT/ITF**, conectores in-backend e **workflows
+> n8n de inscritos** — estão **desligados** e permanecem apenas como **fallback
+> manual** (flags `*_MONGO_ENABLED=False`; agendamentos em `OBSOLETE_TASKS`).
+> A subseção CBT via n8n abaixo reflete o histórico, não o fluxo ativo.
 
 ### CBT / Tênis Integrado
 

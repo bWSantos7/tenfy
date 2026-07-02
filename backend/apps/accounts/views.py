@@ -125,6 +125,13 @@ class RegisterThrottle(AnonRateThrottle):
     rate = '10/hour'
 
 
+class LoginThrottle(AnonRateThrottle):
+    # Defesa em profundidade contra password spraying (muitas contas, mesmo IP).
+    # O lockout por conta (3 tentativas / 15 min em accounts.security) já protege
+    # cada conta; este teto por IP é generoso para não afetar IP compartilhado.
+    rate = '30/minute'
+
+
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
     serializer_class = RegisterSerializer
@@ -260,6 +267,7 @@ def register_status(request):
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
+    throttle_classes = [LoginThrottle]
 
     def post(self, request, *args, **kwargs):
         from rest_framework.exceptions import AuthenticationFailed

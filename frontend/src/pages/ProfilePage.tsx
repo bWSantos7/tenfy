@@ -71,6 +71,7 @@ export const ProfilePage: React.FC = () => {
   const [confirmRemove, setConfirmRemove] = useState<number | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
   const [exporting, setExporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -138,7 +139,7 @@ export const ProfilePage: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploadingAvatar(true);
-    try { const updated = await uploadAvatar(file); setUser(updated); toast.success('Foto atualizada'); }
+    try { const updated = await uploadAvatar(file); setUser(updated); setAvatarLoadFailed(false); toast.success('Foto atualizada'); }
     catch (err) { toast.error(extractApiError(err)); }
     finally { setUploadingAvatar(false); if (fileInputRef.current) fileInputRef.current.value = ''; }
   }
@@ -170,6 +171,7 @@ export const ProfilePage: React.FC = () => {
 
   const avatarLetter = (user?.full_name || user?.email || 'U').slice(0, 1).toUpperCase();
   const roleLabel = ROLE_LABELS[user?.role ?? ''] ?? user?.role ?? '';
+  const avatarUrl = resolveAvatar(user, mediaUrl);
 
   return (
     <div className="space-y-4 pb-4">
@@ -180,8 +182,15 @@ export const ProfilePage: React.FC = () => {
           {/* Avatar com câmera */}
           <div className="relative shrink-0">
             <div className="w-16 h-16 rounded-full bg-accent-neon/20 flex items-center justify-center text-xl font-bold overflow-hidden border-2 border-accent-neon/40">
-              {resolveAvatar(user, mediaUrl)
-                ? <img src={resolveAvatar(user, mediaUrl)!} alt="avatar" className="w-full h-full object-cover" />
+              {avatarUrl && !avatarLoadFailed
+                ? (
+                  <img
+                    src={avatarUrl}
+                    alt="avatar"
+                    className="w-full h-full object-cover"
+                    onError={() => setAvatarLoadFailed(true)}
+                  />
+                )
                 : <span className="text-accent-neon text-2xl font-bold">{avatarLetter}</span>}
             </div>
             <button

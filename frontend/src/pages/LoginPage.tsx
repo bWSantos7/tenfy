@@ -58,10 +58,24 @@ export const LoginPage: React.FC = () => {
     doc.querySelector('.back')?.addEventListener('click', go('/'));
     doc.querySelector('.forgot')?.addEventListener('click', go('/recuperar-senha'));
     doc.querySelector('.partner-link')?.addEventListener('click', go('/parceiro/login'));
-    // No app iOS o cadastro vive fora do app (modelo "conta externa", conformidade
-    // Apple 3.1.1): esconde o convite "Criar conta grátis" em vez de ligá-lo a /register.
+    // No app iOS o cadastro vive fora do app (modelo "conta externa", conformidade Apple
+    // 3.1.1): o link abre o site no navegador do sistema (postMessage para a casca nativa),
+    // nunca dentro da WebView do app — em vez de simplesmente esconder o convite.
     if (isIosApp()) {
-      doc.querySelector('.signup-link')?.closest('.foot')?.setAttribute('style', 'display:none');
+      const link = doc.querySelector('.signup-link');
+      if (link) {
+        link.textContent = 'Criar conta no site';
+        link.addEventListener('click', (e: Event) => {
+          e.preventDefault();
+          const url = 'https://tenfy.com.br/register';
+          const bridge = (window as unknown as { ReactNativeWebView?: { postMessage: (m: string) => void } }).ReactNativeWebView;
+          if (bridge?.postMessage) {
+            bridge.postMessage(JSON.stringify({ type: 'tenfy-open-external', url }));
+          } else {
+            window.open(url, '_blank', 'noopener,noreferrer');
+          }
+        });
+      }
     } else {
       doc.querySelector('.signup-link')?.addEventListener('click', go('/register'));
     }

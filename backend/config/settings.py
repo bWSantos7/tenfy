@@ -188,7 +188,17 @@ USE_TZ = True
 # Static files
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
+# Django 5.1+ removed the DEFAULT_FILE_STORAGE/STATICFILES_STORAGE compatibility
+# shim: those settings are silently ignored now, STORAGES is the only thing read.
+STORAGES = {
+    'default': {
+        'BACKEND': 'django.core.files.storage.FileSystemStorage',
+    },
+    'staticfiles': {
+        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
+    },
+}
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
@@ -443,7 +453,7 @@ if CLOUDINARY_URL:
     os.environ['CLOUDINARY_URL'] = CLOUDINARY_URL
     # Use custom storage class that injects f_auto,q_auto into every served URL
     # to enable automatic WebP conversion and lossy compression on Cloudinary CDN.
-    DEFAULT_FILE_STORAGE = 'apps.core.cloudinary_storage.OptimizedCloudinaryStorage'
+    STORAGES['default']['BACKEND'] = 'apps.core.cloudinary_storage.OptimizedCloudinaryStorage'
     CLOUDINARY_STORAGE = {
         'TRANSFORMATION': [{'quality': 'auto', 'fetch_format': 'auto'}],
     }

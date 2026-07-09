@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Users, Plus, Trash2, ChevronRight, ChevronLeft, Star, Trophy, Calendar, X } from 'lucide-react';
 import { CoachAthlete, WatchlistItem } from '../types';
 import { addAthlete, getAthleteWatchlist, listAthletes, removeAthlete } from '../services/data';
-import { extractApiError } from '../services/api';
+import { extractApiError, mediaUrl } from '../services/api';
+import { resolveAvatar } from '../utils/format';
 
 type View = 'roster' | 'watchlist';
 
@@ -24,6 +25,7 @@ const STATUS_COLOR: Record<string, string> = {
 
 export const CoachPage: React.FC = () => {
   const [athletes, setAthletes] = useState<CoachAthlete[]>([]);
+  const [failedAvatarIds, setFailedAvatarIds] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
   const [emailInput, setEmailInput] = useState('');
   const [notesInput, setNotesInput] = useState('');
@@ -180,11 +182,12 @@ export const CoachPage: React.FC = () => {
           ) : (
             athletes.map(link => (
               <div key={link.id} className="bg-bg-card border border-border-subtle rounded-xl p-4 flex items-center gap-3">
-                {link.athlete_detail.avatar ? (
+                {resolveAvatar(link.athlete_detail, mediaUrl) && !failedAvatarIds.has(link.id) ? (
                   <img
-                    src={link.athlete_detail.avatar}
+                    src={resolveAvatar(link.athlete_detail, mediaUrl)!}
                     alt=""
                     className="w-10 h-10 rounded-full object-cover shrink-0"
+                    onError={() => setFailedAvatarIds(prev => new Set(prev).add(link.id))}
                   />
                 ) : (
                   <div className="w-10 h-10 rounded-full bg-accent-neon/20 flex items-center justify-center shrink-0">

@@ -61,6 +61,7 @@ function isWatchlistEditionPast(item: WatchlistItem): boolean {
 export const PlayerProfilePage: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
   const [profiles, setProfiles] = useState<PlayerProfile[]>([]);
   const [children, setChildren] = useState<ParentChild[]>([]);
   const [selectedChildId, setSelectedChildId] = useState<number | null>(null);
@@ -280,6 +281,7 @@ export const PlayerProfilePage: React.FC = () => {
   }
 
   const avatarLetter = (user?.full_name || user?.email || 'U').slice(0, 1).toUpperCase();
+  const avatarUrl = resolveAvatar(user, mediaUrl);
   const roleLabel = ROLE_LABELS[user?.role ?? ''] ?? user?.role ?? '';
 
   // Tênis Integrado linked IDs from external_ids
@@ -314,8 +316,15 @@ export const PlayerProfilePage: React.FC = () => {
       {/* ── User card ───────────────────────────────────────────────── */}
       <div className="card flex items-center gap-4">
         <div className="w-16 h-16 rounded-full bg-accent-neon/20 flex items-center justify-center text-xl font-bold overflow-hidden border-2 border-accent-neon/40 shrink-0">
-          {resolveAvatar(user, mediaUrl)
-            ? <img src={resolveAvatar(user, mediaUrl)!} alt="avatar" className="w-full h-full object-cover" />
+          {avatarUrl && !avatarLoadFailed
+            ? (
+              <img
+                src={avatarUrl}
+                alt="avatar"
+                className="w-full h-full object-cover"
+                onError={() => setAvatarLoadFailed(true)}
+              />
+            )
             : <span className="text-accent-neon text-2xl font-bold">{avatarLetter}</span>}
         </div>
         <div className="flex-1 min-w-0">

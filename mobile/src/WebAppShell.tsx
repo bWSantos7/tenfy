@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView, WebViewNavigation } from 'react-native-webview';
-import type { WebViewErrorEvent, ShouldStartLoadRequest } from 'react-native-webview/lib/WebViewTypes';
+import type { WebViewErrorEvent, ShouldStartLoadRequest, WebViewMessageEvent } from 'react-native-webview/lib/WebViewTypes';
 import * as Notifications from 'expo-notifications';
 import { registerForPushToken, PushToken } from './push';
 
@@ -141,6 +141,20 @@ export function WebAppShell() {
     return true;
   }, []);
 
+  // Mensagens vindas do web via window.ReactNativeWebView.postMessage. Hoje só usado
+  // para abrir o cadastro (iOS) no navegador do sistema — mesmo sendo o mesmo domínio,
+  // ele não pode renderizar dentro da WebView do app (conformidade Apple 3.1.1).
+  const onMessage = useCallback((e: WebViewMessageEvent) => {
+    try {
+      const data = JSON.parse(e.nativeEvent.data);
+      if (data?.type === 'tenfy-open-external' && typeof data.url === 'string') {
+        Linking.openURL(data.url).catch(() => {});
+      }
+    } catch {
+      // mensagem não reconhecida — ignora
+    }
+  }, []);
+
   const onError = useCallback((e: WebViewErrorEvent) => {
     // Só tratamos como erro de tela cheia quando o frame principal falha.
     const ne = e.nativeEvent;
@@ -194,6 +208,7 @@ export function WebAppShell() {
               }
             }}
             onError={onError}
+            onMessage={onMessage}
             onNavigationStateChange={onNavChange}
             onShouldStartLoadWithRequest={onShouldStartLoadWithRequest}
             style={styles.webview}

@@ -305,6 +305,10 @@ class YouthCategoryPromotionCompatibilityTestCase(TestCase):
 
     def setUp(self):
         cache.clear()
+        # Data relativa: evita "time-bomb" — uma data hardcoded que vira 'hoje'
+        # faria start_date <= today => status dinâmico 'in_progress', que sai dos
+        # status ativos do endpoint compatible (OPEN/CLOSING_SOON/ANNOUNCED).
+        self.future_start = (timezone.now().date() + timedelta(days=30)).isoformat()
         self.client = APIClient()
         self.user = User.objects.create_user(
             email='youth_rules@test.com', password='pass', full_name='Youth Rules'
@@ -348,7 +352,8 @@ class YouthCategoryPromotionCompatibilityTestCase(TestCase):
             competitive_level=PlayerProfile.LEVEL_YOUTH,
         )
 
-    def _edition(self, org_key, slug, title, category_text, normalized_age=None, start_date='2026-07-10'):
+    def _edition(self, org_key, slug, title, category_text, normalized_age=None, start_date=None):
+        start_date = start_date or self.future_start
         org = self.orgs[org_key]
         tournament = Tournament.objects.create(
             canonical_name=title,
@@ -485,14 +490,14 @@ class YouthCategoryPromotionCompatibilityTestCase(TestCase):
             'same-date-cosat',
             'COSAT Same Date',
             'BS U16',
-            start_date='2026-08-01',
+            start_date=self.future_start,
         )
         itf = self._edition(
             'ITF',
             'same-date-itf',
             'ITF Junior Same Date',
             'Boys Singles',
-            start_date='2026-08-01',
+            start_date=self.future_start,
         )
 
         ids = self._compatible_ids(profile, include_category_up='true')
@@ -582,7 +587,7 @@ class YouthCategoryPromotionCompatibilityTestCase(TestCase):
             title=title,
             season_year=2026,
             status=TournamentEdition.STATUS_OPEN,
-            start_date='2026-07-10',
+            start_date=self.future_start,
             is_youth=True,
             is_published=True,
         )
@@ -639,7 +644,7 @@ class YouthCategoryPromotionCompatibilityTestCase(TestCase):
             title='CBT Sub-14 Misto',
             season_year=2026,
             status=TournamentEdition.STATUS_OPEN,
-            start_date='2026-07-10',
+            start_date=self.future_start,
             is_youth=True,
             is_published=True,
         )
@@ -757,7 +762,7 @@ class YouthCategoryPromotionCompatibilityTestCase(TestCase):
             title='Beach Tennis CBT',
             season_year=2026,
             status=TournamentEdition.STATUS_OPEN,
-            start_date='2026-07-10',
+            start_date=self.future_start,
             is_youth=True,
             is_published=True,
         )

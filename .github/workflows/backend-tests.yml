@@ -1,0 +1,103 @@
+name: Backend Tests (full suite + coverage)
+
+on:
+  pull_request:
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-tests.yml"
+  push:
+    branches: [master, tester]
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-tests.yml"
+  workflow_dispatch:
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: tenfy_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d tenfy_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    defaults:
+      run:
+        working-directory: backend
+
+    env:
+      CI: "true"
+      DEBUG: "False"
+      SECRET_KEY: "ci-test-secret-key-only-000000000000000000000000000000000000000000000000"
+      DATABASE_URL: "postgresql://postgres:postgres@127.0.0.1:5432/tenfy_test?sslmode=disable"
+      REDIS_URL: "redis://localhost:6379/1"
+      ALLOWED_HOSTS: "localhost,127.0.0.1,testserver"
+      CSRF_TRUSTED_ORIGINS: "http://localhost:8000,http://127.0.0.1:8000"
+      CORS_ALLOWED_ORIGINS: "http://localhost:5173,http://localhost:8081"
+      ASAAS_ENVIRONMENT: "sandbox"
+      ASAAS_API_KEY: ""
+      ASAAS_WEBHOOK_TOKEN: "test-webhook-token"
+      RESEND_API_KEY: "re_test_ci_only_not_a_real_secret"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt coverage
+
+      - name: Confirm isolated database target
+        run: |
+          python - <<'PY'
+          import os
+          from urllib.parse import urlparse
+          url = os.environ["DATABASE_URL"]
+          parsed = urlparse(url)
+          host = parsed.hostname or ""
+          dbname = (parsed.path or "").lstrip("/")
+          forbidden = ("railway", "rlwy", "proxy", "production", "staging", "tennis.app.br")
+          if host not in {"localhost", "127.0.0.1"}:
+              raise SystemExit(f"Unsafe DATABASE_URL host for tests: {host}")
+          if any(token in url.lower() for token in forbidden):
+              raise SystemExit("Unsafe DATABASE_URL contains a forbidden production/staging marker")
+          if dbname != "tenfy_test":
+              raise SystemExit(f"Unexpected test database name: {dbname}")
+          print("DATABASE_URL confirmed for isolated tests.")
+          PY
+
+      - name: Django check
+        run: python manage.py check
+
+      - name: Migrations are in sync
+        run: python manage.py makemigrations --check --dry-run
+
+      - name: Full test suite (with coverage)
+        run: coverage run manage.py test --verbosity 1
+
+      - name: Coverage report
+        run: |
+          coverage report --skip-covered --sort=cover | tail -40
+          coverage xml -o coverage.xml
+
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: backend/coverage.xml
+          if-no-files-found: ignore

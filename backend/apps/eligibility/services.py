@@ -449,11 +449,31 @@ class EligibilityEngine:
                 ranking_check=result.ranking_check,
                 ranking_note=result.ranking_note,
             )
+        # ITF Juniors é faixa 14–18: abaixo de 14 NÃO é elegível (em nenhum modo).
+        # O teto (18) vem da regra base de idade; este é o piso mínimo.
+        if (circuit == CIRCUIT_ITF and self.sporting_age is not None
+                and self.sporting_age < 14):
+            return EligibilityResult(
+                status=STATUS_INCOMPATIBLE,
+                reasons=list(set(result.reasons + [REASON_CATEGORY_UNAVAILABLE])),
+                category_code=result.category_code,
+                category_label=result.category_label,
+                ranking_check=result.ranking_check,
+                ranking_note=result.ranking_note,
+            )
 
         # Default listing: show ONLY the official category regardless of circuit.
         # Advanced filter (include_category_up=True) applies per-circuit limits below.
         if not self.include_category_up:
             official_age = official_youth_category_age(self.profile)
+            # 8b: ITF Juniors (14–18) é acceptance-list — a entrada não é
+            # garantida, é decidida pela lista de aceitação. Por isso aparecem na
+            # lista PADRÃO também para jogadores 14–16 "jogando para cima", com o
+            # selo "sujeito a aceitação" (entry_guarantee=false vem da camada de
+            # location). O piso de 14 anos já foi garantido no bloco ITF acima;
+            # jogadores U18 casam direto pela regra normal abaixo.
+            if circuit == CIRCUIT_ITF and category_age == 18:
+                return result
             if official_age is not None and category_age != official_age:
                 return EligibilityResult(
                     status=STATUS_INCOMPATIBLE,

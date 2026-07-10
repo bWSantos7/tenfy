@@ -473,15 +473,33 @@ class YouthCategoryPromotionCompatibilityTestCase(TestCase):
         self.assertIn(sub16.id, ids)
         self.assertNotIn(sub18.id, ids)
 
-    def test_itf_junior_is_treated_as_18_only_in_advanced_listing(self):
+    def test_itf_junior_shows_in_default_for_14_to_16_with_seal(self):
+        # 8b: ITF Juniors (14–18, acceptance-list) aparece na lista PADRÃO para
+        # jogadores 14–16 jogando para cima, com selo "sujeito a aceitação".
         profile = self._profile(14)
+        # O selo (entry_guarantee=False) vem do escopo de federação, que exige
+        # uma federação no perfil (federation_state). FPT = federação de SP.
+        profile.federation = self.orgs['FPT']
+        profile.save(update_fields=['federation'])
         itf = self._edition('ITF', 'itf-junior', 'ITF Junior J30', 'Boys Singles')
 
-        default_ids = self._compatible_ids(profile)
-        advanced_ids = self._compatible_ids(profile, include_category_up='true')
+        response = self.client.get(
+            '/api/tournaments/editions/compatible/',
+            {'profile_id': profile.id, 'page_size': 100},
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        items = {it['id']: it for it in response.data.get('results', [])}
+        self.assertIn(itf.id, items)  # agora aparece na lista PADRÃO
+        elig = items[itf.id]['eligibility']
+        self.assertFalse(elig['entry_guarantee'])           # selo: entrada não garantida
+        self.assertNotEqual(elig['entry_model'], 'direct')  # acceptance_list
 
-        self.assertNotIn(itf.id, default_ids)
-        self.assertIn(itf.id, advanced_ids)
+    def test_itf_junior_hidden_below_14(self):
+        # ITF Juniors é faixa 14–18: um jogador de 12 anos não vê ITF em modo algum.
+        profile = self._profile(12)
+        itf = self._edition('ITF', 'itf-young', 'ITF Junior J30', 'Boys Singles')
+        self.assertNotIn(itf.id, self._compatible_ids(profile))
+        self.assertNotIn(itf.id, self._compatible_ids(profile, include_category_up='true'))
 
     def test_cosat_and_itf_can_coexist_on_same_calendar_date(self):
         profile = self._profile(16)

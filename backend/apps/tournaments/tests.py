@@ -1524,3 +1524,76 @@ class FederationScopeListingTestCase(TestCase):
         ids = self._list_ids()
         self.assertIn(club_sp.id, ids)
         self.assertNotIn(club_rj.id, ids)
+
+
+class PlayerLevelKidsFilterTestCase(TestCase):
+    """?player_level=kids/youth/pro/seniors (PlayerProfile.competitive_level,
+    tela "Nível competitivo" -> Crianças/Juvenil/Profissional/Idosos).
+
+    Regressão: torneios 100% Kids (is_kids=True, is_youth=False) precisam
+    aparecer SÓ pra 'kids' — antes desse fix apareciam justamente pra
+    'pro'/'seniors' (o filtro adulto aceitava is_youth=False sem olhar
+    is_kids) e ficavam de fora do próprio filtro 'kids' (que só olhava
+    is_youth=True/None)."""
+
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        self.user = User.objects.create_user(email='plevel@test.com', password='pass')
+        self.org = Organization.objects.create(
+            name='ORG PLEVEL', short_name='OPL', type=Organization.TYPE_CONFEDERATION)
+        self.ds = DataSource.objects.create(
+            organization=self.org, source_name='X', slug='plevel-ds',
+            source_type=DataSource.SOURCE_TYPE_JSON, base_url='https://x',
+            connector_key='plevel_ds')
+        # 100% Kids: sem nenhuma categoria 12-18.
+        self.kids_only = self._edition('kids-only', is_youth=False, is_kids=True)
+        # Misto: torneio "Juvenil e Kids" com as duas faixas de categoria.
+        self.mixed = self._edition('mixed', is_youth=True, is_kids=True)
+        # Só juvenil (12-18), sem nenhuma categoria Kids.
+        self.youth_only = self._edition('youth-only', is_youth=True, is_kids=False)
+        # Adulto: nem youth nem kids. Circuit distinto (não "Infantojuvenil") —
+        # um torneio adulto de verdade não usaria esse texto; usar o mesmo daria
+        # falso-negativo pela rede de segurança circuit__icontains='juvenil'.
+        self.adult = self._edition('adult', is_youth=False, is_kids=False, circuit='Profissional')
+
+    def _edition(self, slug, is_youth, is_kids, circuit='Infantojuvenil'):
+        t = Tournament.objects.create(
+            canonical_name=f'T {slug}', canonical_slug=f'plevel-{slug}',
+            organization=self.org, modality='tennis', circuit=circuit)
+        return TournamentEdition.objects.create(
+            tournament=t, data_source=self.ds, title=f'Torneio {slug}',
+            season_year=2026, status='unknown',
+            is_youth=is_youth, is_kids=is_kids,
+            is_published=True, external_id=f'plevel:{slug}')
+
+    def _ids_for_level(self, level):
+        cache.clear()
+        self.client.force_authenticate(user=self.user)
+        res = self.client.get('/api/tournaments/editions/', {'player_level': level})
+        return [e['id'] for e in _response_items(res)]
+
+    def test_kids_level_ve_kids_only_e_misto(self):
+        ids = self._ids_for_level('kids')
+        self.assertIn(self.kids_only.id, ids)
+        self.assertIn(self.mixed.id, ids)
+        self.assertIn(self.youth_only.id, ids)  # visibilidade ampla já existente
+
+    def test_youth_level_nao_ve_kids_only_mas_ve_misto(self):
+        ids = self._ids_for_level('youth')
+        self.assertNotIn(self.kids_only.id, ids)
+        self.assertIn(self.mixed.id, ids)  # tem categoria 12-18 relevante também
+        self.assertIn(self.youth_only.id, ids)
+
+    def test_pro_level_nunca_ve_kids_nem_misto(self):
+        ids = self._ids_for_level('pro')
+        self.assertNotIn(self.kids_only.id, ids)  # regressão do bug principal
+        self.assertNotIn(self.mixed.id, ids)
+        self.assertNotIn(self.youth_only.id, ids)
+        self.assertIn(self.adult.id, ids)
+
+    def test_seniors_level_nunca_ve_kids_nem_misto(self):
+        ids = self._ids_for_level('seniors')
+        self.assertNotIn(self.kids_only.id, ids)
+        self.assertNotIn(self.mixed.id, ids)
+        self.assertIn(self.adult.id, ids)

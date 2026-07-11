@@ -73,12 +73,17 @@ export const HomePage: React.FC = () => {
     (items: TournamentEditionList[], level: string | null | undefined): TournamentEditionList[] => {
       if (!level) return items;
       if (level === 'kids') {
-        // Crianças: torneios infantis/juvenis (inclui Tennis Kids)
-        return items.filter((t) => t.is_youth !== false);
+        // Crianças: torneios com categoria Kids OU infantojuvenil (mantém a
+        // visibilidade ampla que já existia), agora via campo real is_kids
+        // em vez de só is_youth (torneios 100% Kids têm is_youth=false).
+        return items.filter((t) => t.is_kids === true || t.is_youth !== false);
       }
       if (level === 'youth') {
         return items.filter((t) => {
           if (t.is_youth === false) return false;
+          // Só exclui o que é EXCLUSIVAMENTE Kids (sem categoria 12-18 também);
+          // torneio misto (Kids + Juvenil) continua relevante pro perfil juvenil.
+          if (t.is_kids === true && t.is_youth !== true) return false;
           const circuit = (t.circuit || '').toLowerCase();
           return !circuit.includes('kids');
         });
@@ -86,6 +91,7 @@ export const HomePage: React.FC = () => {
       if (['pro', 'seniors'].includes(level)) {
         return items.filter((t) => {
           if (t.is_youth === true) return false;
+          if (t.is_kids === true) return false;
           const circuit = (t.circuit || '').toLowerCase();
           return !circuit.includes('juvenil') && !circuit.includes('kids');
         });

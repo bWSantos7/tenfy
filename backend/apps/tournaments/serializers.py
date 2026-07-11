@@ -70,7 +70,7 @@ class TournamentEditionListSerializer(serializers.ModelSerializer):
         fields = (
             'id', 'tournament', 'tournament_name',
             'organization_name', 'organization_short', 'organization_logo_url',
-            'circuit', 'modality', 'is_youth',
+            'circuit', 'modality', 'is_youth', 'is_kids',
             'season_year', 'title',
             'start_date', 'end_date', 'entry_open_at', 'entry_close_at',
             'withdrawal_deadline_at', 'has_online_entry',

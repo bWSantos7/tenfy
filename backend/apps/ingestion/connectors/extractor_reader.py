@@ -65,7 +65,11 @@ def iter_tournaments(
     where = []
     params: list = []
     if only_youth:
-        where.append('t.is_youth = TRUE')
+        # is_kids também passa: torneios 100% Kids (sem categoria 12-18) têm
+        # is_youth=FALSE mas ainda são conteúdo relevante para perfis Crianças.
+        # COALESCE cobre bancos do extractor sem a coluna is_kids ainda (versões
+        # anteriores ao suporte a Kids).
+        where.append('(t.is_youth = TRUE OR COALESCE(t.is_kids, FALSE) = TRUE)')
     if source:
         where.append('s.name = %s')
         params.append(source)

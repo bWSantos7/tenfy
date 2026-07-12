@@ -1598,6 +1598,15 @@ class PlayerLevelKidsFilterTestCase(TestCase):
         self.assertNotIn(self.mixed.id, ids)
         self.assertIn(self.adult.id, ids)
 
+    def test_retrieve_kids_only_nao_404_sem_player_level(self):
+        """O front não reenvia player_level ao abrir o detalhe de um torneio já
+        listado (getEdition não passa esse param) — um torneio 100% Kids
+        (is_youth=False) precisa continuar acessível no detalhe, senão quem viu
+        o card na listagem (?player_level=kids) toma 404 ao clicar."""
+        self.client.force_authenticate(user=self.user)
+        res = self.client.get(f'/api/tournaments/editions/{self.kids_only.id}/')
+        self.assertEqual(res.status_code, 200)
+
 
 class KidsCategoryNormalizationTestCase(TestCase):
     """Categorias Kids de idade exata (8/9/11 — a maioria dos dados reais de

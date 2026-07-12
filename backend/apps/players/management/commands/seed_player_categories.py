@@ -41,7 +41,7 @@ for age in [10, 12, 14, 16, 18]:
             'max_age': age,
         })
 
-# Kids
+# Kids: faixas amplas (10U/12U, uso legado/genérico) ...
 for tier in ['10U', '12U']:
     for gender in ['M', 'F']:
         max_age = int(tier[:-1])
@@ -52,6 +52,21 @@ for tier in ['10U', '12U']:
             'gender_scope': gender,
             'min_age': 0,
             'max_age': max_age,
+        })
+
+# ... e idade exata 5-9/11 (tournament-extractor: KIDS_MIN_AGE=5/MAX_AGE=11),
+# no mesmo esquema exato-por-idade do CBT_AGE acima — é o formato real das
+# categorias vindas de CBT/Federações/FPT (ex.: "8 Anos Masculino Simples").
+# 10 já existe no bloco CBT_AGE acima; não duplica aqui.
+for age in [5, 6, 7, 8, 9, 11]:
+    for gender in ['M', 'F']:
+        CATEGORIES.append({
+            'taxonomy': PlayerCategory.TAXONOMY_KIDS,
+            'code': f'{age}{gender}',
+            'label_ptbr': f'Kids {age} {("Masculino" if gender=="M" else "Feminino")}',
+            'gender_scope': gender,
+            'min_age': age,
+            'max_age': age,
         })
 
 # Seniors: 30+, 35+, 40+, 45+, 50+, 55+, 60+, 65+, 70+, 75+

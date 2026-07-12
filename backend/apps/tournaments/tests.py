@@ -1597,3 +1597,53 @@ class PlayerLevelKidsFilterTestCase(TestCase):
         self.assertNotIn(self.kids_only.id, ids)
         self.assertNotIn(self.mixed.id, ids)
         self.assertIn(self.adult.id, ids)
+
+
+class KidsCategoryNormalizationTestCase(TestCase):
+    """Categorias Kids de idade exata (8/9/11 — a maioria dos dados reais de
+    CBT/Federações/FPT) precisam casar com um PlayerCategory normalizado, não
+    só as de 10/12/14/16/18 (que já tinham código seedado antes deste fix)."""
+
+    def setUp(self):
+        from apps.sources.models import Organization, DataSource
+        from apps.ingestion.models import IngestionRun
+        self.org, _ = Organization.objects.get_or_create(
+            name='KIDS_CAT_ORG',
+            defaults={'short_name': 'KCO', 'type': Organization.TYPE_FEDERATION},
+        )
+        self.ds, _ = DataSource.objects.get_or_create(
+            connector_key='kids_cat_test',
+            defaults={
+                'organization': self.org, 'source_name': 'Kids Cat Test',
+                'slug': 'kids-cat-test', 'source_type': DataSource.SOURCE_TYPE_JSON,
+                'base_url': 'https://example.com',
+            },
+        )
+        self.run = IngestionRun.objects.create(data_source=self.ds, triggered_by='test')
+        # Só as categorias exercitadas no teste — evita depender do seed inteiro.
+        for age, gender in [(8, 'M'), (9, 'F'), (11, 'M')]:
+            PlayerCategory.objects.get_or_create(
+                taxonomy=PlayerCategory.TAXONOMY_KIDS, code=f'{age}{gender}', gender_scope=gender,
+                defaults={'label_ptbr': f'Kids {age} {gender}', 'min_age': age, 'max_age': age},
+            )
+
+    def test_kids_ages_get_normalized_category(self):
+        from apps.ingestion.persistence import TournamentPersister
+        persister = TournamentPersister(self.ds, self.run)
+        data = {
+            'external_id': 'kct:1', 'canonical_name': 'Torneio Kids Cat',
+            'canonical_slug': 'kids-cat-test-1', 'circuit': 'Tennis Kids',
+            'modality': 'tennis', 'season_year': 2026, 'title': 'Torneio Kids Cat',
+            'categories': [
+                {'source_text': '8 Anos Masculino Simples'},
+                {'source_text': '9 Anos Feminino Simples'},
+                {'source_text': '11 Anos Masculino Simples - Amarela'},
+            ],
+        }
+        ed, _, _ = persister.upsert(data)
+        cats = {tc.source_category_text: tc for tc in ed.categories.all()}
+        self.assertEqual(cats['8 Anos Masculino Simples'].normalized_category.code, '8M')
+        self.assertEqual(cats['9 Anos Feminino Simples'].normalized_category.code, '9F')
+        # Sufixo de cor (" - Amarela") não deve atrapalhar a extração da idade.
+        self.assertEqual(
+            cats['11 Anos Masculino Simples - Amarela'].normalized_category.code, '11M')

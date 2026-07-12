@@ -294,6 +294,69 @@ class SyncFromExtractorTest(TestCase):
         self.assertEqual(fe.player_age, 12)
 
 
+class ExtractorSchemaWithoutIsKidsColumnTest(TestCase):
+    """Dependência de ordem de deploy: o Tenfy e o tournament-extractor são
+    deployados de repos/serviços separados. Se este código for ao ar ANTES da
+    migration 002_add_kids.sql rodar no banco do extractor, a coluna is_kids
+    ainda não existe — o sync inteiro (não só o suporte a Kids) não pode
+    quebrar por causa disso."""
+
+    def _create_extractor_schema_pre_kids(self):
+        """Schema do extractor no formato ANTERIOR ao suporte a Kids (sem a
+        coluna tournaments.is_kids) — replica o estado do banco de produção
+        antes do deploy da migration correspondente no repo sync."""
+        with connection.cursor() as cur:
+            cur.execute('CREATE SCHEMA IF NOT EXISTS extractor')
+            cur.execute('''
+                CREATE TABLE extractor.sources (
+                    id serial PRIMARY KEY, name varchar(64), base_url varchar(512), type varchar(32))
+            ''')
+            cur.execute('''
+                CREATE TABLE extractor.tournaments (
+                    id serial PRIMARY KEY, source_id int, external_id varchar(128),
+                    name varchar(512), original_name varchar(512), normalized_name varchar(512),
+                    federation varchar(255), organization varchar(255), modality varchar(64),
+                    country varchar(64), state varchar(64), city varchar(128), venue varchar(255),
+                    address text, start_date date, end_date date, registration_start_date date,
+                    registration_end_date date, registration_fee numeric(12,2), status varchar(64),
+                    original_url varchar(1024), is_youth boolean, possible_duplicate_of int,
+                    raw_data jsonb, created_at timestamptz default now(), updated_at timestamptz default now())
+            ''')
+            cur.execute('''
+                CREATE TABLE extractor.tournament_categories (
+                    id serial PRIMARY KEY, tournament_id int, name varchar(255),
+                    normalized_name varchar(255), age_group int, gender varchar(16),
+                    category_type varchar(32))
+            ''')
+            cur.execute('''
+                CREATE TABLE extractor.entrants (
+                    id serial PRIMARY KEY, tournament_id int, category_id int, external_id varchar(128),
+                    name varchar(255), country varchar(64), state varchar(64), city varchar(128),
+                    ranking varchar(64), position int, rating varchar(64),
+                    payment_status varchar(32), registration_status varchar(32), raw_data jsonb)
+            ''')
+            cur.execute("INSERT INTO extractor.sources (id, name, type) VALUES (1, 'cbt', 'html')")
+            cur.execute('''
+                INSERT INTO extractor.tournaments
+                    (id, source_id, external_id, name, federation, modality, country, state, city,
+                     start_date, end_date, registration_end_date, registration_fee,
+                     status, original_url, is_youth, raw_data)
+                VALUES (10, 1, '22697', 'Aberto Infantojuvenil de Teste', 'CBT', 'tennis',
+                        'Brasil', 'RJ', 'Niteroi', '2026-06-20', '2026-06-22', '2026-06-15', 150.00,
+                        'inscricoes_abertas', 'https://x/22697', TRUE, '{}'::jsonb)
+            ''')
+
+    def test_sync_does_not_crash_without_is_kids_column(self):
+        self._create_extractor_schema_pre_kids()
+        out = io.StringIO()
+        call_command('sync_from_extractor', '--no-dry-run', stdout=out)  # não deve levantar UndefinedColumn
+
+        self.assertEqual(TournamentEdition.objects.count(), 1)
+        ed = TournamentEdition.objects.get(external_id='cbt:22697')
+        self.assertTrue(ed.is_youth)
+        self.assertFalse(ed.is_kids)  # default do model, sem dado do extractor pra sobrepor
+
+
 class MappingHelpersTest(TestCase):
     def test_payment_mapping(self):
         self.assertEqual(_map_payment({'payment_status': 'pago'})[0], FederationEntry.PAYMENT_PAID)

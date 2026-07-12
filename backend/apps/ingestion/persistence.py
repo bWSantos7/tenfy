@@ -585,7 +585,9 @@ class TournamentPersister:
     def _infer_category_code(source_text: str) -> Optional[str]:
         normalized = TournamentPersister._normalize_category_text(source_text)
 
-        age_match = re.search(r'\b(8|9|10|11|12|14|16|18)\s*ANOS?\b', normalized)
+        # 5-11: idades Kids reais (tournament-extractor, KIDS_MIN_AGE=5/MAX_AGE=11)
+        # 12/14/16/18: faixas juvenis oficiais.
+        age_match = re.search(r'\b(5|6|7|8|9|10|11|12|14|16|18)\s*ANOS?\b', normalized)
         gender = TournamentPersister._extract_gender(normalized)
         if age_match and gender in {'M', 'F'}:
             return f'{age_match.group(1)}{gender}'

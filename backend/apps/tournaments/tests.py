@@ -1626,6 +1626,13 @@ class KidsCategoryNormalizationTestCase(TestCase):
                 taxonomy=PlayerCategory.TAXONOMY_KIDS, code=f'{age}{gender}', gender_scope=gender,
                 defaults={'label_ptbr': f'Kids {age} {gender}', 'min_age': age, 'max_age': age},
             )
+        # TournamentPersister cacheia PlayerCategory a nível de classe (processo),
+        # sem invalidar sozinho — se outro teste já carregou o cache antes deste
+        # setUp criar as categorias acima, _match_category() usaria a versão
+        # desatualizada (sem 8M/9F/11M) e o teste falharia por ordem de execução.
+        from apps.ingestion.persistence import TournamentPersister
+        TournamentPersister.invalidate_category_cache()
+        self.addCleanup(TournamentPersister.invalidate_category_cache)
 
     def test_kids_ages_get_normalized_category(self):
         from apps.ingestion.persistence import TournamentPersister

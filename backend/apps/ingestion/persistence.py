@@ -172,7 +172,7 @@ class TournamentPersister:
             if new_modality and tournament.modality != new_modality:
                 t_updates['modality'] = new_modality
                 logger.info(
-                    'Modality corrected for tournament %s: %s → %s',
+                    'Modality corrected for tournament %s: %s -> %s',
                     tournament.canonical_slug, tournament.modality, new_modality,
                 )
             if new_circuit and tournament.circuit != new_circuit:

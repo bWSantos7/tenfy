@@ -56,7 +56,7 @@ class Command(BaseCommand):
                     unchanged += 1
                     continue
                 self.stdout.write(
-                    f'  [{uf}] {org.short_name!r}→{short!r} | {org.name!r}→{name!r}'
+                    f'  [{uf}] {org.short_name!r}->{short!r} | {org.name!r}->{name!r}'
                 )
                 if apply:
                     org.name = name

@@ -256,6 +256,8 @@ export interface TournamentEditionList {
   modality: string;
   /** True = youth/junior tournament; False = adult; null = not yet classified */
   is_youth: boolean | null;
+  /** True = torneio tem categoria(s) Kids (abaixo de 12 anos) */
+  is_kids: boolean;
   season_year: number;
   title: string;
   start_date: string | null;

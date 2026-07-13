@@ -687,7 +687,7 @@ class EditionPatchSerializer(serializers.ModelSerializer):
             'id', 'title', 'status', 'start_date', 'end_date',
             'entry_open_at', 'entry_close_at', 'official_source_url',
             'base_price_brl', 'data_confidence', 'is_manual_override', 'is_youth',
-            'is_published',
+            'is_kids', 'is_published',
         )
         read_only_fields = ('id',)
 
@@ -704,7 +704,7 @@ class AdminEditionListSerializer(serializers.ModelSerializer):
         fields = (
             'id', 'title', 'status',
             'start_date', 'end_date', 'entry_close_at',
-            'data_confidence', 'is_manual_override', 'is_youth', 'is_published',
+            'data_confidence', 'is_manual_override', 'is_youth', 'is_kids', 'is_published',
             'official_source_url', 'source_name',
             'organization_short_name', 'venue_city', 'venue_state',
         )
@@ -771,7 +771,7 @@ class EditionCreateSerializer(serializers.ModelSerializer):
         fields = (
             'title', 'circuit', 'status', 'start_date', 'end_date',
             'entry_open_at', 'entry_close_at', 'official_source_url',
-            'base_price_brl', 'is_youth',
+            'base_price_brl', 'is_youth', 'is_kids',
             'venue_city', 'venue_state',
         )
 

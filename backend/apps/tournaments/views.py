@@ -110,10 +110,17 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
         # is_youth=None  → not yet classified     → shown by default (legacy data)
         # is_youth=False → explicitly adult        → hidden by default
         # Pass ?youth_only=false to bypass (admin use); ignored when player_level is set.
-        player_level = self.request.query_params.get('player_level', '').strip()
-        youth_param = self.request.query_params.get('youth_only', 'true').lower()
-        if not player_level and youth_param != 'false':
-            qs = qs.filter(Q(is_youth=True) | Q(is_youth__isnull=True))
+        #
+        # Não se aplica ao detalhe (retrieve): o front não reenvia player_level ao
+        # abrir um torneio já listado, então um torneio 100% Kids (is_youth=False,
+        # is_kids=True) — visível na listagem via player_level=kids — 404ava ao
+        # clicar, pois caía no fallback youth-only. Mesmo raciocínio do escopo de
+        # federação logo abaixo: quem já apareceu numa lista pode ser aberto.
+        if self.action != 'retrieve':
+            player_level = self.request.query_params.get('player_level', '').strip()
+            youth_param = self.request.query_params.get('youth_only', 'true').lower()
+            if not player_level and youth_param != 'false':
+                qs = qs.filter(Q(is_youth=True) | Q(is_youth__isnull=True))
 
         # Hide editions explicitly unpublished by admin from the public listing.
         # Admin endpoints (TournamentEditionAdminViewSet) bypass this.

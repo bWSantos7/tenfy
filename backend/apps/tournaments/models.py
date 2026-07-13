@@ -158,6 +158,12 @@ class TournamentEdition(TimestampedModel):
         null=True, blank=True, db_index=True,
         help_text='True = torneio infantojuvenil (categorias até 18 anos). Null = não classificado.',
     )
+    # Kids classification (categorias abaixo de 12 anos). Independente de is_youth:
+    # um torneio pode ter as duas (categorias kids E juvenis no mesmo evento).
+    is_kids = models.BooleanField(
+        default=False, db_index=True,
+        help_text='True = torneio tem categoria(s) Kids (abaixo de 12 anos).',
+    )
 
     # Cross-source deduplication fingerprint (sha1 of title+date+city)
     dedup_fingerprint = models.CharField(

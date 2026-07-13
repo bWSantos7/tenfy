@@ -332,6 +332,13 @@ class Command(BaseCommand):
             'official_source_url': t.get('original_url') or '',
             'source_name': f'extractor:{source}',
             'categories': categories,
+            # is_youth/is_kids: o extractor classifica por idade REAL de categoria,
+            # mais preciso que o heurístico de texto do TournamentPersister — repassa
+            # como veio (None quando o schema do extractor ainda não tem a coluna,
+            # ex.: bancos antigos pré-suporte a Kids — aí o persister cai no próprio
+            # heurístico em vez de assumir False por engano).
+            'is_youth': t.get('is_youth'),
+            'is_kids': t.get('is_kids'),
         }
 
     def _sync_entries(self, ed, t: dict, source: str, stats: Counter):

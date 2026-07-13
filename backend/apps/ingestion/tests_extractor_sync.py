@@ -31,7 +31,8 @@ def _create_extractor_schema():
                 country varchar(64), state varchar(64), city varchar(128), venue varchar(255),
                 address text, start_date date, end_date date, registration_start_date date,
                 registration_end_date date, registration_fee numeric(12,2), status varchar(64),
-                original_url varchar(1024), is_youth boolean, possible_duplicate_of int,
+                original_url varchar(1024), is_youth boolean, is_kids boolean default false,
+                possible_duplicate_of int,
                 raw_data jsonb, created_at timestamptz default now(), updated_at timestamptz default now())
         ''')
         cur.execute('''
@@ -68,6 +69,23 @@ def _create_extractor_schema():
             VALUES (1000, 10, 100, '240896', 'Fulano de Tal', 'Brasil', 'RJ', 'Rio de Janeiro',
                     '21', 1, '30,05', 'pago', 'confirmado', '{}'::jsonb)
         ''')
+        # Torneio 100% Kids (sem categoria 12-18): is_youth=FALSE, is_kids=TRUE.
+        # Regressão do bug em extractor_reader.iter_tournaments (WHERE só olhava
+        # is_youth, excluía torneios assim do sync) e do filtro de nível de
+        # jogador (que mostrava esses torneios pra perfil Profissional/Idosos).
+        cur.execute('''
+            INSERT INTO extractor.tournaments
+                (id, source_id, external_id, name, federation, modality, country, state, city,
+                 start_date, end_date, registration_end_date, registration_fee,
+                 status, original_url, is_youth, is_kids, raw_data)
+            VALUES (11, 1, '22876', 'Circuito KidsTour de Teste', 'CBT', 'tennis',
+                    'Brasil', 'RJ', 'Niteroi', '2026-06-20', '2026-06-22', '2026-06-15', 80.00,
+                    'inscricoes_abertas', 'https://x/22876', FALSE, TRUE, '{}'::jsonb)
+        ''')
+        cur.execute('''
+            INSERT INTO extractor.tournament_categories (id, tournament_id, name, age_group, gender, category_type)
+            VALUES (101, 11, '9 Anos Masculino Simples', 9, 'M', 'singles')
+        ''')
 
 
 class SyncFromExtractorTest(TestCase):
@@ -76,8 +94,8 @@ class SyncFromExtractorTest(TestCase):
         out = io.StringIO()
         call_command('sync_from_extractor', '--no-dry-run', '--import-entries', stdout=out)
 
-        self.assertEqual(TournamentEdition.objects.count(), 1)
-        ed = TournamentEdition.objects.first()
+        self.assertEqual(TournamentEdition.objects.count(), 2)
+        ed = TournamentEdition.objects.get(external_id='cbt:22697')
         self.assertEqual(ed.title, 'Aberto Infantojuvenil de Teste')
         self.assertEqual(ed.external_id, 'cbt:22697')
         self.assertEqual(ed.season_year, 2026)
@@ -98,6 +116,19 @@ class SyncFromExtractorTest(TestCase):
         self.assertEqual(fe.source, 'cbt')
         # Bandeira do inscrito: player_country_code resolvido de "Brasil".
         self.assertEqual(fe.player_country_code, 'BRA')
+
+    def test_sync_kids_only_tournament_is_not_excluded_and_flagged(self):
+        """Torneio 100% Kids (is_youth=FALSE, is_kids=TRUE no extractor) precisa
+        chegar no sync (não ser filtrado por engano) e virar is_kids=True /
+        is_youth=False na TournamentEdition."""
+        _create_extractor_schema()
+        out = io.StringIO()
+        call_command('sync_from_extractor', '--no-dry-run', stdout=out)
+
+        self.assertEqual(TournamentEdition.objects.count(), 2)
+        kids_ed = TournamentEdition.objects.get(external_id='cbt:22876')
+        self.assertTrue(kids_ed.is_kids)
+        self.assertFalse(kids_ed.is_youth)
 
     def test_country_code_passthrough_and_itf_hint(self):
         # inscrito ITF/COSAT já vem com código 3 letras -> passthrough
@@ -121,7 +152,7 @@ class SyncFromExtractorTest(TestCase):
         _create_extractor_schema()
         call_command('sync_from_extractor', '--no-dry-run', '--import-entries', stdout=io.StringIO())
         call_command('sync_from_extractor', '--no-dry-run', '--import-entries', stdout=io.StringIO())
-        self.assertEqual(TournamentEdition.objects.count(), 1)
+        self.assertEqual(TournamentEdition.objects.count(), 2)
         self.assertEqual(FederationEntry.objects.count(), 1)
 
     def test_refresh_replaces_old_entries(self):
@@ -129,7 +160,7 @@ class SyncFromExtractorTest(TestCase):
         são substituídos pelos do extractor, sem duplicar."""
         _create_extractor_schema()
         call_command('sync_from_extractor', '--no-dry-run', '--import-entries', stdout=io.StringIO())
-        ed = TournamentEdition.objects.first()
+        ed = TournamentEdition.objects.get(external_id='cbt:22697')
         self.assertEqual(FederationEntry.objects.filter(edition=ed).count(), 1)
         # Inscrito antigo (meio anterior) na MESMA edição, fonte/id diferentes.
         FederationEntry.objects.create(
@@ -261,6 +292,69 @@ class SyncFromExtractorTest(TestCase):
         self.assertEqual(fe.player_ti_id, '257249')  # id_tenista puro, não o composto
         self.assertEqual(fe.player_uf, 'SP')
         self.assertEqual(fe.player_age, 12)
+
+
+class ExtractorSchemaWithoutIsKidsColumnTest(TestCase):
+    """Dependência de ordem de deploy: o Tenfy e o tournament-extractor são
+    deployados de repos/serviços separados. Se este código for ao ar ANTES da
+    migration 002_add_kids.sql rodar no banco do extractor, a coluna is_kids
+    ainda não existe — o sync inteiro (não só o suporte a Kids) não pode
+    quebrar por causa disso."""
+
+    def _create_extractor_schema_pre_kids(self):
+        """Schema do extractor no formato ANTERIOR ao suporte a Kids (sem a
+        coluna tournaments.is_kids) — replica o estado do banco de produção
+        antes do deploy da migration correspondente no repo sync."""
+        with connection.cursor() as cur:
+            cur.execute('CREATE SCHEMA IF NOT EXISTS extractor')
+            cur.execute('''
+                CREATE TABLE extractor.sources (
+                    id serial PRIMARY KEY, name varchar(64), base_url varchar(512), type varchar(32))
+            ''')
+            cur.execute('''
+                CREATE TABLE extractor.tournaments (
+                    id serial PRIMARY KEY, source_id int, external_id varchar(128),
+                    name varchar(512), original_name varchar(512), normalized_name varchar(512),
+                    federation varchar(255), organization varchar(255), modality varchar(64),
+                    country varchar(64), state varchar(64), city varchar(128), venue varchar(255),
+                    address text, start_date date, end_date date, registration_start_date date,
+                    registration_end_date date, registration_fee numeric(12,2), status varchar(64),
+                    original_url varchar(1024), is_youth boolean, possible_duplicate_of int,
+                    raw_data jsonb, created_at timestamptz default now(), updated_at timestamptz default now())
+            ''')
+            cur.execute('''
+                CREATE TABLE extractor.tournament_categories (
+                    id serial PRIMARY KEY, tournament_id int, name varchar(255),
+                    normalized_name varchar(255), age_group int, gender varchar(16),
+                    category_type varchar(32))
+            ''')
+            cur.execute('''
+                CREATE TABLE extractor.entrants (
+                    id serial PRIMARY KEY, tournament_id int, category_id int, external_id varchar(128),
+                    name varchar(255), country varchar(64), state varchar(64), city varchar(128),
+                    ranking varchar(64), position int, rating varchar(64),
+                    payment_status varchar(32), registration_status varchar(32), raw_data jsonb)
+            ''')
+            cur.execute("INSERT INTO extractor.sources (id, name, type) VALUES (1, 'cbt', 'html')")
+            cur.execute('''
+                INSERT INTO extractor.tournaments
+                    (id, source_id, external_id, name, federation, modality, country, state, city,
+                     start_date, end_date, registration_end_date, registration_fee,
+                     status, original_url, is_youth, raw_data)
+                VALUES (10, 1, '22697', 'Aberto Infantojuvenil de Teste', 'CBT', 'tennis',
+                        'Brasil', 'RJ', 'Niteroi', '2026-06-20', '2026-06-22', '2026-06-15', 150.00,
+                        'inscricoes_abertas', 'https://x/22697', TRUE, '{}'::jsonb)
+            ''')
+
+    def test_sync_does_not_crash_without_is_kids_column(self):
+        self._create_extractor_schema_pre_kids()
+        out = io.StringIO()
+        call_command('sync_from_extractor', '--no-dry-run', stdout=out)  # não deve levantar UndefinedColumn
+
+        self.assertEqual(TournamentEdition.objects.count(), 1)
+        ed = TournamentEdition.objects.get(external_id='cbt:22697')
+        self.assertTrue(ed.is_youth)
+        self.assertFalse(ed.is_kids)  # default do model, sem dado do extractor pra sobrepor
 
 
 class MappingHelpersTest(TestCase):

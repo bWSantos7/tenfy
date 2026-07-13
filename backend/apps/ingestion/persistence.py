@@ -69,8 +69,43 @@ _COSAT_YOUTH_CAT_PATTERN = re.compile(r'\b(BS|GS|BD|GD)\s*[Uu]?\s*\d{1,2}\b', re
 _ITF_JUNIOR_PATTERN = re.compile(r'\b(J[1-5]|Junior|Boys|Girls|Youth)\b', re.IGNORECASE)
 
 
-def _classify_is_youth(circuit: str, title: str, categories: list, source_name: str = '') -> bool:
-    """Return True if the tournament appears to be for players up to 18 years old."""
+_KIDS_KEYWORDS = {'kids', 'tennis kids', 'mini tenis', 'mini-tenis'}
+
+
+def _classify_is_kids(circuit: str, title: str, categories: list, source_name: str = '',
+                       extractor_is_kids: Optional[bool] = None) -> bool:
+    """True se o torneio tem categoria(s) Kids (abaixo de 12 anos).
+
+    Quando o dado vem do tournament-extractor, ``extractor_is_kids`` já traz a
+    classificação feita lá (idade real por categoria + sinal de departamento da
+    fonte, ex.: "Tennis Kids" no Tênis Integrado) — bem mais confiável que regex
+    de texto, então tem prioridade. Outras fontes caem no heurístico por palavra-
+    chave (mesmo padrão de ``_classify_is_youth``)."""
+    if extractor_is_kids is not None:
+        return bool(extractor_is_kids)
+
+    combined = (circuit + ' ' + title + ' ' + source_name).lower()
+    if any(kw in combined for kw in _KIDS_KEYWORDS):
+        return True
+    for cat in categories:
+        cat_text = (cat.get('source_text') or '').lower()
+        if any(kw in cat_text for kw in _KIDS_KEYWORDS):
+            return True
+    return False
+
+
+def _classify_is_youth(circuit: str, title: str, categories: list, source_name: str = '',
+                        extractor_is_youth: Optional[bool] = None) -> bool:
+    """Return True if the tournament appears to be for players up to 18 years old.
+
+    ``extractor_is_youth``, quando fornecido, tem prioridade: o tournament-extractor
+    classifica por idade REAL de categoria (12-18 vs Kids <12), mais preciso que o
+    heurístico de texto abaixo — que trata "kids"/idade 8-18 como youth em bloco
+    (correto como fallback pra fontes sem dado granular, mas conflita com o novo
+    ``is_kids`` quando o extractor já sabe a resposta certa)."""
+    if extractor_is_youth is not None:
+        return bool(extractor_is_youth)
+
     combined = (circuit + ' ' + title + ' ' + source_name).lower()
 
     # COSAT tournaments are predominantly youth (the platform focuses on juniors)
@@ -137,7 +172,7 @@ class TournamentPersister:
             if new_modality and tournament.modality != new_modality:
                 t_updates['modality'] = new_modality
                 logger.info(
-                    'Modality corrected for tournament %s: %s → %s',
+                    'Modality corrected for tournament %s: %s -> %s',
                     tournament.canonical_slug, tournament.modality, new_modality,
                 )
             if new_circuit and tournament.circuit != new_circuit:
@@ -247,6 +282,14 @@ class TournamentPersister:
             data.get('title', ''),
             data.get('categories') or [],
             source_name=data.get('source_name', '') or getattr(self.data_source, 'source_name', ''),
+            extractor_is_youth=data.get('is_youth'),
+        )
+        is_kids = _classify_is_kids(
+            data.get('circuit', ''),
+            data.get('title', ''),
+            data.get('categories') or [],
+            source_name=data.get('source_name', '') or getattr(self.data_source, 'source_name', ''),
+            extractor_is_kids=data.get('is_kids'),
         )
 
         v_city = (data.get('venue') or {}).get('city', '')
@@ -303,6 +346,7 @@ class TournamentPersister:
                 raw_payload=data,
                 data_confidence=TournamentEdition.CONFIDENCE_MED,
                 is_youth=is_youth,
+                is_kids=is_kids,
                 dedup_fingerprint=fingerprint,
                 validation_errors=ingest_validation_errors,
                 acceptance_list=acceptance_list,
@@ -374,10 +418,11 @@ class TournamentPersister:
                 # Update acceptance list if new data provided
                 if acceptance_list:
                     ed.acceptance_list = acceptance_list
-                # Always update is_youth from classifier unless manual override.
+                # Always update is_youth/is_kids from classifier unless manual override.
                 # This ensures a corrected classifier fixes existing editions on re-sync.
                 if not ed.is_manual_override:
                     ed.is_youth = is_youth
+                    ed.is_kids = is_kids
                 if fingerprint and not ed.dedup_fingerprint:
                     ed.dedup_fingerprint = fingerprint
                 # Refresh validation_errors so stale UF mismatches are resolved if
@@ -540,7 +585,9 @@ class TournamentPersister:
     def _infer_category_code(source_text: str) -> Optional[str]:
         normalized = TournamentPersister._normalize_category_text(source_text)
 
-        age_match = re.search(r'\b(8|9|10|11|12|14|16|18)\s*ANOS?\b', normalized)
+        # 5-11: idades Kids reais (tournament-extractor, KIDS_MIN_AGE=5/MAX_AGE=11)
+        # 12/14/16/18: faixas juvenis oficiais.
+        age_match = re.search(r'\b(5|6|7|8|9|10|11|12|14|16|18)\s*ANOS?\b', normalized)
         gender = TournamentPersister._extract_gender(normalized)
         if age_match and gender in {'M', 'F'}:
             return f'{age_match.group(1)}{gender}'

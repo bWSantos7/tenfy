@@ -47,6 +47,30 @@ def is_available() -> bool:
         return bool(row and row[0])
 
 
+def _has_tournaments_is_kids_column() -> bool:
+    """True se ``extractor.tournaments.is_kids`` já existe.
+
+    Dependência de ordem de deploy: o Tenfy (este módulo) e o tournament-extractor
+    (repo separado) são deployados independentemente. Se este código for ao ar
+    antes da migration ``002_add_kids.sql`` rodar no banco do extractor, a coluna
+    ainda não existe — referenciá-la direto no WHERE quebraria TODO sync (não só
+    o suporte a Kids). Checar antes evita crash; volta pro filtro antigo
+    (só is_youth) até a coluna existir.
+    """
+    with connection.cursor() as cur:
+        cur.execute(
+            """
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = %s AND table_name = 'tournaments' AND column_name = 'is_kids'
+            )
+            """,
+            [SCHEMA],
+        )
+        row = cur.fetchone()
+        return bool(row and row[0])
+
+
 def _rows(cur) -> list[dict]:
     cols = [c[0] for c in cur.description]
     return [dict(zip(cols, r)) for r in cur.fetchall()]
@@ -65,7 +89,15 @@ def iter_tournaments(
     where = []
     params: list = []
     if only_youth:
-        where.append('t.is_youth = TRUE')
+        # is_kids também passa: torneios 100% Kids (sem categoria 12-18) têm
+        # is_youth=FALSE mas ainda são conteúdo relevante para perfis Crianças.
+        # Só referencia a coluna se ela já existir no banco do extractor —
+        # ver _has_tournaments_is_kids_column (dependência de ordem de deploy
+        # entre este repo e o tournament-extractor).
+        if _has_tournaments_is_kids_column():
+            where.append('(t.is_youth = TRUE OR COALESCE(t.is_kids, FALSE) = TRUE)')
+        else:
+            where.append('t.is_youth = TRUE')
     if source:
         where.append('s.name = %s')
         params.append(source)

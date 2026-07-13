@@ -73,12 +73,17 @@ export const HomePage: React.FC = () => {
     (items: TournamentEditionList[], level: string | null | undefined): TournamentEditionList[] => {
       if (!level) return items;
       if (level === 'kids') {
-        // Crianças: torneios infantis/juvenis (inclui Tennis Kids)
-        return items.filter((t) => t.is_youth !== false);
+        // Crianças: torneios com categoria Kids OU infantojuvenil (mantém a
+        // visibilidade ampla que já existia), agora via campo real is_kids
+        // em vez de só is_youth (torneios 100% Kids têm is_youth=false).
+        return items.filter((t) => t.is_kids === true || t.is_youth !== false);
       }
       if (level === 'youth') {
         return items.filter((t) => {
           if (t.is_youth === false) return false;
+          // Só exclui o que é EXCLUSIVAMENTE Kids (sem categoria 12-18 também);
+          // torneio misto (Kids + Juvenil) continua relevante pro perfil juvenil.
+          if (t.is_kids === true && t.is_youth !== true) return false;
           const circuit = (t.circuit || '').toLowerCase();
           return !circuit.includes('kids');
         });
@@ -86,6 +91,7 @@ export const HomePage: React.FC = () => {
       if (['pro', 'seniors'].includes(level)) {
         return items.filter((t) => {
           if (t.is_youth === true) return false;
+          if (t.is_kids === true) return false;
           const circuit = (t.circuit || '').toLowerCase();
           return !circuit.includes('juvenil') && !circuit.includes('kids');
         });
@@ -146,9 +152,16 @@ export const HomePage: React.FC = () => {
       // closing-soon/recentes vêm filtrados no servidor pela federação do
       // dependente (igual ao que o dependente vê), não por todas as federações.
       const scopeId = primary?.id ?? null;
+      const level = (primary as any)?.competitive_level;
+      // player_level precisa ir pro servidor também (não só pro filterByLevel
+      // client-side abaixo): sem ele, o queryset cai no fallback youth-only
+      // (is_youth=True/nulo) e um torneio 100% Kids (is_youth=False) nunca
+      // chega no cliente pra filterByLevel filtrar — sumia da Home mesmo pra
+      // perfil Kids, embora aparecesse certo em /torneios (que já manda isso).
+      const levelFilter: Record<string, string> = level ? { player_level: level } : {};
       const [closingData, recentData, alerts] = await Promise.all([
-        closingSoon(14, scopeId ? { profile_id: String(scopeId) } : {}).catch(() => [] as TournamentEditionList[]),
-        listEditions({ page_size: 8, ordering: '-created_at', ...(scopeId ? { profile_id: scopeId } : {}) }).catch(() => ({ results: [] as TournamentEditionList[] })),
+        closingSoon(14, { ...(scopeId ? { profile_id: String(scopeId) } : {}), ...levelFilter }).catch(() => [] as TournamentEditionList[]),
+        listEditions({ page_size: 8, ordering: '-created_at', ...(scopeId ? { profile_id: scopeId } : {}), ...levelFilter }).catch(() => ({ results: [] as TournamentEditionList[] })),
         unreadAlerts().catch(() => [] as any[]),
       ]);
 
@@ -156,7 +169,6 @@ export const HomePage: React.FC = () => {
 
       // Apply modality + level filters now that we know the active profile
       const modality = primary?.preferred_modality;
-      const level = (primary as any)?.competitive_level;
       const allClosing = closingData as TournamentEditionList[];
       const allRecent = ((recentData as any).results || []) as TournamentEditionList[];
       const applyProfileFilters = (items: TournamentEditionList[]) =>
@@ -185,16 +197,18 @@ export const HomePage: React.FC = () => {
     // Clear saved tournament filters so TournamentsPage re-applies the new
     // profile's modality as the default filter on the next visit.
     try { sessionStorage.removeItem('tenfy_tournament_filters'); } catch {}
-    // Re-fetch closing soon filtered by the new profile's modality + federation scope
+    // Re-fetch closing soon filtered by the new profile's modality + level + federation scope
     const newModality = opt.profile.preferred_modality;
+    const newLevel = (opt.profile as any).competitive_level;
     const modalityFilters: Record<string, string> = {
       ...(newModality ? { modality: newModality } : {}),
+      ...(newLevel ? { player_level: newLevel } : {}),
       profile_id: String(opt.profile.id),
     };
     closingSoon(14, modalityFilters)
       .catch(() => [] as TournamentEditionList[])
       .then((data) => {
-        const arr = data as TournamentEditionList[];
+        const arr = filterByLevel(filterByModality(data as TournamentEditionList[], newModality), newLevel);
         setClosing(arr.filter((t) => ACTIVE_STATUSES.has((t.dynamic_status || t.status) ?? '')).slice(0, 6));
       });
     await loadCompat(opt.profile);

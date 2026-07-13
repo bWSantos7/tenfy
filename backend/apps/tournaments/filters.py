@@ -164,23 +164,34 @@ class TournamentEditionFilter(filters.FilterSet):
         Coarse tournament-type filter based on PlayerProfile.competitive_level
         (níveis CBT — Task 12):
 
-        'kids'    → is_youth=True/None (inclui torneios Tennis Kids/infantis)
-        'youth'   → is_youth=True/None, exclui circuitos 'kids'
-                    (mantém Infantojuvenil, FPT Juniors; remove Tennis Kids)
+        'kids'    → is_kids=True (torneios com categoria Kids) OU is_youth=True/None
+                    (mantém a visibilidade ampla que já existia para infantojuvenil).
+        'youth'   → is_youth=True/None. Um torneio misto (Kids + Juvenil no mesmo
+                    evento) continua visível — só exclui o que é EXCLUSIVAMENTE Kids
+                    (is_kids=True e is_youth não-True).
         'pro'/'seniors' (adultos)
-                  → is_youth=False/None, exclui circuitos 'juvenil'/'kids'
+                  → is_youth=False/None, e SEMPRE exclui is_kids=True (mesmo torneios
+                    mistos não fazem sentido pra um perfil adulto).
+
+        ``circuit__icontains`` fica como rede de segurança adicional: dados vindos
+        do tournament-extractor sempre gravam circuit='Infantojuvenil' (não reflete
+        o conteúdo real), então esse texto nunca casa com 'kids'/'juvenil' pra essas
+        fontes — quem carrega esse peso hoje é o campo booleano is_kids/is_youth.
         """
         if not value:
             return queryset
 
         if value == 'kids':
-            return queryset.filter(Q(is_youth=True) | Q(is_youth__isnull=True))
+            return queryset.filter(
+                Q(is_kids=True) | Q(is_youth=True) | Q(is_youth__isnull=True)
+            )
 
         if value == 'youth':
             return (
                 queryset
                 .filter(Q(is_youth=True) | Q(is_youth__isnull=True))
                 .exclude(tournament__circuit__icontains='kids')
+                .exclude(Q(is_kids=True) & ~Q(is_youth=True))
             )
 
         if value in ('pro', 'seniors'):
@@ -189,7 +200,8 @@ class TournamentEditionFilter(filters.FilterSet):
                 .filter(Q(is_youth=False) | Q(is_youth__isnull=True))
                 .exclude(
                     Q(tournament__circuit__icontains='juvenil') |
-                    Q(tournament__circuit__icontains='kids')
+                    Q(tournament__circuit__icontains='kids') |
+                    Q(is_kids=True)
                 )
             )
 

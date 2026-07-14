@@ -111,6 +111,11 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
         # is_youth=False → explicitly adult        → hidden by default
         # Pass ?youth_only=false to bypass (admin use); ignored when player_level is set.
         #
+        # age_category (Kids/Infantojuvenil manual, responsável sem perfil vinculado)
+        # também bypassa o fallback: ele já decide sozinho o recorte etário via
+        # TournamentEditionFilter.filter_age_category, então aplicar o fallback aqui
+        # em cima excluiria torneios 100% Kids mesmo com ?age_category=kids explícito.
+        #
         # Não se aplica ao detalhe (retrieve): o front não reenvia player_level ao
         # abrir um torneio já listado, então um torneio 100% Kids (is_youth=False,
         # is_kids=True) — visível na listagem via player_level=kids — 404ava ao
@@ -118,8 +123,9 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
         # federação logo abaixo: quem já apareceu numa lista pode ser aberto.
         if self.action != 'retrieve':
             player_level = self.request.query_params.get('player_level', '').strip()
+            age_category = self.request.query_params.get('age_category', '').strip()
             youth_param = self.request.query_params.get('youth_only', 'true').lower()
-            if not player_level and youth_param != 'false':
+            if not player_level and not age_category and youth_param != 'false':
                 qs = qs.filter(Q(is_youth=True) | Q(is_youth__isnull=True))
 
         # Hide editions explicitly unpublished by admin from the public listing.
@@ -232,6 +238,31 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
         if TournamentEdition.objects.filter(is_published=True, venue__country_code='').exists():
             codes.add('BRA')
         return Response(sorted(c.upper() for c in codes if c))
+
+    @action(detail=False)
+    def category_ages(self, request):
+        """
+        GET /api/tournaments/editions/category_ages/
+
+        Números de categoria etária (o "14" de "BS 14", "Sub-14", "14 Anos
+        Masculino"...) presentes de fato entre as edições publicadas, pra
+        alimentar o combo de Categoria na aba Torneios — só o que existe nos
+        dados reais, não uma lista fixa. Vem de PlayerCategory.max_age (mesmo
+        número seedado pras taxonomias etárias cbt_age/kids), casado com
+        ``?category_age=`` (TournamentEditionFilter).
+        """
+        # .distinct() sozinho não deduplica aqui: o Meta.ordering default do model
+        # entra no SELECT (exigência do Postgres pra DISTINCT com ORDER BY), então
+        # a "distinção" acaba sendo por (max_age, campo de ordenação) e não só
+        # max_age. Mesmo problema resolvido em `countries()` acima: força a
+        # deduplicação em Python com set().
+        ages = set(
+            TournamentEdition.objects
+            .filter(is_published=True)
+            .exclude(categories__normalized_category__max_age__isnull=True)
+            .values_list('categories__normalized_category__max_age', flat=True)
+        )
+        return Response(sorted(ages))
 
     def _build_compatible_candidate_filter(self, profile, include_category_up=False):
         from apps.players.models import PlayerCategory

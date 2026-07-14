@@ -1608,6 +1608,135 @@ class PlayerLevelKidsFilterTestCase(TestCase):
         self.assertEqual(res.status_code, 200)
 
 
+class AgeCategoryFilterTestCase(TestCase):
+    """?age_category=kids/youth (caixinhas, igual ao filtro de Status: um, outro,
+    ou os dois separados por vírgula) — seleção manual oferecida ao responsável
+    sem nenhum perfil vinculado (sem competitive_level pra travar player_level
+    automaticamente). Diferente de player_level=kids (que é amplo por design e
+    também mostra youth_only), aqui cada opção mostra só a própria categoria
+    (mixed aparece nas duas, por ter as duas categorias de verdade)."""
+
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        self.user = User.objects.create_user(email='agecat@test.com', password='pass')
+        self.org = Organization.objects.create(
+            name='ORG AGECAT', short_name='OAC', type=Organization.TYPE_CONFEDERATION)
+        self.ds = DataSource.objects.create(
+            organization=self.org, source_name='X', slug='agecat-ds',
+            source_type=DataSource.SOURCE_TYPE_JSON, base_url='https://x',
+            connector_key='agecat_ds')
+        self.kids_only = self._edition('kids-only', is_youth=False, is_kids=True)
+        self.mixed = self._edition('mixed', is_youth=True, is_kids=True)
+        self.youth_only = self._edition('youth-only', is_youth=True, is_kids=False)
+        self.adult = self._edition('adult', is_youth=False, is_kids=False, circuit='Profissional')
+
+    def _edition(self, slug, is_youth, is_kids, circuit='Infantojuvenil'):
+        t = Tournament.objects.create(
+            canonical_name=f'T {slug}', canonical_slug=f'agecat-{slug}',
+            organization=self.org, modality='tennis', circuit=circuit)
+        return TournamentEdition.objects.create(
+            tournament=t, data_source=self.ds, title=f'Torneio {slug}',
+            season_year=2026, status='unknown',
+            is_youth=is_youth, is_kids=is_kids,
+            is_published=True, external_id=f'agecat:{slug}')
+
+    def _ids_for(self, age_category):
+        cache.clear()
+        self.client.force_authenticate(user=self.user)
+        res = self.client.get('/api/tournaments/editions/', {'age_category': age_category})
+        return [e['id'] for e in _response_items(res)]
+
+    def test_kids_ve_kids_only_e_misto_mas_nao_youth_only(self):
+        """Regressão: sem o bypass do fallback youth-only em get_queryset, o
+        kids_only (is_youth=False) seria excluído mesmo com age_category=kids
+        explícito, porque o fallback é aplicado ANTES do FilterSet."""
+        ids = self._ids_for('kids')
+        self.assertIn(self.kids_only.id, ids)
+        self.assertIn(self.mixed.id, ids)
+        self.assertNotIn(self.youth_only.id, ids)
+        self.assertNotIn(self.adult.id, ids)
+
+    def test_youth_ve_youth_only_e_misto_mas_nao_kids_only(self):
+        ids = self._ids_for('youth')
+        self.assertIn(self.youth_only.id, ids)
+        self.assertIn(self.mixed.id, ids)
+        self.assertNotIn(self.kids_only.id, ids)
+        self.assertNotIn(self.adult.id, ids)
+
+    def test_kids_e_youth_juntos_ve_os_tres_infantis_mas_nao_adulto(self):
+        """Os dois marcados (igual ao filtro de Status com mais de um status
+        selecionado) -> união: kids_only, mixed e youth_only aparecem juntos."""
+        ids = self._ids_for('kids,youth')
+        self.assertIn(self.kids_only.id, ids)
+        self.assertIn(self.mixed.id, ids)
+        self.assertIn(self.youth_only.id, ids)
+        self.assertNotIn(self.adult.id, ids)
+
+
+class CategoryAgeFilterTestCase(TestCase):
+    """?category_age=<idade> — filtro pelo NÚMERO da categoria (o "14" de "BS 14",
+    "Sub-14" etc.), casando com PlayerCategory.max_age das taxonomias etárias.
+    Independente de gênero: uma edição com categoria 14M ou 14F casa com
+    category_age=14 igualmente. Alimenta o combo de Categoria (que troca o campo
+    de texto livre por uma lista das idades que existem de verdade nos dados)."""
+
+    def setUp(self):
+        cache.clear()
+        self.client = APIClient()
+        self.user = User.objects.create_user(email='catage@test.com', password='pass')
+        self.org = Organization.objects.create(
+            name='ORG CATAGE', short_name='OCA', type=Organization.TYPE_CONFEDERATION)
+        self.ds = DataSource.objects.create(
+            organization=self.org, source_name='X', slug='catage-ds',
+            source_type=DataSource.SOURCE_TYPE_JSON, base_url='https://x',
+            connector_key='catage_ds')
+        self.cat_14m = PlayerCategory.objects.create(
+            taxonomy=PlayerCategory.TAXONOMY_CBT_AGE, code='14M', label_ptbr='Sub-14 Masculino',
+            gender_scope=PlayerCategory.GENDER_M, min_age=14, max_age=14)
+        self.cat_14f = PlayerCategory.objects.create(
+            taxonomy=PlayerCategory.TAXONOMY_CBT_AGE, code='14F', label_ptbr='Sub-14 Feminino',
+            gender_scope=PlayerCategory.GENDER_F, min_age=14, max_age=14)
+        self.cat_16m = PlayerCategory.objects.create(
+            taxonomy=PlayerCategory.TAXONOMY_CBT_AGE, code='16M', label_ptbr='Sub-16 Masculino',
+            gender_scope=PlayerCategory.GENDER_M, min_age=16, max_age=16)
+
+        self.edition_14 = self._edition('bs14', 'BS 14')
+        TournamentCategory.objects.create(
+            edition=self.edition_14, source_category_text='BS 14', normalized_category=self.cat_14m)
+        self.edition_14f = self._edition('bs14f', 'BS 14 Feminino')
+        TournamentCategory.objects.create(
+            edition=self.edition_14f, source_category_text='BS 14 Feminino', normalized_category=self.cat_14f)
+        self.edition_16 = self._edition('bs16', 'BS 16')
+        TournamentCategory.objects.create(
+            edition=self.edition_16, source_category_text='BS 16', normalized_category=self.cat_16m)
+
+    def _edition(self, slug, title):
+        t = Tournament.objects.create(
+            canonical_name=f'T {slug}', canonical_slug=f'catage-{slug}',
+            organization=self.org, modality='tennis', circuit='Infantojuvenil')
+        return TournamentEdition.objects.create(
+            tournament=t, data_source=self.ds, title=title,
+            season_year=2026, status='unknown', is_youth=True,
+            is_published=True, external_id=f'catage:{slug}')
+
+    def test_category_age_14_pega_masculino_e_feminino_mas_nao_16(self):
+        cache.clear()
+        self.client.force_authenticate(user=self.user)
+        res = self.client.get('/api/tournaments/editions/', {'category_age': 14})
+        ids = [e['id'] for e in _response_items(res)]
+        self.assertIn(self.edition_14.id, ids)
+        self.assertIn(self.edition_14f.id, ids)
+        self.assertNotIn(self.edition_16.id, ids)
+
+    def test_category_ages_action_lista_idades_reais_presentes(self):
+        cache.clear()
+        self.client.force_authenticate(user=self.user)
+        res = self.client.get('/api/tournaments/editions/category_ages/')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data, [14, 16])
+
+
 class KidsCategoryNormalizationTestCase(TestCase):
     """Categorias Kids de idade exata (8/9/11 — a maioria dos dados reais de
     CBT/Federações/FPT) precisam casar com um PlayerCategory normalizado, não

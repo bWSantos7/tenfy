@@ -25,6 +25,9 @@ export interface TournamentFilters {
   category?: string;
   category_id?: number;
   category_code?: string;
+  /** Número da categoria etária (o "14" de "BS 14", "Sub-14"...), a partir da
+   * lista de idades reais em listCategoryAges(). */
+  category_age?: number;
   include_category_up?: boolean | string;
   near_profile?: number;
   /** Active profile id — scopes the listing to the player's declared federation
@@ -35,6 +38,10 @@ export interface TournamentFilters {
   country?: string;
   /** Locked filter derived from active profile's competitive_level. Not user-editable. */
   player_level?: string;
+  /** Seleção manual de categoria etária (lista separada por vírgula, ex.: 'kids',
+   * 'youth' ou 'kids,youth' — igual ao filtro de status), oferecida ao responsável
+   * sem nenhum perfil vinculado (sem player_level pra travar automático). */
+  age_category?: string;
   page?: number;
   page_size?: number;
   ordering?: string;
@@ -71,6 +78,20 @@ export async function listCountries(): Promise<string[]> {
     _countriesCache = [];
   }
   return _countriesCache;
+}
+
+/** Números de categoria etária (ex.: 14 de "BS 14"/"Sub-14") realmente presentes
+ * entre as edições publicadas, pro combo de Categoria na aba Torneios. */
+let _categoryAgesCache: number[] | null = null;
+export async function listCategoryAges(): Promise<number[]> {
+  if (_categoryAgesCache) return _categoryAgesCache;
+  try {
+    const res = await api.get<number[]>('/api/tournaments/editions/category_ages/');
+    _categoryAgesCache = Array.isArray(res.data) ? res.data : [];
+  } catch {
+    _categoryAgesCache = [];
+  }
+  return _categoryAgesCache;
 }
 
 function qs(params: Record<string, unknown>): string {

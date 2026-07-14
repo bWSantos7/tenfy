@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Search, Filter, Loader2, X, MapPin, List, Calendar, ChevronLeft, ChevronRight, ChevronDown, Check, GitCompareArrows, CheckSquare, Square, Sparkles } from 'lucide-react';
+import { Search, Filter, Loader2, X, MapPin, List, Calendar, ChevronLeft, ChevronRight, ChevronDown, Check, GitCompareArrows, CheckSquare, Square, Sparkles, Baby } from 'lucide-react';
 import { TournamentEditionList } from '../types';
 import {
   listEditions,
@@ -188,6 +188,7 @@ interface PersistedFilters {
   nearMe: boolean;
   showFilters: boolean;
   page: number;
+  childBrowseMode?: boolean;
 }
 
 function loadSavedFilters(): PersistedFilters | null {
@@ -251,6 +252,11 @@ export const TournamentsPage: React.FC = () => {
   const [showFilters, setShowFilters] = useState(saved.current?.showFilters ?? false);
   const [q, setQ] = useState(saved.current?.q ?? '');
   const [nearMe, setNearMe] = useState(saved.current?.nearMe ?? false);
+  // Responsável sem nenhum perfil vinculado (nem próprio, nem dependente): não há
+  // competitive_level pra travar player_level automaticamente, então oferecemos
+  // esse toggle manual pra ele enxergar torneios Kids + Infantojuvenil (mesma regra
+  // de 'player_level=kids' no backend, que já inclui is_kids OU is_youth).
+  const [childBrowseMode, setChildBrowseMode] = useState<boolean>(saved.current?.childBrowseMode ?? false);
   const [primaryProfileId, setPrimaryProfileId] = useState<number | null>(null);
   // Locked constraints from the active profile — not user-editable in the filter UI
   const [profileModality, setProfileModality] = useState<string>('');
@@ -324,6 +330,20 @@ export const TournamentsPage: React.FC = () => {
     listCountries().then(setCountryCodes).catch(() => setCountryCodes([]));
   }, [user?.id, user?.role, refreshKey]);
 
+  // Sincroniza o toggle "Torneios kids e juvenis" pro filtro player_level=kids.
+  // Só se aplica quando não há competitive_level real travando o filtro (profileLevel
+  // vazio) — perfil de dependente sempre manda no player_level, o toggle é só pro
+  // responsável sem nenhum perfil vinculado.
+  useEffect(() => {
+    if (profileLevel) return;
+    setFilters((f) => {
+      if (childBrowseMode) return { ...f, player_level: 'kids' };
+      if (f.player_level !== 'kids') return f;
+      const { player_level, ...rest } = f;
+      return rest;
+    });
+  }, [childBrowseMode, profileLevel]);
+
   // Auto-apply text search after 400ms debounce
   useEffect(() => {
     if (searchDebounce.current) clearTimeout(searchDebounce.current);
@@ -354,8 +374,8 @@ export const TournamentsPage: React.FC = () => {
 
   // Persist filters in sessionStorage so they survive navigation to detail and back
   useEffect(() => {
-    saveFilters({ filters, q, nearMe, showFilters, page });
-  }, [filters, q, nearMe, showFilters, page]);
+    saveFilters({ filters, q, nearMe, showFilters, page, childBrowseMode });
+  }, [filters, q, nearMe, showFilters, page, childBrowseMode]);
 
   // Load list view
   useEffect(() => {
@@ -430,6 +450,7 @@ export const TournamentsPage: React.FC = () => {
       ...(profileLevel ? { player_level: profileLevel } : {}),
     });
     setNearMe(false);
+    setChildBrowseMode(false);
     setPage(1);
     try { sessionStorage.removeItem(FILTER_SESSION_KEY); } catch {}
   }
@@ -539,6 +560,21 @@ export const TournamentsPage: React.FC = () => {
             Perto de mim
           </button>
         )}
+        {user?.role === 'parent' && !primaryProfileId && (
+          <button
+            onClick={() => { setChildBrowseMode((v) => !v); setPage(1); }}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-sm font-medium transition-colors ${
+              childBrowseMode
+                ? 'bg-accent-neon text-bg-base border-accent-neon'
+                : 'bg-bg-card border-border-subtle text-text-secondary hover:text-text-primary'
+            }`}
+            title="Sem dependente vinculado ainda? Mostra torneios Kids e Infantojuvenil"
+            data-testid="filter-child-browse"
+          >
+            <Baby className="w-4 h-4" />
+            Torneios kids e juvenis
+          </button>
+        )}
       </div>
 
       {/* Search + filter toggle */}
@@ -564,7 +600,7 @@ export const TournamentsPage: React.FC = () => {
             <span className="absolute -top-1 -right-1 bg-accent-neon w-2 h-2 rounded-full" />
           )}
         </button>
-        {(hasAnyFilter || nearMe) && (
+        {(hasAnyFilter || nearMe || childBrowseMode) && (
           <button
             className="text-xs text-accent-blue flex items-center gap-1 px-2 hover:underline shrink-0"
             onClick={clearFilters}

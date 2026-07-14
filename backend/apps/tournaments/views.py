@@ -251,12 +251,16 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
         número seedado pras taxonomias etárias cbt_age/kids), casado com
         ``?category_age=`` (TournamentEditionFilter).
         """
-        ages = (
+        # .distinct() sozinho não deduplica aqui: o Meta.ordering default do model
+        # entra no SELECT (exigência do Postgres pra DISTINCT com ORDER BY), então
+        # a "distinção" acaba sendo por (max_age, campo de ordenação) e não só
+        # max_age. Mesmo problema resolvido em `countries()` acima: força a
+        # deduplicação em Python com set().
+        ages = set(
             TournamentEdition.objects
             .filter(is_published=True)
             .exclude(categories__normalized_category__max_age__isnull=True)
             .values_list('categories__normalized_category__max_age', flat=True)
-            .distinct()
         )
         return Response(sorted(ages))
 

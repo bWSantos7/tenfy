@@ -52,6 +52,12 @@ class TournamentEditionFilter(filters.FilterSet):
     # Values (níveis CBT): 'kids' | 'youth' | 'pro' | 'seniors'
     player_level = filters.CharFilter(method='filter_player_level')
 
+    # Filtro explícito de categoria etária (distinto de `player_level`, que é amplo
+    # e implícito por perfil). Usado pelo toggle Kids/Infantojuvenil da aba Torneios
+    # para o responsável sem nenhum perfil vinculado escolher manualmente o que ver.
+    # Values: 'kids' | 'youth'
+    age_category = filters.CharFilter(method='filter_age_category')
+
     class Meta:
         model = TournamentEdition
         fields = [
@@ -59,7 +65,7 @@ class TournamentEditionFilter(filters.FilterSet):
             'organization_slug', 'modality', 'circuit', 'surface',
             'status', 'status_exclude', 'q', 'near_profile', 'country',
             'category', 'category_id', 'category_code',
-            'player_level',
+            'player_level', 'age_category',
         ]
 
     @property
@@ -203,6 +209,32 @@ class TournamentEditionFilter(filters.FilterSet):
                     Q(tournament__circuit__icontains='kids') |
                     Q(is_kids=True)
                 )
+            )
+
+        return queryset
+
+    def filter_age_category(self, queryset, name, value):
+        """
+        Seleção EXATA e exclusiva de categoria etária (diferente de `player_level`,
+        que é amplo por design pra cobrir a visibilidade de um perfil real). Usado
+        pelo toggle Kids/Infantojuvenil oferecido ao responsável sem nenhum perfil
+        vinculado, que quer escolher manualmente o que ver na aba Torneios:
+
+        'kids'  → somente torneios com categoria Kids (is_kids=True). Um torneio
+                  misto (Kids + Juvenil) tem categoria Kids de verdade, então continua
+                  aparecendo aqui também.
+        'youth' → somente torneios Infantojuvenil (is_youth=True ou ainda não
+                  classificado), excluindo o que é EXCLUSIVAMENTE Kids — mesma regra
+                  de exclusão do 'youth' em filter_player_level.
+        """
+        if value == 'kids':
+            return queryset.filter(is_kids=True)
+
+        if value == 'youth':
+            return (
+                queryset
+                .filter(Q(is_youth=True) | Q(is_youth__isnull=True))
+                .exclude(Q(is_kids=True) & ~Q(is_youth=True))
             )
 
         return queryset

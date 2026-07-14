@@ -35,6 +35,9 @@ export interface TournamentFilters {
   country?: string;
   /** Locked filter derived from active profile's competitive_level. Not user-editable. */
   player_level?: string;
+  /** Seleção manual exclusiva de categoria etária ('kids' | 'youth'), oferecida ao
+   * responsável sem nenhum perfil vinculado (sem player_level pra travar automático). */
+  age_category?: string;
   page?: number;
   page_size?: number;
   ordering?: string;

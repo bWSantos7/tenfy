@@ -239,6 +239,27 @@ class TournamentEditionViewSet(viewsets.ReadOnlyModelViewSet):
             codes.add('BRA')
         return Response(sorted(c.upper() for c in codes if c))
 
+    @action(detail=False)
+    def category_ages(self, request):
+        """
+        GET /api/tournaments/editions/category_ages/
+
+        Números de categoria etária (o "14" de "BS 14", "Sub-14", "14 Anos
+        Masculino"...) presentes de fato entre as edições publicadas, pra
+        alimentar o combo de Categoria na aba Torneios — só o que existe nos
+        dados reais, não uma lista fixa. Vem de PlayerCategory.max_age (mesmo
+        número seedado pras taxonomias etárias cbt_age/kids), casado com
+        ``?category_age=`` (TournamentEditionFilter).
+        """
+        ages = (
+            TournamentEdition.objects
+            .filter(is_published=True)
+            .exclude(categories__normalized_category__max_age__isnull=True)
+            .values_list('categories__normalized_category__max_age', flat=True)
+            .distinct()
+        )
+        return Response(sorted(ages))
+
     def _build_compatible_candidate_filter(self, profile, include_category_up=False):
         from apps.players.models import PlayerCategory
         from apps.eligibility.services import YOUTH_CATEGORY_BUCKETS, official_youth_category_age

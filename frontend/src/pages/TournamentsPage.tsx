@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Search, Filter, Loader2, X, MapPin, List, Calendar, ChevronLeft, ChevronRight, ChevronDown, Check, GitCompareArrows, CheckSquare, Square, Sparkles, Baby } from 'lucide-react';
+import { Search, Filter, Loader2, X, MapPin, List, Calendar, ChevronLeft, ChevronRight, ChevronDown, Check, GitCompareArrows, CheckSquare, Square, Sparkles } from 'lucide-react';
 import { TournamentEditionList } from '../types';
 import {
   listEditions,
   listOrganizations,
   listCountries,
+  listCategoryAges,
   calendar as calendarApi,
   compatibleForProfile,
   TournamentFilters,
@@ -111,14 +112,17 @@ function sortTournaments(list: TournamentEditionList[]): TournamentEditionList[]
 
 type ViewMode = 'list' | 'calendar';
 
-// Filtro de status em "caixa" (como os demais filtros), porém com multi-seleção via
-// checkboxes num dropdown. Sem seleção = "Todos" (a visão aplica seu padrão de ocultação).
-const StatusFilterSelect: React.FC<{
+// Filtro em "caixa" com multi-seleção via checkboxes num dropdown (Status, e
+// Kids/Infantojuvenil pro responsável sem perfil vinculado). Sem seleção = "Todos"
+// (a visão aplica seu padrão de ocultação/visibilidade).
+const CheckboxFilterSelect: React.FC<{
   options: { v: string; l: string }[];
   selected: Set<string>;
   onToggle: (v: string) => void;
   onClear: () => void;
-}> = ({ options, selected, onToggle, onClear }) => {
+  testId?: string;
+  clearLabel?: string;
+}> = ({ options, selected, onToggle, onClear, testId = 'filter-status', clearLabel = 'Limpar' }) => {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -141,7 +145,7 @@ const StatusFilterSelect: React.FC<{
         type="button"
         onClick={() => setOpen((o) => !o)}
         className="input-base w-full flex items-center justify-between gap-2 text-left"
-        data-testid="filter-status"
+        data-testid={testId}
       >
         <span className={`truncate ${selected.size === 0 ? 'text-text-muted' : ''}`}>{summary}</span>
         <ChevronDown className={`w-4 h-4 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
@@ -171,7 +175,7 @@ const StatusFilterSelect: React.FC<{
               onClick={onClear}
               className="w-full text-xs text-accent-blue hover:underline px-2 py-1.5 text-left"
             >
-              Limpar status
+              {clearLabel}
             </button>
           )}
         </div>
@@ -188,7 +192,6 @@ interface PersistedFilters {
   nearMe: boolean;
   showFilters: boolean;
   page: number;
-  childCategory?: '' | 'kids' | 'youth';
 }
 
 function loadSavedFilters(): PersistedFilters | null {
@@ -252,18 +255,15 @@ export const TournamentsPage: React.FC = () => {
   const [showFilters, setShowFilters] = useState(saved.current?.showFilters ?? false);
   const [q, setQ] = useState(saved.current?.q ?? '');
   const [nearMe, setNearMe] = useState(saved.current?.nearMe ?? false);
-  // Responsável sem nenhum perfil vinculado (nem próprio, nem dependente): não há
-  // competitive_level pra travar player_level automaticamente. Oferecemos essa
-  // seleção manual e EXCLUSIVA (diferente do `player_level=kids` amplo, usado
-  // por um perfil real) pra ele escolher exatamente o que ver: só Kids, só
-  // Infantojuvenil, ou nenhum dos dois (padrão da aba, sem esse recorte).
-  const [childCategory, setChildCategory] = useState<'' | 'kids' | 'youth'>(saved.current?.childCategory ?? '');
   const [primaryProfileId, setPrimaryProfileId] = useState<number | null>(null);
   // Locked constraints from the active profile — not user-editable in the filter UI
   const [profileModality, setProfileModality] = useState<string>('');
   const [profileLevel, setProfileLevel] = useState<string>('');
   const [organizations, setOrganizations] = useState<OrganizationOption[]>([]);
   const [countryCodes, setCountryCodes] = useState<string[]>([]);
+  // Números de categoria etária reais (ex.: 14 de "BS 14"/"Sub-14") pro combo
+  // de Categoria — substitui o antigo campo de texto livre.
+  const [categoryAges, setCategoryAges] = useState<number[]>([]);
   // Bumped on 'profiles-changed' (e.g. federation edited in settings) to force a
   // fresh reload of the active profile + listing without a hard refresh.
   const [refreshKey, setRefreshKey] = useState(0);
@@ -329,21 +329,8 @@ export const TournamentsPage: React.FC = () => {
     }).catch(() => {});
     listOrganizations().then(setOrganizations).catch(() => setOrganizations([]));
     listCountries().then(setCountryCodes).catch(() => setCountryCodes([]));
+    listCategoryAges().then(setCategoryAges).catch(() => setCategoryAges([]));
   }, [user?.id, user?.role, refreshKey]);
-
-  // Sincroniza a seleção Kids/Infantojuvenil pro filtro age_category. Só se aplica
-  // quando não há competitive_level real travando o filtro (profileLevel vazio) —
-  // perfil de dependente sempre manda no player_level, essa seleção é só pro
-  // responsável sem nenhum perfil vinculado.
-  useEffect(() => {
-    if (profileLevel) return;
-    setFilters((f) => {
-      if (childCategory) return { ...f, age_category: childCategory };
-      if (!f.age_category) return f;
-      const { age_category, ...rest } = f;
-      return rest;
-    });
-  }, [childCategory, profileLevel]);
 
   // Auto-apply text search after 400ms debounce
   useEffect(() => {
@@ -362,21 +349,44 @@ export const TournamentsPage: React.FC = () => {
     [filters.status],
   );
 
+  // Kids/Infantojuvenil selecionados (multi-seleção, igual ao status): filters.age_category
+  // é uma lista separada por vírgula ('kids', 'youth' ou 'kids,youth'). Só oferecido ao
+  // responsável sem nenhum perfil vinculado (ver render condicional mais abaixo).
+  const selectedAgeCategories = useMemo(
+    () => new Set((filters.age_category || '').split(',').filter(Boolean)),
+    [filters.age_category],
+  );
+
+  function toggleAgeCategory(v: string) {
+    setPage(1);
+    setFilters((f) => {
+      const cur = new Set((f.age_category || '').split(',').filter(Boolean));
+      if (cur.has(v)) cur.delete(v); else cur.add(v);
+      const joined = Array.from(cur).join(',');
+      if (!joined) {
+        const { age_category, ...rest } = f;
+        return rest;
+      }
+      return { ...f, age_category: joined };
+    });
+  }
+
   const hasAnyFilter = useMemo(
     () => !!(
       filters.status || filters.state || filters.q
       // Modality and player_level are locked constraints, not user-applied filters.
       || (filters.modality && filters.modality !== profileModality)
       || filters.from_date || filters.to_date
-      || filters.organization || filters.category || filters.country
+      || filters.organization || filters.category || filters.category_age || filters.country
+      || filters.age_category
     ),
     [filters, profileModality],
   );
 
   // Persist filters in sessionStorage so they survive navigation to detail and back
   useEffect(() => {
-    saveFilters({ filters, q, nearMe, showFilters, page, childCategory });
-  }, [filters, q, nearMe, showFilters, page, childCategory]);
+    saveFilters({ filters, q, nearMe, showFilters, page });
+  }, [filters, q, nearMe, showFilters, page]);
 
   // Load list view
   useEffect(() => {
@@ -451,7 +461,6 @@ export const TournamentsPage: React.FC = () => {
       ...(profileLevel ? { player_level: profileLevel } : {}),
     });
     setNearMe(false);
-    setChildCategory('');
     setPage(1);
     try { sessionStorage.removeItem(FILTER_SESSION_KEY); } catch {}
   }
@@ -561,37 +570,6 @@ export const TournamentsPage: React.FC = () => {
             Perto de mim
           </button>
         )}
-        {user?.role === 'parent' && !primaryProfileId && (
-          <div className="flex items-center gap-1 bg-bg-card border border-border-subtle rounded-xl p-1">
-            <button
-              onClick={() => { setChildCategory((v) => (v === 'kids' ? '' : 'kids')); setPage(1); }}
-              aria-pressed={childCategory === 'kids'}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                childCategory === 'kids'
-                  ? 'bg-accent-neon text-bg-base'
-                  : 'text-text-secondary hover:text-text-primary'
-              }`}
-              title="Sem dependente vinculado ainda? Mostra só torneios Kids"
-              data-testid="filter-child-kids"
-            >
-              <Baby className="w-4 h-4" />
-              Kids
-            </button>
-            <button
-              onClick={() => { setChildCategory((v) => (v === 'youth' ? '' : 'youth')); setPage(1); }}
-              aria-pressed={childCategory === 'youth'}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                childCategory === 'youth'
-                  ? 'bg-accent-neon text-bg-base'
-                  : 'text-text-secondary hover:text-text-primary'
-              }`}
-              title="Sem dependente vinculado ainda? Mostra só torneios Infantojuvenil"
-              data-testid="filter-child-youth"
-            >
-              Infantojuvenil
-            </button>
-          </div>
-        )}
       </div>
 
       {/* Search + filter toggle */}
@@ -617,7 +595,7 @@ export const TournamentsPage: React.FC = () => {
             <span className="absolute -top-1 -right-1 bg-accent-neon w-2 h-2 rounded-full" />
           )}
         </button>
-        {(hasAnyFilter || nearMe || childCategory) && (
+        {(hasAnyFilter || nearMe) && (
           <button
             className="text-xs text-accent-blue flex items-center gap-1 px-2 hover:underline shrink-0"
             onClick={clearFilters}
@@ -642,13 +620,28 @@ export const TournamentsPage: React.FC = () => {
             />
             <div>
               <label className="text-xs text-text-secondary mb-1 block">Status</label>
-              <StatusFilterSelect
+              <CheckboxFilterSelect
                 options={STATUS_OPTS.filter((o) => o.v)}
                 selected={selectedStatuses}
                 onToggle={toggleStatus}
                 onClear={() => { setPage(1); setFilters((f) => ({ ...f, status: '' })); }}
+                testId="filter-status"
+                clearLabel="Limpar status"
               />
             </div>
+            {user?.role === 'parent' && !primaryProfileId && (
+              <div>
+                <label className="text-xs text-text-secondary mb-1 block">Tipo de torneio</label>
+                <CheckboxFilterSelect
+                  options={[{ v: 'kids', l: 'Kids' }, { v: 'youth', l: 'Infantojuvenil' }]}
+                  selected={selectedAgeCategories}
+                  onToggle={toggleAgeCategory}
+                  onClear={() => { setPage(1); setFilters((f) => { const { age_category, ...rest } = f; return rest; }); }}
+                  testId="filter-age-category"
+                  clearLabel="Limpar tipo de torneio"
+                />
+              </div>
+            )}
             <div>
               <label className="text-xs text-text-secondary mb-1 block">Data inicial (a partir de)</label>
               <input
@@ -689,15 +682,17 @@ export const TournamentsPage: React.FC = () => {
                 data-testid="filter-country"
               />
             )}
-            <div className="col-span-2">
-              <label className="text-xs text-text-secondary mb-1 block">Categoria</label>
-              <input
-                className="input-base"
-                placeholder="Ex.: 16M, GA, Gold M1, Sub-12"
-                value={filters.category || ''}
-                onChange={(e) => { setPage(1); setFilters((f) => ({ ...f, category: e.target.value || undefined })); }}
+            {categoryAges.length > 0 && (
+              <SearchableSelect
+                label="Categoria"
+                value={filters.category_age != null ? String(filters.category_age) : ''}
+                onChange={(v) => { setPage(1); setFilters((f) => ({ ...f, category_age: v ? Number(v) : undefined })); }}
+                options={[{ value: '', label: 'Todas' }, ...categoryAges.map((age) => ({ value: String(age), label: `${age} anos` }))]}
+                placeholder="Todas"
+                allowClear
+                data-testid="filter-category-age"
               />
-            </div>
+            )}
           </div>
           {hasAnyFilter && (
             <button

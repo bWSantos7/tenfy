@@ -441,6 +441,29 @@ class DependentManagementTestCase(TestCase):
         res = self.client.get('/api/auth/children/')
         self.assertEqual(res.data['count'], 3)
 
+    def test_familia_single_responsible_can_use_spare_seat_for_fourth_dependent(self):
+        """Com apenas 1 responsável, a vaga extra (max_members=5 - 1) vira um 4º
+        dependente — só cai para 3 quando um 2º responsável realmente ocupa a vaga."""
+        self._activate_plan(self.parent, self.familia_plan)
+        self.client.force_authenticate(user=self.parent)
+        for i in range(4):
+            res = self.client.post('/api/auth/children/', {
+                'full_name': f'Solo Child {i}',
+                'email': f'solo{i}@example.com',
+                'password': 'Str0ngPass!',
+                'password_confirm': 'Str0ngPass!', 'email_code': '000000',
+            }, format='json')
+            self.assertEqual(res.status_code, 201, f'Solo child {i} creation failed')
+
+        # 5th dependent would leave 0 room for any responsável seat beyond the titular.
+        res = self.client.post('/api/auth/children/', {
+            'full_name': 'Solo Child 4 blocked',
+            'email': 'solo4@example.com',
+            'password': 'Str0ngPass!',
+            'password_confirm': 'Str0ngPass!', 'email_code': '000000',
+        }, format='json')
+        self.assertIn(res.status_code, [400, 403])
+
     # ── Authentication ──────────────────────────────────────────────────────────
 
     def test_dependent_can_authenticate(self):

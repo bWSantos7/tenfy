@@ -419,6 +419,33 @@ class FamilyMemberEndpointsTestCase(TestCase):
         self.client.force_authenticate(user=user)
         return self.client.post('/api/billing/family/members/', {'email': email}, format='json')
 
+    def test_invite_blocked_when_dependents_fill_the_spare_seat(self):
+        # max_members=5, apenas o titular como responsável → 4 dependentes usam a
+        # vaga extra, sem sobrar espaço para um 2º responsável.
+        from apps.accounts.models import ParentChild
+        for i in range(4):
+            child = make_user(email=f'dep{i}@example.com')
+            ParentChild.objects.create(parent=self.titular, child=child, is_active=True)
+
+        res = self.client_post_invite(self.titular, self.co1.email)
+        self.assertEqual(res.status_code, 400)
+        self.assertIn('limite', res.data['detail'].lower())
+
+    def test_accept_reblocked_when_dependents_filled_seat_after_invite(self):
+        # Convite enviado quando ainda havia vaga; 4 dependentes chegam depois —
+        # o aceite precisa revalidar e bloquear.
+        from apps.accounts.models import ParentChild
+        m = FamilyMembership.objects.create(subscription=self.sub, member_user=self.co1)
+        for i in range(4):
+            child = make_user(email=f'late_dep{i}@example.com')
+            ParentChild.objects.create(parent=self.titular, child=child, is_active=True)
+
+        self.client.force_authenticate(user=self.co1)
+        res = self.client.post(f'/api/billing/family/members/{m.pk}/')
+        self.assertEqual(res.status_code, 400)
+        m.refresh_from_db()
+        self.assertEqual(m.status, FamilyMembership.STATUS_PENDING)
+
     def test_co_responsible_can_accept_invite(self):
         m = FamilyMembership.objects.create(subscription=self.sub, member_user=self.co1)
         self.client.force_authenticate(user=self.co1)

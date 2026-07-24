@@ -1151,6 +1151,23 @@ def family_members(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    # Early feedback: se os dependentes já ocupam a(s) vaga(s) extra(s) de
+    # responsável (ex.: 4 dependentes com apenas 1 responsável), o convite nunca
+    # poderia ser aceito sem estourar o total de perfis. Reavaliado (com lock) no
+    # accept, que é o momento em que a vaga passa a valer de fato.
+    from apps.accounts import services as accounts_services
+    responsible_count, dependent_count = accounts_services.family_headcount(sub)
+    if responsible_count + dependent_count >= sub.plan.max_members:
+        return Response(
+            {
+                'detail': (
+                    f'A família já está no limite de {sub.plan.max_members} perfis. '
+                    'Remova um dependente antes de convidar um segundo responsável.'
+                ),
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
     # Idempotent: revive a removed entry instead of creating a duplicate
     membership, created = FamilyMembership.objects.get_or_create(
         subscription=sub, member_user=target,
@@ -1200,17 +1217,33 @@ def family_member_detail(request, pk):
                 {'detail': 'Convite não está pendente.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        membership.status = FamilyMembership.STATUS_ACTIVE
-        membership.accepted_at = timezone.now()
-        membership.save(update_fields=['status', 'accepted_at', 'updated_at'])
+
+        from apps.accounts.models import ParentChild
+        from apps.accounts import services as accounts_services
+
+        # Authoritative re-check (com lock): dependentes podem ter sido adicionados
+        # entre o convite e o aceite, ocupando a vaga extra de responsável.
+        with transaction.atomic():
+            locked_sub = Subscription.objects.select_for_update().get(pk=membership.subscription_id)
+            responsible_count, dependent_count = accounts_services.family_headcount(locked_sub)
+            if responsible_count + dependent_count >= locked_sub.plan.max_members:
+                return Response(
+                    {
+                        'detail': (
+                            f'A família já está no limite de {locked_sub.plan.max_members} perfis. '
+                            'Remova um dependente antes de aceitar este convite.'
+                        ),
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            membership.status = FamilyMembership.STATUS_ACTIVE
+            membership.accepted_at = timezone.now()
+            membership.save(update_fields=['status', 'accepted_at', 'updated_at'])
         _log_action(request.user, 'billing.family.accept_responsible', f'membership_id={membership.pk}')
 
         # Visão unificada: espelha os dependentes já vinculados ao titular para o
         # novo co-responsável, e avisa cada dependente afetado (transparência LGPD,
         # não bloqueante).
-        from apps.accounts.models import ParentChild
-        from apps.accounts import services as accounts_services
-
         existing_links = (
             ParentChild.objects.filter(parent=titular, is_active=True).select_related('child')
         )

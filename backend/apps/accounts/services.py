@@ -12,8 +12,10 @@ Business rule (Área 5):
     max of whichever exceptions apply (never a "first match wins").
 
 This is distinct from the dependent-count limit (how many children a family may
-have, driven by plan.max_members - plan.max_responsibles). Both rules coexist, and
-for Família both are scoped to the whole family (shared quota), not per-responsável.
+have). For Família, the family has plan.max_members profiles total (5 today),
+split dynamically between responsáveis and dependentes — with only 1 responsável,
+the spare seat can hold an extra dependent instead. Both rules coexist, and both
+are scoped to the whole family (shared quota), not per-responsável.
 """
 import logging
 
@@ -156,13 +158,29 @@ def _family_responsible_ids(subscription) -> set:
     return ids
 
 
+def family_headcount(subscription) -> tuple:
+    """Return (responsible_count, dependent_count) currently active for the family
+    anchored on ``subscription``. Both counts are distinct-child/distinct-user."""
+    from .models import ParentChild
+
+    responsible_ids = _family_responsible_ids(subscription)
+    dependent_count = (
+        ParentChild.objects
+        .filter(parent_id__in=responsible_ids, is_active=True)
+        .values('child').distinct().count()
+    )
+    return len(responsible_ids), dependent_count
+
+
 def assert_can_add_dependent(acting_parent, for_update: bool = False) -> None:
     """Raise ValidationError when ``acting_parent`` may not add another dependent.
 
     The dependent quota is shared by the whole family (titular + active
-    co-responsáveis on the same subscription), not counted per-responsável — a
-    Família subscription has room for max_members - max_responsibles dependents
-    total, regardless of which responsável creates them.
+    co-responsáveis on the same subscription), not counted per-responsável. The
+    family has room for max_members profiles total, split dynamically between
+    responsáveis and dependentes: with only 1 responsável, the "spare" seat can be
+    used for an extra dependent (e.g. max_members=5 → up to 4 dependents with 1
+    responsável, or up to 3 with 2 responsáveis).
 
     Pass ``for_update=True`` (from inside a ``transaction.atomic()`` block, right
     before creating the ParentChild) to lock the family's Subscription row and
@@ -195,13 +213,8 @@ def assert_can_add_dependent(acting_parent, for_update: bool = False) -> None:
             code='forbidden',
         )
 
-    responsible_ids = _family_responsible_ids(sub)
-    current = (
-        ParentChild.objects
-        .filter(parent_id__in=responsible_ids, is_active=True)
-        .values('child').distinct().count()
-    )
-    max_dependents = max(sub.plan.max_members - sub.plan.max_responsibles, 0)
+    responsible_count, current = family_headcount(sub)
+    max_dependents = max(sub.plan.max_members - responsible_count, 0)
     if current >= max_dependents:
         raise ValidationError(
             f'Limite de {max_dependents} dependente(s) atingido para o seu plano. '

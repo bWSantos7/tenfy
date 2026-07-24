@@ -40,7 +40,14 @@ class Plan(TimestampedModel):
     is_active       = models.BooleanField(default=True)
     max_members     = models.PositiveSmallIntegerField(
         default=1,
-        help_text='Total de membros permitidos (titular + dependentes). Individual=1, Família=5+.',
+        help_text='Total de perfis permitidos (responsáveis + dependentes). Individual=1, Família=5.',
+    )
+    max_responsibles = models.PositiveSmallIntegerField(
+        default=1,
+        help_text=(
+            'Quantos perfis de responsável (titular + co-responsáveis) podem compartilhar '
+            'esta assinatura. Dependentes permitidos = max_members - max_responsibles.'
+        ),
     )
 
     class Meta:
@@ -257,11 +264,13 @@ class WebhookEvent(TimestampedModel):
 
 class FamilyMembership(TimestampedModel):
     """
-    Links a dependent/member user to a Família subscription.
+    Links a co-responsável (second parent) to a Família subscription.
 
-    The responsible payer is Subscription.user.
-    Each FamilyMembership represents one dependent seat under that subscription.
-    The plan's max_members limits how many active memberships a subscription can have.
+    The titular/payer is Subscription.user. Each FamilyMembership represents one
+    extra responsável seat under that subscription — NOT a dependent (dependents are
+    tracked via apps.accounts.models.ParentChild, mirrored across all responsáveis of
+    the same family). The plan's max_responsibles limits how many active memberships
+    a subscription can have (titular counts as 1 of that total).
     """
     STATUS_PENDING = 'pending'
     STATUS_ACTIVE  = 'active'
@@ -287,3 +296,30 @@ class FamilyMembership(TimestampedModel):
 
     def __str__(self):
         return f'{self.subscription.user.email} → {self.member_user.email} [{self.status}]'
+
+
+def get_effective_subscription(user):
+    """
+    Return the Subscription that governs ``user``'s plan/features.
+
+    A user's own Subscription (if any) always takes priority. Otherwise, if the
+    user is an active co-responsável (FamilyMembership) of a Família subscription,
+    that subscription is inherited — this is how the second responsável gets the
+    same features and shared dependent quota as the titular.
+    """
+    try:
+        return user.subscription
+    except Subscription.DoesNotExist:
+        pass
+
+    membership = (
+        FamilyMembership.objects
+        .filter(
+            member_user=user,
+            status=FamilyMembership.STATUS_ACTIVE,
+            subscription__plan__slug=Plan.SLUG_FAMILIA,
+        )
+        .select_related('subscription__plan')
+        .first()
+    )
+    return membership.subscription if membership else None

@@ -5,7 +5,7 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from apps.billing.models import Plan, Subscription
+from apps.billing.models import FamilyMembership, Plan, Subscription
 from . import security, services
 from .models import ParentChild
 
@@ -16,7 +16,12 @@ LOGIN_URL = '/api/auth/login/'
 
 
 def _plan(slug, name):
-    return Plan.objects.create(slug=slug, name=name, max_members=5 if slug == 'familia' else 1)
+    is_familia = slug == 'familia'
+    return Plan.objects.create(
+        slug=slug, name=name,
+        max_members=5 if is_familia else 1,
+        max_responsibles=2 if is_familia else 1,
+    )
 
 
 def _sub(user, plan, status=Subscription.STATUS_ACTIVE):
@@ -79,6 +84,7 @@ class ResponsibleLinkRuleTests(TestCase):
         cache.clear()
         self.individual = _plan('individual', 'Individual')
         self.tester = _plan('tester', 'Tester')
+        self.familia = _plan('familia', 'Família')
         self.child = User.objects.create_user(email='child@example.com', password=PWD, role='player')
         self.p1 = User.objects.create_user(email='p1@example.com', password=PWD, role='parent')
         self.p2 = User.objects.create_user(email='p2@example.com', password=PWD, role='parent')
@@ -115,6 +121,39 @@ class ResponsibleLinkRuleTests(TestCase):
     def test_tester_blocks_third(self):
         _sub(self.p1, self.tester)
         self._link(self.p1, self.child)
+        self._link(self.p2, self.child)
+        with self.assertRaises(ValidationError):
+            services.assert_can_link_responsible(self.child, self.p3)
+
+    def test_familia_titular_allows_second(self):
+        _sub(self.p1, self.familia)
+        self._link(self.p1, self.child)
+        # p1 owns a Família subscription → exception applies → 2nd allowed.
+        services.assert_can_link_responsible(self.child, self.p2)
+
+    def test_familia_blocks_third(self):
+        _sub(self.p1, self.familia)
+        self._link(self.p1, self.child)
+        self._link(self.p2, self.child)
+        with self.assertRaises(ValidationError):
+            services.assert_can_link_responsible(self.child, self.p3)
+
+    def test_familia_second_responsible_via_membership_allows_second(self):
+        # p2 has no subscription of their own — inherits p1's Família plan via
+        # an active FamilyMembership (co-responsável), same as the real invite flow.
+        sub = _sub(self.p1, self.familia)
+        FamilyMembership.objects.create(
+            subscription=sub, member_user=self.p2, status=FamilyMembership.STATUS_ACTIVE,
+        )
+        self._link(self.p1, self.child)
+        services.assert_can_link_responsible(self.child, self.p2)
+
+    def test_familia_and_tester_do_not_stack_past_two(self):
+        # Both exceptions apply (p1 is Tester, child ends up in a Família family via p2)
+        # but the hard cap stays at 2, never 4.
+        _sub(self.p1, self.tester)
+        self._link(self.p1, self.child)
+        _sub(self.p2, self.familia)
         self._link(self.p2, self.child)
         with self.assertRaises(ValidationError):
             services.assert_can_link_responsible(self.child, self.p3)

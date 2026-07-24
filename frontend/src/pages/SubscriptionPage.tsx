@@ -576,7 +576,10 @@ export const SubscriptionPage: React.FC = () => {
   );
 };
 
-// ── Família — gestão de dependentes ─────────────────────────────────────────
+// ── Família — segundo responsável ────────────────────────────────────────────
+// Convida um segundo responsável para compartilhar esta assinatura Família (até
+// 2 responsáveis no total). Dependentes são geridos em /perfil e ficam
+// automaticamente visíveis para os dois responsáveis assim que o convite é aceito.
 
 const FamilySection: React.FC = () => {
   const [members, setMembers] = useState<FamilyMember[]>([]);
@@ -598,6 +601,8 @@ const FamilySection: React.FC = () => {
 
   useEffect(() => { load(); }, [load]);
 
+  const hasSeatTaken = members.some((m) => m.status !== 'removed');
+
   async function handleAdd() {
     if (!email.trim() || adding) return;
     setAdding(true);
@@ -605,7 +610,7 @@ const FamilySection: React.FC = () => {
       await addFamilyMember({ email: email.trim() });
       setEmail('');
       await load();
-      toast.success('Dependente adicionado.');
+      toast.success('Convite de segundo responsável enviado.');
     } catch (err) {
       toast.error(extractApiError(err));
     } finally {
@@ -614,11 +619,11 @@ const FamilySection: React.FC = () => {
   }
 
   async function handleRemove(m: FamilyMember) {
-    if (!window.confirm(`Remover ${m.member_email} da assinatura?`)) return;
+    if (!window.confirm(`Remover ${m.member_email} como responsável desta assinatura?`)) return;
     try {
       await removeFamilyMember(m.id);
       await load();
-      toast.success('Dependente removido.');
+      toast.success('Responsável removido.');
     } catch (err) {
       toast.error(extractApiError(err));
     }
@@ -627,35 +632,39 @@ const FamilySection: React.FC = () => {
   return (
     <div className="card !p-4 space-y-3">
       <div>
-        <div className="text-sm font-semibold">Plano Família — dependentes</div>
+        <div className="text-sm font-semibold">Plano Família — segundo responsável</div>
         <div className="text-xs text-text-muted">
-          Cada dependente precisa ter um cadastro no app antes de ser convidado. O titular é responsável pelo pagamento.
+          Convide o segundo responsável da família (até 2 no total) para compartilhar esta
+          assinatura. Ele precisa ter uma conta de Responsável cadastrada no app. Os dependentes
+          já vinculados ficam automaticamente visíveis para ele após aceitar o convite.
         </div>
       </div>
 
-      <div className="flex gap-2">
-        <input
-          className="input-base flex-1 text-sm"
-          type="email"
-          placeholder="email@exemplo.com"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
-        />
-        <button
-          className="btn-primary !text-sm"
-          onClick={handleAdd}
-          disabled={adding || !email.trim()}
-        >
-          {adding ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
-        </button>
-      </div>
+      {!hasSeatTaken && (
+        <div className="flex gap-2">
+          <input
+            className="input-base flex-1 text-sm"
+            type="email"
+            placeholder="email@exemplo.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+          />
+          <button
+            className="btn-primary !text-sm"
+            onClick={handleAdd}
+            disabled={adding || !email.trim()}
+          >
+            {adding ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <Loader2 className="w-5 h-5 animate-spin mx-auto text-text-muted" />
       ) : members.length === 0 ? (
         <div className="text-xs text-text-muted text-center py-2">
-          Nenhum dependente adicionado.
+          Nenhum segundo responsável adicionado.
         </div>
       ) : (
         <div className="space-y-1.5">

@@ -40,7 +40,7 @@ _INDIVIDUAL_FEATURES = {
 # Família includes all Individual features plus family member management
 _FAMILIA_FEATURES = {
     **_INDIVIDUAL_FEATURES,
-    'family_members': None,           # Perfis de família (até 4 dependentes)
+    'family_members': None,           # Perfis de família (até 2 responsáveis + 3 dependentes)
 }
 
 # Tester plan: all features enabled, free during beta period
@@ -78,10 +78,11 @@ PLANS = [
         'slug': 'familia',
         'price_monthly': '89.90',
         'price_yearly':  '899.00',
-        'description': 'Até 4 perfis na mesma conta.',
+        'description': 'Até 2 responsáveis e 3 dependentes na mesma assinatura.',
         'highlight_label': 'Mais popular',
         'display_order': 2,
-        'max_members': 4,
+        'max_members': 5,
+        'max_responsibles': 2,
         'features': _FAMILIA_FEATURES,
     },
 ]
@@ -126,7 +127,10 @@ class Command(BaseCommand):
                 defaults=plan_data,
             )
             action = 'Created' if created else 'Updated'
-            self.stdout.write(f'  {action} plan: {plan.slug} (max_members={plan.max_members})')
+            self.stdout.write(
+                f'  {action} plan: {plan.slug} '
+                f'(max_members={plan.max_members}, max_responsibles={plan.max_responsibles})'
+            )
 
             desired_feature_ids = []
             for code, limit in features.items():

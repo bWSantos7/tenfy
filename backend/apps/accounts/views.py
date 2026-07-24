@@ -46,6 +46,18 @@ def _responsible_link_error(exc) -> Response:
     return Response({'detail': detail}, status=status.HTTP_400_BAD_REQUEST)
 
 
+def _dependent_limit_error(exc) -> Response:
+    """Render a services.assert_can_add_dependent ValidationError.
+
+    code='forbidden' (no/insufficient plan) → 403; code='limit' (quota reached) → 400.
+    """
+    from django.core.exceptions import ValidationError as DjangoValidationError
+    detail = exc.messages[0] if isinstance(exc, DjangoValidationError) and exc.messages else str(exc)
+    code = getattr(exc, 'code', None)
+    http_status = status.HTTP_403_FORBIDDEN if code == 'forbidden' else status.HTTP_400_BAD_REQUEST
+    return Response({'detail': detail}, status=http_status)
+
+
 def _resolve_federation(federation_value):
     """Resolve a federation id (from raw profile payload) to an active federation
     Organization, or None. Tolerant: invalid/missing ids return None so federation
@@ -649,35 +661,20 @@ class ParentChildViewSet(viewsets.ModelViewSet):
         )
 
     def create(self, request, *args, **kwargs):
-        # Enforce plan-based dependent limit
-        from apps.billing.models import Subscription, Plan
-        current_dependents = ParentChild.objects.filter(parent=request.user, is_active=True).count()
-
-        try:
-            sub = request.user.subscription
-            if sub.plan.slug == Plan.SLUG_INDIVIDUAL:
-                return Response(
-                    {'detail': 'O Plano Individual não permite cadastrar dependentes. Faça upgrade para o Plano Família.'},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
-            max_dependents = sub.plan.max_members - 1  # titular doesn't count
-            if current_dependents >= max_dependents:
-                return Response(
-                    {'detail': f'Limite de {max_dependents} dependente(s) atingido para o seu plano. Faça upgrade para adicionar mais.'},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-        except Subscription.DoesNotExist:
-            # Allow first dependent creation for parent accounts during initial onboarding.
-            # Subsequent dependents require an active Família subscription.
-            if current_dependents >= 1:
-                return Response(
-                    {'detail': 'Você precisa de uma assinatura ativa do Plano Família para adicionar mais dependentes.'},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
+        from django.core.exceptions import ValidationError as DjangoValidationError
+        from django.db import transaction
 
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        link = serializer.save()
+
+        try:
+            with transaction.atomic():
+                services.assert_can_add_dependent(request.user, for_update=True)
+                link = serializer.save()
+        except DjangoValidationError as exc:
+            return _dependent_limit_error(exc)
+
+        services.mirror_to_co_responsibles(link.child, request.user)
         return Response(
             ParentChildSerializer(link, context={'request': request}).data,
             status=status.HTTP_201_CREATED,
@@ -694,29 +691,6 @@ class ParentChildViewSet(viewsets.ModelViewSet):
                 {'detail': 'Apenas contas do tipo Responsável/Pai podem cadastrar dependentes.'},
                 status=status.HTTP_403_FORBIDDEN,
             )
-
-        from apps.billing.models import Subscription, Plan
-        current_dependents = ParentChild.objects.filter(parent=request.user, is_active=True).count()
-        if not request.user.is_staff:
-            try:
-                sub = request.user.subscription
-                if sub.plan.slug == Plan.SLUG_INDIVIDUAL:
-                    return Response(
-                        {'detail': 'O Plano Individual não permite cadastrar dependentes. Faça upgrade para o Plano Família.'},
-                        status=status.HTTP_403_FORBIDDEN,
-                    )
-                max_dependents = sub.plan.max_members - 1
-                if current_dependents >= max_dependents:
-                    return Response(
-                        {'detail': f'Limite de {max_dependents} dependente(s) atingido para o seu plano.'},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-            except Subscription.DoesNotExist:
-                if current_dependents >= 1:
-                    return Response(
-                        {'detail': 'Você precisa de uma assinatura ativa do Plano Família para adicionar mais dependentes.'},
-                        status=status.HTTP_403_FORBIDDEN,
-                    )
 
         account_serializer = ChildAccountCreateSerializer(data=request.data, context={'request': request})
         account_serializer.is_valid(raise_exception=True)
@@ -748,23 +722,31 @@ class ParentChildViewSet(viewsets.ModelViewSet):
         # player's residence UF (kept independent so it is never overwritten).
         federation = _resolve_federation(profile_data.get('federation'))
 
-        with transaction.atomic():
-            link = account_serializer.save()
-            child = link.child
-            display_name = (profile_data.get('display_name') or '').strip() or child.full_name or 'Jogador'
-            new_profile = PlayerProfile.objects.create(
-                user=child,
-                display_name=display_name,
-                birth_year=profile_data.get('birth_year'),
-                gender=profile_data.get('gender', ''),
-                home_state=profile_data.get('home_state', 'SP'),
-                home_city=profile_data.get('home_city', ''),
-                federation=federation,
-                travel_states=travel_states,
-                competitive_level=profile_data.get('competitive_level', 'pro'),
-                preferred_modality=profile_data.get('preferred_modality', ''),
-                is_primary=True,
-            )
+        from django.core.exceptions import ValidationError as DjangoValidationError
+        try:
+            with transaction.atomic():
+                if not request.user.is_staff:
+                    services.assert_can_add_dependent(request.user, for_update=True)
+                link = account_serializer.save()
+                child = link.child
+                display_name = (profile_data.get('display_name') or '').strip() or child.full_name or 'Jogador'
+                new_profile = PlayerProfile.objects.create(
+                    user=child,
+                    display_name=display_name,
+                    birth_year=profile_data.get('birth_year'),
+                    gender=profile_data.get('gender', ''),
+                    home_state=profile_data.get('home_state', 'SP'),
+                    home_city=profile_data.get('home_city', ''),
+                    federation=federation,
+                    travel_states=travel_states,
+                    competitive_level=profile_data.get('competitive_level', 'pro'),
+                    preferred_modality=profile_data.get('preferred_modality', ''),
+                    is_primary=True,
+                )
+        except DjangoValidationError as exc:
+            return _dependent_limit_error(exc)
+
+        services.mirror_to_co_responsibles(child, request.user)
 
         from apps.registrations.tasks import (
             match_new_profile_to_entries, match_profile_now,
@@ -809,31 +791,15 @@ class ParentChildViewSet(viewsets.ModelViewSet):
             return Response(ParentChildSerializer(existing, context={'request': request}).data, status=status.HTTP_200_OK)
 
         # Plan limit check
-        from apps.billing.models import Subscription, Plan
-        current_dependents = ParentChild.objects.filter(parent=request.user, is_active=True).count()
+        from django.core.exceptions import ValidationError as DjangoValidationError
+        from django.db import transaction
         if not request.user.is_staff:
             try:
-                sub = request.user.subscription
-                if sub.plan.slug == Plan.SLUG_INDIVIDUAL:
-                    return Response(
-                        {'detail': 'O Plano Individual não permite dependentes. Faça upgrade para o Plano Família.'},
-                        status=status.HTTP_403_FORBIDDEN,
-                    )
-                max_dependents = sub.plan.max_members - 1
-                if current_dependents >= max_dependents:
-                    return Response(
-                        {'detail': f'Limite de {max_dependents} dependente(s) atingido para o seu plano.'},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-            except Subscription.DoesNotExist:
-                if current_dependents >= 1:
-                    return Response(
-                        {'detail': 'Você precisa do Plano Família para adicionar mais dependentes.'},
-                        status=status.HTTP_403_FORBIDDEN,
-                    )
+                services.assert_can_add_dependent(request.user)
+            except DjangoValidationError as exc:
+                return _dependent_limit_error(exc)
 
         # Área 5: respeitar o limite de responsáveis por jogador/dependente.
-        from django.core.exceptions import ValidationError as DjangoValidationError
         try:
             services.assert_can_link_responsible(child, request.user)
         except DjangoValidationError as exc:
@@ -841,10 +807,12 @@ class ParentChildViewSet(viewsets.ModelViewSet):
 
         # Staff bypass: create link directly without requiring an invite
         if request.user.is_staff:
-            link, _ = ParentChild.objects.get_or_create(parent=request.user, child=child, defaults={'is_active': True})
-            if not link.is_active:
-                link.is_active = True
-                link.save(update_fields=['is_active'])
+            with transaction.atomic():
+                link, _ = ParentChild.objects.get_or_create(parent=request.user, child=child, defaults={'is_active': True})
+                if not link.is_active:
+                    link.is_active = True
+                    link.save(update_fields=['is_active'])
+            services.mirror_to_co_responsibles(child, request.user)
             return Response(ParentChildSerializer(link, context={'request': request}).data, status=status.HTTP_201_CREATED)
 
         # Accepted invite exists — finalise the link
@@ -852,10 +820,16 @@ class ParentChildViewSet(viewsets.ModelViewSet):
             parent=request.user, invitee=child, status=DependentInvite.STATUS_ACCEPTED
         ).first()
         if accepted_invite:
-            link, _ = ParentChild.objects.get_or_create(parent=request.user, child=child, defaults={'is_active': True})
-            if not link.is_active:
-                link.is_active = True
-                link.save(update_fields=['is_active'])
+            try:
+                with transaction.atomic():
+                    services.assert_can_add_dependent(request.user, for_update=True)
+                    link, _ = ParentChild.objects.get_or_create(parent=request.user, child=child, defaults={'is_active': True})
+                    if not link.is_active:
+                        link.is_active = True
+                        link.save(update_fields=['is_active'])
+            except DjangoValidationError as exc:
+                return _dependent_limit_error(exc)
+            services.mirror_to_co_responsibles(child, request.user)
             logger.info('ParentChild link created via accepted invite: parent=%s child=%s', request.user.id, child.id)
             return Response(ParentChildSerializer(link, context={'request': request}).data, status=status.HTTP_201_CREATED)
 
@@ -1106,28 +1080,12 @@ class ParentChildViewSet(viewsets.ModelViewSet):
         if not invitee_id:
             return Response({'detail': 'invitee_id é obrigatório.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        from apps.billing.models import Subscription, Plan
-        current_dependents = ParentChild.objects.filter(parent=request.user, is_active=True).count()
+        from django.core.exceptions import ValidationError as DjangoValidationError
         if not request.user.is_staff:
             try:
-                sub = request.user.subscription
-                if sub.plan.slug == Plan.SLUG_INDIVIDUAL:
-                    return Response(
-                        {'detail': 'O Plano Individual não permite dependentes. Faça upgrade para o Plano Família.'},
-                        status=status.HTTP_403_FORBIDDEN,
-                    )
-                max_dependents = sub.plan.max_members - 1
-                if current_dependents >= max_dependents:
-                    return Response(
-                        {'detail': f'Limite de {max_dependents} dependente(s) atingido para o seu plano.'},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-            except Subscription.DoesNotExist:
-                if current_dependents >= 1:
-                    return Response(
-                        {'detail': 'Você precisa do Plano Família para adicionar mais dependentes.'},
-                        status=status.HTTP_403_FORBIDDEN,
-                    )
+                services.assert_can_add_dependent(request.user)
+            except DjangoValidationError as exc:
+                return _dependent_limit_error(exc)
 
         try:
             invitee = User.objects.get(pk=invitee_id, is_active=True, role=User.ROLE_PLAYER)
@@ -1142,7 +1100,6 @@ class ParentChildViewSet(viewsets.ModelViewSet):
             return Response({'detail': 'Este jogador já é seu dependente.'}, status=status.HTTP_400_BAD_REQUEST)
 
         # Área 5: não enviar convite que não poderá ser finalizado (limite de responsáveis).
-        from django.core.exceptions import ValidationError as DjangoValidationError
         try:
             services.assert_can_link_responsible(invitee, request.user)
         except DjangoValidationError as exc:
@@ -1273,50 +1230,42 @@ class DependentInviteViewSet(viewsets.GenericViewSet):
         now = tz.now()
 
         if action == 'accept':
-            from apps.billing.models import Subscription, Plan
+            from django.core.exceptions import ValidationError as DjangoValidationError
+
             # Re-validate plan limit at accept time
-            current_dependents = ParentChild.objects.filter(parent=invite.parent, is_active=True).count()
             if not invite.parent.is_staff:
                 try:
-                    sub = invite.parent.subscription
-                    if sub.plan.slug == Plan.SLUG_INDIVIDUAL:
-                        return Response(
-                            {'detail': 'O responsável não possui Plano Família ativo.'},
-                            status=status.HTTP_400_BAD_REQUEST,
-                        )
-                    max_dependents = sub.plan.max_members - 1
-                    if current_dependents >= max_dependents:
-                        return Response(
-                            {'detail': 'O responsável atingiu o limite de dependentes do plano.'},
-                            status=status.HTTP_400_BAD_REQUEST,
-                        )
-                except Subscription.DoesNotExist:
-                    if current_dependents >= 1:
-                        return Response(
-                            {'detail': 'O responsável não possui Plano Família ativo.'},
-                            status=status.HTTP_400_BAD_REQUEST,
-                        )
+                    services.assert_can_add_dependent(invite.parent)
+                except DjangoValidationError as exc:
+                    return _dependent_limit_error(exc)
 
             # Área 5: re-validar o limite de responsáveis no momento do aceite.
-            from django.core.exceptions import ValidationError as DjangoValidationError
             try:
                 services.assert_can_link_responsible(invite.invitee, invite.parent)
             except DjangoValidationError as exc:
                 return _responsible_link_error(exc)
 
-            with transaction.atomic():
-                invite.status = DependentInvite.STATUS_ACCEPTED
-                invite.responded_at = now
-                invite.save(update_fields=['status', 'responded_at'])
+            try:
+                with transaction.atomic():
+                    if not invite.parent.is_staff:
+                        services.assert_can_add_dependent(invite.parent, for_update=True)
 
-                link, _ = ParentChild.objects.get_or_create(
-                    parent=invite.parent,
-                    child=invite.invitee,
-                    defaults={'is_active': True},
-                )
-                if not link.is_active:
-                    link.is_active = True
-                    link.save(update_fields=['is_active'])
+                    invite.status = DependentInvite.STATUS_ACCEPTED
+                    invite.responded_at = now
+                    invite.save(update_fields=['status', 'responded_at'])
+
+                    link, _ = ParentChild.objects.get_or_create(
+                        parent=invite.parent,
+                        child=invite.invitee,
+                        defaults={'is_active': True},
+                    )
+                    if not link.is_active:
+                        link.is_active = True
+                        link.save(update_fields=['is_active'])
+            except DjangoValidationError as exc:
+                return _dependent_limit_error(exc)
+
+            services.mirror_to_co_responsibles(invite.invitee, invite.parent)
 
             # Remove the invite alert — it's no longer actionable
             try:

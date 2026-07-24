@@ -170,12 +170,15 @@ def subscription_checkout(request):
 
         if is_tester:
             # Tester plan: activate immediately — no payment required
+            was_familia = not created and sub.plan_id and sub.plan.slug == Plan.SLUG_FAMILIA
             sub.plan = plan
             sub.status = Subscription.STATUS_ACTIVE
             sub.pending_plan = None
             sub.pending_billing_period = ''
             sub.cancel_at_period_end = False
             sub.save(update_fields=['plan', 'status', 'pending_plan', 'pending_billing_period', 'cancel_at_period_end', 'updated_at'])
+            if was_familia:
+                _demote_family_co_responsibles(sub)
         else:
             # Track pending plan; activated via PAYMENT_CONFIRMED webhook
             sub.pending_plan = plan
@@ -500,6 +503,7 @@ def subscription_cancel(request):
             sub.status = Subscription.STATUS_CANCELED
             sub.canceled_at = timezone.now()
             sub.save(update_fields=['status', 'canceled_at', 'updated_at'])
+            _demote_family_co_responsibles(sub)
         else:
             sub.cancel_at_period_end = True
             sub.save(update_fields=['cancel_at_period_end', 'updated_at'])
@@ -793,6 +797,7 @@ def _handle_payment_confirmed(payload: dict):
     )
     if sub and _transition_subscription(sub, Subscription.STATUS_ACTIVE, 'payment_confirmed'):
         from datetime import date as date_cls
+        was_familia = sub.plan_id and sub.plan.slug == Plan.SLUG_FAMILIA
         if sub.pending_plan_id:
             sub.plan = sub.pending_plan
             if sub.pending_billing_period:
@@ -810,6 +815,8 @@ def _handle_payment_confirmed(payload: dict):
             'plan', 'billing_period', 'pending_plan', 'pending_billing_period',
             'status', 'start_date', 'next_due_date', 'updated_at',
         ])
+        if was_familia and sub.plan.slug != Plan.SLUG_FAMILIA:
+            _demote_family_co_responsibles(sub)
         logger.info('Subscription %s activated after payment confirmed', sub.id)
 
     # Comissão de parceiro (Fluxo C) — 1º pagamento confirmado. Idempotente.
@@ -941,6 +948,7 @@ def _handle_subscription_inactivated(payload: dict):
     if sub and _transition_subscription(sub, Subscription.STATUS_EXPIRED, 'subscription_inactivated'):
         sub.status = Subscription.STATUS_EXPIRED
         sub.save(update_fields=['status', 'updated_at'])
+        _demote_family_co_responsibles(sub)
 
 
 def _handle_subscription_deleted(payload: dict):
@@ -955,9 +963,36 @@ def _handle_subscription_deleted(payload: dict):
         sub.status = Subscription.STATUS_CANCELED
         sub.canceled_at = timezone.now()
         sub.save(update_fields=['status', 'canceled_at', 'updated_at'])
+        _demote_family_co_responsibles(sub)
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
+
+def _demote_family_co_responsibles(subscription) -> int:
+    """
+    Remove all co-responsável seats when a Família subscription is cancelled or
+    downgraded away from the plan. The titular's own plan/status already governs
+    this — this just cuts the second responsável's inherited access to features
+    and the shared dependent quota.
+
+    ParentChild links already mirrored to the co-responsável are intentionally
+    left untouched (same residual-access behaviour as a solo titular who cancels).
+    """
+    from .permissions import _invalidate_user_features_cache
+
+    memberships = FamilyMembership.objects.filter(
+        subscription=subscription,
+        status__in=[FamilyMembership.STATUS_PENDING, FamilyMembership.STATUS_ACTIVE],
+    )
+    member_ids = list(memberships.values_list('member_user_id', flat=True))
+    if not member_ids:
+        return 0
+    updated = memberships.update(status=FamilyMembership.STATUS_REMOVED)
+    for uid in member_ids:
+        _invalidate_user_features_cache(uid)
+    logger.info('Demoted %d co-responsável(is) for subscription %s', updated, subscription.id)
+    return updated
+
 
 def _map_billing_type(billing_type: str) -> str:
     return {
@@ -1027,11 +1062,14 @@ def _log_action(user, action: str, detail: str):
         pass
 
 
-# ── Família — gestão de dependentes ────────────────────────────────────────────
+# ── Família — segundo responsável ───────────────────────────────────────────────
+# FamilyMembership represents a co-responsável (second parent) seat, NOT a
+# dependent — dependents are apps.accounts.models.ParentChild, mirrored across
+# every active responsável of the family (see apps.accounts.services).
 
 def _get_familia_subscription_for(user):
     """Return the user's Família subscription or None.
-    Only the responsible payer (Subscription.user) manages the family."""
+    Only the titular (Subscription.user) manages the family's responsável seat."""
     try:
         sub = user.subscription
     except Subscription.DoesNotExist:
@@ -1045,14 +1083,14 @@ def _get_familia_subscription_for(user):
 @permission_classes([permissions.IsAuthenticated])
 def family_members(request):
     """
-    GET  → list all (non-removed) members under the requesting user's Família subscription.
-    POST → add a new dependent by email or user_id.
-           Validates plan=Família, max_members limit (titular conta), no duplicates.
+    GET  → list all (non-removed) co-responsável seats under the titular's Família subscription.
+    POST → invite a second responsável by email or user_id.
+           Validates plan=Família, max_responsibles limit, target role, no duplicates.
     """
     sub = _get_familia_subscription_for(request.user)
     if sub is None:
         return Response(
-            {'detail': 'Apenas o titular de uma assinatura Família pode gerenciar dependentes.'},
+            {'detail': 'Apenas o titular de uma assinatura Família pode gerenciar o segundo responsável.'},
             status=status.HTTP_403_FORBIDDEN,
         )
 
@@ -1060,7 +1098,7 @@ def family_members(request):
         qs = sub.family_members.exclude(status=FamilyMembership.STATUS_REMOVED).order_by('-created_at')
         return Response(FamilyMembershipSerializer(qs, many=True).data)
 
-    # POST — add member
+    # POST — invite co-responsável
     ser = FamilyMemberAddSerializer(data=request.data)
     ser.is_valid(raise_exception=True)
     d = ser.validated_data
@@ -1074,24 +1112,59 @@ def family_members(request):
 
     if target is None:
         return Response(
-            {'detail': 'Usuário não encontrado. Peça que ele cadastre antes de adicionar à família.'},
+            {'detail': 'Usuário não encontrado. Peça que ele cadastre antes de convidar como responsável.'},
             status=status.HTTP_404_NOT_FOUND,
         )
 
     if target.pk == request.user.pk:
         return Response(
-            {'detail': 'O titular não precisa ser adicionado como dependente.'},
+            {'detail': 'O titular não precisa ser adicionado como segundo responsável.'},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # Limit: max_members = titular + active/pending dependents.
-    # Allowed dependents = max_members - 1.
+    if target.role != User.ROLE_PARENT:
+        return Response(
+            {'detail': 'O convidado precisa ter uma conta de Responsável para aceitar este convite.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Um usuário não pode ser co-responsável de 2 famílias ao mesmo tempo.
+    already_in_another_family = (
+        FamilyMembership.objects
+        .filter(member_user=target, status__in=[FamilyMembership.STATUS_PENDING, FamilyMembership.STATUS_ACTIVE])
+        .exclude(subscription=sub)
+        .exists()
+    )
+    if already_in_another_family:
+        return Response(
+            {'detail': 'Este usuário já é responsável em outra família.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Limit: max_responsibles = titular + co-responsáveis (pending ou active).
     active_count = sub.family_members.filter(
         status__in=[FamilyMembership.STATUS_PENDING, FamilyMembership.STATUS_ACTIVE]
     ).count()
-    if active_count >= sub.plan.max_members - 1:
+    if active_count >= sub.plan.max_responsibles - 1:
         return Response(
-            {'detail': f'Limite de {sub.plan.max_members} membros atingido (titular + dependentes).'},
+            {'detail': f'Limite de {sub.plan.max_responsibles} responsáveis atingido para o seu plano.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Early feedback: se os dependentes já ocupam a(s) vaga(s) extra(s) de
+    # responsável (ex.: 4 dependentes com apenas 1 responsável), o convite nunca
+    # poderia ser aceito sem estourar o total de perfis. Reavaliado (com lock) no
+    # accept, que é o momento em que a vaga passa a valer de fato.
+    from apps.accounts import services as accounts_services
+    responsible_count, dependent_count = accounts_services.family_headcount(sub)
+    if responsible_count + dependent_count >= sub.plan.max_members:
+        return Response(
+            {
+                'detail': (
+                    f'A família já está no limite de {sub.plan.max_members} perfis. '
+                    'Remova um dependente antes de convidar um segundo responsável.'
+                ),
+            },
             status=status.HTTP_400_BAD_REQUEST,
         )
 
@@ -1106,11 +1179,11 @@ def family_members(request):
             membership.save(update_fields=['status', 'updated_at'])
         else:
             return Response(
-                {'detail': 'Esse usuário já é dependente nessa assinatura.'},
+                {'detail': 'Esse usuário já é responsável nessa assinatura.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-    _log_action(request.user, 'billing.family.add', f'member_id={target.id}')
+    _log_action(request.user, 'billing.family.invite_responsible', f'member_id={target.id}')
     return Response(
         FamilyMembershipSerializer(membership).data,
         status=status.HTTP_201_CREATED,
@@ -1121,22 +1194,22 @@ def family_members(request):
 @permission_classes([permissions.IsAuthenticated])
 def family_member_detail(request, pk):
     """
-    POST   → accept/activate a pending membership (callable by the dependent).
-    DELETE → remove a dependent (callable only by the titular).
+    POST   → accept/activate a pending co-responsável invite (callable by the invitee).
+    DELETE → remove a co-responsável (callable only by the titular).
     """
     try:
         membership = FamilyMembership.objects.select_related('subscription__user', 'member_user').get(pk=pk)
     except FamilyMembership.DoesNotExist:
-        return Response({'detail': 'Membro não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+        return Response({'detail': 'Convite não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
 
     titular = membership.subscription.user
-    dependent = membership.member_user
+    co_responsible = membership.member_user
 
     if request.method == 'POST':
-        # Only the dependent themselves can accept
-        if request.user.pk != dependent.pk:
+        # Only the invitee themselves can accept
+        if request.user.pk != co_responsible.pk:
             return Response(
-                {'detail': 'Apenas o dependente pode aceitar o convite.'},
+                {'detail': 'Apenas o convidado pode aceitar o convite.'},
                 status=status.HTTP_403_FORBIDDEN,
             )
         if membership.status != FamilyMembership.STATUS_PENDING:
@@ -1144,19 +1217,73 @@ def family_member_detail(request, pk):
                 {'detail': 'Convite não está pendente.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        membership.status = FamilyMembership.STATUS_ACTIVE
-        membership.accepted_at = timezone.now()
-        membership.save(update_fields=['status', 'accepted_at', 'updated_at'])
-        _log_action(request.user, 'billing.family.accept', f'membership_id={membership.pk}')
+
+        from apps.accounts.models import ParentChild
+        from apps.accounts import services as accounts_services
+
+        # Authoritative re-check (com lock): dependentes podem ter sido adicionados
+        # entre o convite e o aceite, ocupando a vaga extra de responsável.
+        with transaction.atomic():
+            locked_sub = Subscription.objects.select_for_update().get(pk=membership.subscription_id)
+            responsible_count, dependent_count = accounts_services.family_headcount(locked_sub)
+            if responsible_count + dependent_count >= locked_sub.plan.max_members:
+                return Response(
+                    {
+                        'detail': (
+                            f'A família já está no limite de {locked_sub.plan.max_members} perfis. '
+                            'Remova um dependente antes de aceitar este convite.'
+                        ),
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            membership.status = FamilyMembership.STATUS_ACTIVE
+            membership.accepted_at = timezone.now()
+            membership.save(update_fields=['status', 'accepted_at', 'updated_at'])
+        _log_action(request.user, 'billing.family.accept_responsible', f'membership_id={membership.pk}')
+
+        # Visão unificada: espelha os dependentes já vinculados ao titular para o
+        # novo co-responsável, e avisa cada dependente afetado (transparência LGPD,
+        # não bloqueante).
+        existing_links = (
+            ParentChild.objects.filter(parent=titular, is_active=True).select_related('child')
+        )
+        for link in existing_links:
+            accounts_services.mirror_to_co_responsibles(link.child, titular)
+            try:
+                from apps.alerts.models import Alert
+                co_name = co_responsible.full_name or co_responsible.email
+                Alert.objects.get_or_create(
+                    dedup_key=f'family_co_responsible_added:{membership.pk}:{link.child_id}',
+                    defaults=dict(
+                        user=link.child,
+                        kind=Alert.KIND_OTHER,
+                        channel=Alert.CHANNEL_IN_APP,
+                        status=Alert.STATUS_SENT,
+                        title=f'{co_name} agora também acompanha seu perfil',
+                        body=(
+                            f'{co_name} ({co_responsible.email}) aceitou o convite de segundo '
+                            'responsável da sua família na plataforma Tenfy e passou a ter acesso '
+                            'ao seu perfil.'
+                        ),
+                        payload={
+                            'action': 'family_co_responsible_added',
+                            'co_responsible_id': co_responsible.id,
+                            'co_responsible_name': co_name,
+                        },
+                    ),
+                )
+            except Exception as exc:
+                logger.warning('Could not create co-responsible alert for child %s: %s', link.child_id, exc)
+
         return Response(FamilyMembershipSerializer(membership).data)
 
     # DELETE — only titular can remove
     if request.user.pk != titular.pk:
         return Response(
-            {'detail': 'Apenas o titular pode remover dependentes.'},
+            {'detail': 'Apenas o titular pode remover o segundo responsável.'},
             status=status.HTTP_403_FORBIDDEN,
         )
     membership.status = FamilyMembership.STATUS_REMOVED
     membership.save(update_fields=['status', 'updated_at'])
-    _log_action(request.user, 'billing.family.remove', f'membership_id={membership.pk}')
+    _log_action(request.user, 'billing.family.remove_responsible', f'membership_id={membership.pk}')
     return Response(status=status.HTTP_204_NO_CONTENT)

@@ -38,11 +38,13 @@ def _invalidate_user_features_cache(user_id: int):
 
 
 def get_user_subscription(user) -> 'Subscription | None':
-    """Return the user's active Subscription, or None."""
-    try:
-        return user.subscription
-    except Subscription.DoesNotExist:
-        return None
+    """Return the Subscription that governs this user's plan/features.
+
+    Own subscription takes priority; a second responsável on a Família plan (no
+    subscription of their own) inherits the titular's via FamilyMembership.
+    """
+    from .models import get_effective_subscription
+    return get_effective_subscription(user)
 
 
 def _get_plan_feature_codes(plan) -> set:

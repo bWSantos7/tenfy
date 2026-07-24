@@ -30,7 +30,7 @@ class PlanSerializer(serializers.ModelSerializer):
         fields = (
             'id', 'name', 'slug', 'price_monthly', 'price_yearly',
             'description', 'highlight_label', 'display_order', 'is_active',
-            'max_members', 'features', 'is_available',
+            'max_members', 'max_responsibles', 'features', 'is_available',
         )
 
 
@@ -93,6 +93,7 @@ class CheckoutSerializer(serializers.Serializer):
 
 
 class FamilyMembershipSerializer(serializers.ModelSerializer):
+    """A co-responsável (second parent) seat on a Família subscription."""
     member_email = serializers.EmailField(source='member_user.email', read_only=True)
     member_name  = serializers.CharField(source='member_user.full_name', read_only=True)
 
@@ -107,7 +108,7 @@ class CancelSubscriptionSerializer(serializers.Serializer):
 
 
 class FamilyMemberAddSerializer(serializers.Serializer):
-    """Add a dependent to a Família subscription by email or user_id."""
+    """Invite a second responsável to a Família subscription by email or user_id."""
     email   = serializers.EmailField(required=False, allow_blank=True)
     user_id = serializers.IntegerField(required=False)
 

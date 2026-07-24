@@ -243,6 +243,7 @@ class ParentChildTestCase(TestCase):
             name='Familia',
             slug=Plan.SLUG_FAMILIA,
             max_members=5,
+            max_responsibles=2,
             is_active=True,
         )
         Subscription.objects.create(
@@ -306,7 +307,7 @@ class DependentManagementTestCase(TestCase):
             name='Tester', slug=Plan.SLUG_TESTER, max_members=4, is_active=True,
         )
         self.familia_plan = Plan.objects.create(
-            name='Familia', slug=Plan.SLUG_FAMILIA, max_members=5, is_active=True,
+            name='Familia', slug=Plan.SLUG_FAMILIA, max_members=5, max_responsibles=2, is_active=True,
         )
         self.individual_plan = Plan.objects.create(
             name='Individual', slug=Plan.SLUG_INDIVIDUAL, max_members=1, is_active=True,
@@ -390,6 +391,55 @@ class DependentManagementTestCase(TestCase):
             'password_confirm': 'Str0ngPass!', 'email_code': '000000',
         }, format='json')
         self.assertIn(res.status_code, [400, 403])
+
+    def test_familia_shared_dependent_quota_across_two_responsibles(self):
+        """Família max_members=5, max_responsibles=2 → 3 dependentes compartilhados
+        pelos dois responsáveis (cota única, não 3 por responsável)."""
+        from apps.billing.models import FamilyMembership
+
+        self._activate_plan(self.parent, self.familia_plan)
+        sub = self.parent.subscription
+        co_parent = User.objects.create_user(
+            email='co-parent@example.com', password='Str0ngPass!',
+            full_name='Co Responsible', role=User.ROLE_PARENT,
+        )
+        FamilyMembership.objects.create(
+            subscription=sub, member_user=co_parent, status=FamilyMembership.STATUS_ACTIVE,
+        )
+
+        self.client.force_authenticate(user=self.parent)
+        for i in range(2):
+            res = self.client.post('/api/auth/children/', {
+                'full_name': f'Shared Child {i}',
+                'email': f'shared{i}@example.com',
+                'password': 'Str0ngPass!',
+                'password_confirm': 'Str0ngPass!', 'email_code': '000000',
+            }, format='json')
+            self.assertEqual(res.status_code, 201, f'Shared child {i} creation failed')
+
+        # Co-responsável creates the family's 3rd (last) dependent — quota is shared.
+        self.client.force_authenticate(user=co_parent)
+        res = self.client.post('/api/auth/children/', {
+            'full_name': 'Shared Child 2',
+            'email': 'shared2@example.com',
+            'password': 'Str0ngPass!',
+            'password_confirm': 'Str0ngPass!', 'email_code': '000000',
+        }, format='json')
+        self.assertEqual(res.status_code, 201)
+
+        # 4th dependent must be blocked regardless of which responsável tries.
+        res = self.client.post('/api/auth/children/', {
+            'full_name': 'Shared Child 3 blocked',
+            'email': 'shared3@example.com',
+            'password': 'Str0ngPass!',
+            'password_confirm': 'Str0ngPass!', 'email_code': '000000',
+        }, format='json')
+        self.assertIn(res.status_code, [400, 403])
+
+        # Every dependent, regardless of who created it, is visible to both responsáveis.
+        self.client.force_authenticate(user=self.parent)
+        res = self.client.get('/api/auth/children/')
+        self.assertEqual(res.data['count'], 3)
 
     # ── Authentication ──────────────────────────────────────────────────────────
 
@@ -607,7 +657,7 @@ class DependentEmailOtpTestCase(TestCase):
             email='parent-otp@example.com', password='x',
             role=User.ROLE_PARENT, full_name='Pai OTP',
         )
-        plan = Plan.objects.create(name='Familia', slug=Plan.SLUG_FAMILIA, max_members=5, is_active=True)
+        plan = Plan.objects.create(name='Familia', slug=Plan.SLUG_FAMILIA, max_members=5, max_responsibles=2, is_active=True)
         Subscription.objects.create(user=self.parent, plan=plan, status=Subscription.STATUS_ACTIVE)
         self.client.force_authenticate(self.parent)
 

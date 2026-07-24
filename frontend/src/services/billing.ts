@@ -17,6 +17,7 @@ export interface Plan {
   display_order: number;
   is_active: boolean;
   max_members: number;
+  max_responsibles: number;
   features: PlanFeature[];
 }
 
@@ -155,7 +156,9 @@ export async function reactivateSubscription(): Promise<Subscription> {
   return res.data;
 }
 
-// ── Família — gestão de dependentes ─────────────────────────────────────────
+// ── Família — segundo responsável ────────────────────────────────────────────
+// FamilyMember aqui representa o SEGUNDO RESPONSÁVEL da assinatura Família
+// (co-responsável), não um dependente. Dependentes são geridos em /perfil.
 
 export async function listFamilyMembers(): Promise<FamilyMember[]> {
   const res = await api.get('/api/billing/family/members/');

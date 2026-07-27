@@ -1285,5 +1285,7 @@ def family_member_detail(request, pk):
         )
     membership.status = FamilyMembership.STATUS_REMOVED
     membership.save(update_fields=['status', 'updated_at'])
+    from .permissions import _invalidate_user_features_cache
+    _invalidate_user_features_cache(co_responsible.id)
     _log_action(request.user, 'billing.family.remove_responsible', f'membership_id={membership.pk}')
     return Response(status=status.HTTP_204_NO_CONTENT)

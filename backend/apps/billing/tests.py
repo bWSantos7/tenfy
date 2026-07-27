@@ -487,6 +487,30 @@ class FamilyMemberEndpointsTestCase(TestCase):
         res = self.client.delete(f'/api/billing/family/members/{m.pk}/')
         self.assertEqual(res.status_code, 403)
 
+    def test_removed_co_responsible_loses_features_immediately(self):
+        """Cache de features não pode sobreviver à remoção (mesma garantia que
+        _demote_family_co_responsibles já dá no cancelamento/downgrade)."""
+        from apps.billing.permissions import user_has_feature
+
+        # Feature exclusiva do plano Família (ranking_access também está no
+        # Individual, e o fallback sem assinatura usa o Individual — não serviria
+        # para provar a perda de acesso especificamente).
+        familia_only = Feature.objects.create(code='familia_only_feature', name='Só Família')
+        PlanFeature.objects.create(plan=self.familia, feature=familia_only, limit=None)
+
+        m = FamilyMembership.objects.create(
+            subscription=self.sub, member_user=self.co1, status=FamilyMembership.STATUS_ACTIVE,
+        )
+        # Popula o cache de features do co-responsável (herdadas via effective
+        # subscription) enquanto ainda está ativo.
+        self.assertTrue(user_has_feature(self.co1, 'familia_only_feature'))
+
+        self.client.force_authenticate(user=self.titular)
+        res = self.client.delete(f'/api/billing/family/members/{m.pk}/')
+        self.assertEqual(res.status_code, 204)
+
+        self.assertFalse(user_has_feature(self.co1, 'familia_only_feature'))
+
 
 # ── PCI-DSS / Card security ────────────────────────────────────────────────────
 
